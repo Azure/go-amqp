@@ -1,4 +1,4 @@
-PACKAGE := pack.ag/amqp
+PACKAGE := github.com/Azure/go-amqp
 FUZZ_DIR := ./fuzz
 
 all: test
@@ -19,8 +19,8 @@ test:
 	TEST_CORPUS=1 go test -tags gofuzz -race -run=Corpus
 	go test -tags gofuzz -v -race ./...
 
-integration:
-	go test -tags "integration pkgerrors" -count=1 -v -race .
+#integration:
+	#go test -tags "integration pkgerrors" -count=1 -v -race .
 
 test386:
 	TEST_CORPUS=1 go test -tags "gofuzz" -count=1 -v .
@@ -28,4 +28,4 @@ test386:
 ci: test386 coverage
 
 coverage:
-	TEST_CORPUS=1 go test -tags "integration gofuzz" -cover -coverprofile=cover.out -v
+	TEST_CORPUS=1 go test -tags "gofuzz" -cover -coverprofile=cover.out -v

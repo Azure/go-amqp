@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
-	"pack.ag/amqp/internal/testconn"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Azure/go-amqp/internal/testconn"
 )
 
 // Known good challenges/responses taken following specification:

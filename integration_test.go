@@ -14,21 +14,14 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/services/eventhub/mgmt/2017-04-01/eventhub"
-	"github.com/Azure/azure-sdk-for-go/services/servicebus/mgmt/2017-04-01/servicebus"
-	"github.com/Azure/go-autorest/autorest"
-	"github.com/Azure/go-autorest/autorest/adal"
-	"github.com/Azure/go-autorest/autorest/azure"
+	"github.com/Azure/go-amqp"
+	"github.com/Azure/go-amqp/internal/testconn"
 	"github.com/fortytw2/leaktest"
-	"pack.ag/amqp"
-	"pack.ag/amqp/internal/testconn"
 )
 
 func init() {
@@ -37,18 +30,18 @@ func init() {
 }
 
 var (
-	isForkPR        = os.Getenv("CI") != "" && os.Getenv("SERVICEBUS_ACCESS_KEY") == ""
-	subscriptionID  = mustGetenv("AZURE_SUBSCRIPTION_ID")
-	resourceGroup   = mustGetenv("AZURE_RESOURCE_GROUP")
-	tenantID        = mustGetenv("AZURE_TENANT_ID")
-	clientID        = mustGetenv("AZURE_CLIENT_ID")
-	clientSecret    = mustGetenv("AZURE_CLIENT_SECRET")
+	isForkPR = os.Getenv("CI") != "" && os.Getenv("SERVICEBUS_ACCESS_KEY") == ""
+	/*subscriptionID = mustGetenv("AZURE_SUBSCRIPTION_ID")
+	resourceGroup  = mustGetenv("AZURE_RESOURCE_GROUP")
+	tenantID       = mustGetenv("AZURE_TENANT_ID")
+	clientID       = mustGetenv("AZURE_CLIENT_ID")
+	clientSecret   = mustGetenv("AZURE_CLIENT_SECRET")
 	namespace       = mustGetenv("SERVICEBUS_NAMESPACE")
 	accessKeyName   = mustGetenv("SERVICEBUS_ACCESS_KEY_NAME")
 	accessKey       = mustGetenv("SERVICEBUS_ACCESS_KEY")
 	ehNamespace     = mustGetenv("EVENTHUB_NAMESPACE")
 	ehAccessKeyName = mustGetenv("EVENTHUB_ACCESS_KEY_NAME")
-	ehAccessKey     = mustGetenv("EVENTHUB_ACCESS_KEY")
+	ehAccessKey     = mustGetenv("EVENTHUB_ACCESS_KEY")*/
 
 	tlsKeyLog = flag.String("tlskeylog", "", "path to write the TLS key log")
 	recordDir = flag.String("recorddir", "", "directory to write connection records to")
@@ -950,7 +943,7 @@ func TestIntegrationClose(t *testing.T) {
 	})
 }
 
-func TestIntegration_EventHubs_RoundTrip(t *testing.T) {
+/*func TestIntegration_EventHubs_RoundTrip(t *testing.T) {
 	hubName, _, cleanup := newTestHub(t, "receive")
 	defer cleanup()
 
@@ -1106,7 +1099,7 @@ func createEventHubReceivers(t testing.TB, hubName string, session *amqp.Session
 
 		return received, errs
 	}
-}
+}*/
 
 func TestIssue48_ReceiverModeSecond(t *testing.T) {
 	azDescription := regexp.MustCompile(`The format code '0x68' at frame buffer offset '\d+' is invalid or unexpected`)
@@ -1271,7 +1264,7 @@ func newClient(t testing.TB, label, ns, username, password string, opts ...amqp.
 	return client
 }
 
-func newTestQueue(t testing.TB, suffix string) (string, servicebus.QueuesClient, func()) {
+/*func newTestQueue(t testing.TB, suffix string) (string, servicebus.QueuesClient, func()) {
 	t.Helper()
 	shouldRunIntegration(t)
 
@@ -1344,7 +1337,7 @@ func newTestHub(t testing.TB, suffix string) (string, eventhub.EventHubsClient, 
 	}
 
 	return hubName, ehClient, cleanup
-}
+}*/
 
 func ptrInt64(i int64) *int64 {
 	return &i

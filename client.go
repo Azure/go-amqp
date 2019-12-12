@@ -160,7 +160,7 @@ func (c *Client) NewSession(opts ...SessionOption) (*Session, error) {
 // Default session options
 const (
 	DefaultMaxLinks = 4294967296
-	DefaultWindow   = 5000
+	DefaultWindow   = 100
 )
 
 // SessionOption is an function for configuring an AMQP session.

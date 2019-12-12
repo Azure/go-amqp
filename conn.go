@@ -14,7 +14,7 @@ import (
 // Default connection options
 const (
 	DefaultIdleTimeout  = 1 * time.Minute
-	DefaultMaxFrameSize = 512
+	DefaultMaxFrameSize = 65536
 	DefaultMaxSessions  = 65536
 )
 

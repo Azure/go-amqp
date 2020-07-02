@@ -1,6 +1,7 @@
 package amqp
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -1784,30 +1785,30 @@ func (m *Message) GetData() []byte {
 
 // Accept notifies the server that the message has been
 // accepted and does not require redelivery.
-func (m *Message) Accept() error {
+func (m *Message) Accept(ctx context.Context) error {
 	if !m.shouldSendDisposition() {
 		return nil
 	}
-	return m.receiver.messageDisposition(m.deliveryID, &stateAccepted{})
+	return m.receiver.messageDisposition(ctx, m.deliveryID, &stateAccepted{})
 }
 
 // Reject notifies the server that the message is invalid.
 //
 // Rejection error is optional.
-func (m *Message) Reject(e *Error) error {
+func (m *Message) Reject(ctx context.Context, e *Error) error {
 	if !m.shouldSendDisposition() {
 		return nil
 	}
-	return m.receiver.messageDisposition(m.deliveryID, &stateRejected{Error: e})
+	return m.receiver.messageDisposition(ctx, m.deliveryID, &stateRejected{Error: e})
 }
 
 // Release releases the message back to the server. The message
 // may be redelivered to this or another consumer.
-func (m *Message) Release() error {
+func (m *Message) Release(ctx context.Context) error {
 	if !m.shouldSendDisposition() {
 		return nil
 	}
-	return m.receiver.messageDisposition(m.deliveryID, &stateReleased{})
+	return m.receiver.messageDisposition(ctx, m.deliveryID, &stateReleased{})
 }
 
 // Modify notifies the server that the message was not acted upon
@@ -1822,15 +1823,16 @@ func (m *Message) Release() error {
 // messageAnnotations is an optional annotation map to be merged
 // with the existing message annotations, overwriting existing keys
 // if necessary.
-func (m *Message) Modify(deliveryFailed, undeliverableHere bool, messageAnnotations Annotations) error {
+func (m *Message) Modify(ctx context.Context, deliveryFailed, undeliverableHere bool, messageAnnotations Annotations) error {
 	if !m.shouldSendDisposition() {
 		return nil
 	}
-	return m.receiver.messageDisposition(m.deliveryID, &stateModified{
-		DeliveryFailed:     deliveryFailed,
-		UndeliverableHere:  undeliverableHere,
-		MessageAnnotations: messageAnnotations,
-	})
+	return m.receiver.messageDisposition(ctx,
+		m.deliveryID, &stateModified{
+			DeliveryFailed:     deliveryFailed,
+			UndeliverableHere:  undeliverableHere,
+			MessageAnnotations: messageAnnotations,
+		})
 }
 
 // MarshalBinary encodes the message into binary form.

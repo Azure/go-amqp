@@ -2046,7 +2046,7 @@ func (r *Receiver) sendDisposition(first uint32, last *uint32, state interface{}
 	return r.link.session.txFrame(fr, nil)
 }
 
-func (r *Receiver) messageDisposition(id uint32, state interface{}) error {
+func (r *Receiver) messageDisposition(ctx context.Context, id uint32, state interface{}) error {
 	var wait chan error
 	if r.link.receiverSettleMode != nil && *r.link.receiverSettleMode == ModeSecond {
 		wait = r.inFlight.add(id)
@@ -2065,7 +2065,12 @@ func (r *Receiver) messageDisposition(id uint32, state interface{}) error {
 		return nil
 	}
 
-	return <-wait
+	select {
+	case err := <-wait:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // inFlight tracks in-flight message dispositions allowing receivers

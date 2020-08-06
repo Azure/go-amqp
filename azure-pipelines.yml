@@ -31,6 +31,7 @@ jobs:
           shopt -s extglob
           mv !(work) '$(sdkPath)'
           echo '##vso[task.prependpath]$(GOPATH)/bin'
+          go version
         displayName: 'Create Go Workspace'
 
       - script: |
@@ -43,14 +44,14 @@ jobs:
         displayName: 'Install Dependencies'
 
       - script: |
-          go vet ./...
-        workingDirectory: '$(sdkPath)'
-        displayName: 'Vet'
-
-      - script: |
           go build -v ./...
         workingDirectory: '$(sdkPath)'
         displayName: 'Build'
+
+      - script: |
+          go vet ./...
+        workingDirectory: '$(sdkPath)'
+        displayName: 'Vet'
 
       - script: |
           set -e

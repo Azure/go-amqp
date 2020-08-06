@@ -35,7 +35,7 @@ func FuzzConn(data []byte) int {
 		return 0
 	}
 
-	msg.Accept()
+	msg.Accept(context.Background())
 
 	ctx, close := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer close()

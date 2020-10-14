@@ -101,7 +101,7 @@ func main() {
 			}
 
 			// Accept message
-			msg.Accept()
+			msg.Accept(context.Background())
 
 			fmt.Printf("Message received: %s\n", msg.GetData())
 		}

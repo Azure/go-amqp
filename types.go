@@ -1674,6 +1674,7 @@ type Message struct {
 	Format uint32
 
 	// The DeliveryTag can be up to 32 octets of binary data.
+	// Note that when mode one is enabled there will be no delivery tag.
 	DeliveryTag []byte
 
 	// The header section carries standard delivery details about the transfer

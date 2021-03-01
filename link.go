@@ -232,9 +232,6 @@ func (l *link) addUnsettled(msg *Message) {
 }
 
 func (l *link) deleteUnsettled(msg *Message) {
-	if len(msg.DeliveryTag) == 0 {
-		return
-	}
 	l.unsettledMessagesLock.Lock()
 	delete(l.unsettledMessages, string(msg.DeliveryTag))
 	l.unsettledMessagesLock.Unlock()

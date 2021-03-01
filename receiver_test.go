@@ -25,10 +25,14 @@ func accept(msg *Message) error {
 	return msg.Accept(context.TODO())
 }
 
-func makeMessage() Message {
+func makeMessage(mode ReceiverSettleMode) Message {
+	var tag []byte
+	if mode == ModeSecond {
+		tag = []byte("one")
+	}
 	return Message{
 		deliveryID:  uint32(1),
-		DeliveryTag: []byte("one"),
+		DeliveryTag: tag,
 		doneSignal:  make(chan struct{}),
 	}
 }
@@ -39,33 +43,19 @@ func TestReceiver_HandleMessageModeFirst_AutoAccept(t *testing.T) {
 		batching:     true, // allows to  avoid making the outgoing call on dispostion
 		dispositions: make(chan messageDisposition, 2),
 	}
-	msg := makeMessage()
+	msg := makeMessage(ModeFirst)
 	r.link.messages <- msg
 	r.link.addUnsettled(&msg)
+	if r.link.countUnsettled() != 0 {
+		// mode first messages have no delivery tag, thus there should be no unsettled message
+		t.Fatal("expected zero unsettled count")
+	}
 	if err := r.HandleMessage(context.TODO(), doNothing); err != nil {
 		t.Errorf("HandleMessage() error = %v", err)
 	}
 
-	if len(r.dispositions) == 0 {
-		t.Errorf("the message should have triggered a disposition")
-	}
-
-	// handle the race because the mao is purged in a background goroutine
-	check := true
-	success := true
-	for check {
-		select {
-		case <-time.After(10 * time.Millisecond):
-			success = false
-			break
-		default:
-			if r.link.countUnsettled() == 0 {
-				check = false
-			}
-		}
-	}
-	if !success {
-		t.Errorf("the message was not removed from the unsettled map")
+	if len(r.dispositions) != 0 {
+		t.Errorf("the message should not have triggered a disposition")
 	}
 }
 
@@ -75,7 +65,7 @@ func TestReceiver_HandleMessageModeSecond_DontDispose(t *testing.T) {
 		batching:     true, // allows to  avoid making the outgoing call on dispostion
 		dispositions: make(chan messageDisposition, 2),
 	}
-	msg := makeMessage()
+	msg := makeMessage(ModeSecond)
 	r.link.messages <- msg
 	r.link.addUnsettled(&msg)
 	if err := r.HandleMessage(context.TODO(), doNothing); err != nil {
@@ -95,7 +85,7 @@ func TestReceiver_HandleMessageModeSecond_removeFromUnsettledMapOnDisposition(t 
 		batching:     true, // allows to  avoid making the outgoing call on dispostion
 		dispositions: make(chan messageDisposition, 1),
 	}
-	msg := makeMessage()
+	msg := makeMessage(ModeSecond)
 	r.link.messages <- msg
 	r.link.addUnsettled(&msg)
 	// unblock the accept waiting on inflight disposition for modeSecond

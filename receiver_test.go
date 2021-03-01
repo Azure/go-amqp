@@ -27,13 +27,15 @@ func accept(msg *Message) error {
 
 func makeMessage(mode ReceiverSettleMode) Message {
 	var tag []byte
+	var done chan struct{}
 	if mode == ModeSecond {
 		tag = []byte("one")
+		done = make(chan struct{})
 	}
 	return Message{
 		deliveryID:  uint32(1),
 		DeliveryTag: tag,
-		doneSignal:  make(chan struct{}),
+		doneSignal:  done,
 	}
 }
 
@@ -77,6 +79,15 @@ func TestReceiver_HandleMessageModeSecond_DontDispose(t *testing.T) {
 	if r.link.countUnsettled() == 0 {
 		t.Errorf("the message should still be tracked until settled")
 	}
+	// ensure channel wasn't closed
+	select {
+	case _, ok := <-msg.doneSignal:
+		if !ok {
+			t.Fatal("unexpected closing of doneSignal")
+		}
+	default:
+		// channel wasn't closed
+	}
 }
 
 func TestReceiver_HandleMessageModeSecond_removeFromUnsettledMapOnDisposition(t *testing.T) {
@@ -117,4 +128,13 @@ func TestReceiver_HandleMessageModeSecond_removeFromUnsettledMapOnDisposition(t 
 		t.Errorf("the message should be removed from unsettled map")
 	}
 	loop = false
+	// ensure channel was closed
+	select {
+	case _, ok := <-msg.doneSignal:
+		if !ok {
+			// channel was closed
+		}
+	default:
+		t.Fatal("expected closed of doneSignal")
+	}
 }

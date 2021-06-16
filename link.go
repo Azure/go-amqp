@@ -223,9 +223,6 @@ func attachLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 }
 
 func (l *link) addUnsettled(msg *Message) {
-	if len(msg.DeliveryTag) == 0 {
-		return
-	}
 	l.unsettledMessagesLock.Lock()
 	l.unsettledMessages[string(msg.DeliveryTag)] = struct{}{}
 	l.unsettledMessagesLock.Unlock()
@@ -512,7 +509,9 @@ func (l *link) muxReceive(fr performTransfer) error {
 	debug(1, "deliveryID %d before push to receiver - deliveryCount : %d - linkCredit: %d, len(messages): %d, len(inflight): %d", l.msg.deliveryID, l.deliveryCount, l.linkCredit, len(l.messages), len(l.receiver.inFlight.m))
 	// send to receiver, this should never block due to buffering
 	// and flow control.
-	l.addUnsettled(&l.msg)
+	if l.receiverSettleMode.value() == ModeSecond {
+		l.addUnsettled(&l.msg)
+	}
 	l.messages <- l.msg
 
 	debug(1, "deliveryID %d after push to receiver - deliveryCount : %d - linkCredit: %d, len(messages): %d, len(inflight): %d", l.msg.deliveryID, l.deliveryCount, l.linkCredit, len(l.messages), len(l.receiver.inFlight.m))

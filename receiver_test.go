@@ -47,7 +47,6 @@ func TestReceiver_HandleMessageModeFirst_AutoAccept(t *testing.T) {
 	}
 	msg := makeMessage(ModeFirst)
 	r.link.messages <- msg
-	r.link.addUnsettled(&msg)
 	if r.link.countUnsettled() != 0 {
 		// mode first messages have no delivery tag, thus there should be no unsettled message
 		t.Fatal("expected zero unsettled count")

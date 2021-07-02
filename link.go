@@ -512,12 +512,22 @@ func (l *link) muxReceive(fr performTransfer) error {
 		return err
 	}
 	debug(1, "deliveryID %d before push to receiver - deliveryCount : %d - linkCredit: %d, len(messages): %d, len(inflight): %d", l.msg.deliveryID, l.deliveryCount, l.linkCredit, len(l.messages), len(l.receiver.inFlight.m))
-	// send to receiver, this should never block due to buffering
-	// and flow control.
-	l.addUnsettled(&l.msg)
-	l.messages <- l.msg
 
-	debug(1, "deliveryID %d after push to receiver - deliveryCount : %d - linkCredit: %d, len(messages): %d, len(inflight): %d", l.msg.deliveryID, l.deliveryCount, l.linkCredit, len(l.messages), len(l.receiver.inFlight.m))
+	l.addUnsettled(&l.msg)
+
+	// send to receiver, this should never block due to buffering and flow
+	// control, but we still check for link close in case something unexpected
+	// happens so that we can shut down properly.
+	var closed bool
+	select {
+	case l.messages <- l.msg:
+		// Sent
+		debug(1, "deliveryID %d after push to receiver - deliveryCount : %d - linkCredit: %d, len(messages): %d, len(inflight): %d", l.msg.deliveryID, l.deliveryCount, l.linkCredit, len(l.messages), len(l.receiver.inFlight.m))
+	case <-l.close:
+		// Link was closed
+		debug(1, "deliveryID %d skipping push to receiver - deliveryCount : %d - linkCredit: %d, len(messages): %d, len(inflight): %d", l.msg.deliveryID, l.deliveryCount, l.linkCredit, len(l.messages), len(l.receiver.inFlight.m))
+		closed = true
+	}
 
 	// reset progress
 	l.buf.reset()
@@ -527,6 +537,14 @@ func (l *link) muxReceive(fr performTransfer) error {
 	l.deliveryCount++
 	l.linkCredit--
 	debug(1, "deliveryID %d before exit - deliveryCount : %d - linkCredit: %d, len(messages): %d", l.msg.deliveryID, l.deliveryCount, l.linkCredit, len(l.messages))
+
+	// we defer returning on close until after we've updated our counters just
+	// to be safe. returning a link closed error allows the shutdown to complete
+	// normally
+	if closed {
+		return ErrLinkClosed
+	}
+
 	return nil
 }
 

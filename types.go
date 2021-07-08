@@ -1796,10 +1796,10 @@ func (m *Message) GetData() []byte {
 	return m.Data[0]
 }
 
-// GetLinkName returns associated link name or empty string if receiver or link is not defined.
-func (m *Message) GetLinkName() string {
-	if m.receiver != nil && m.receiver.link != nil {
-		return m.receiver.link.key.name
+// LinkName returns associated link name or empty string if receiver or link is not defined.
+func (m *Message) LinkName() string {
+	if m.receiver != nil {
+		return m.receiver.LinkName()
 	}
 	return ""
 }

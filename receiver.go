@@ -133,6 +133,14 @@ func (r *Receiver) Address() string {
 	return r.link.source.Address
 }
 
+// LinkName returns associated link name or an empty string if link is not defined.
+func (r *Receiver) LinkName() string {
+	if r.link != nil {
+		return r.link.key.name
+	}
+	return ""
+}
+
 // LinkSourceFilterValue retrieves the specified link source filter value or nil if it doesn't exist.
 func (r *Receiver) LinkSourceFilterValue(name string) interface{} {
 	if r.link.source == nil {

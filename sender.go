@@ -130,6 +130,14 @@ func (s *Sender) Address() string {
 	return s.link.target.Address
 }
 
+// LinkName returns associated link name or an empty string if link is not defined.
+func (r *Sender) LinkName() string {
+	if r.link != nil {
+		return r.link.key.name
+	}
+	return ""
+}
+
 // Close closes the Sender and AMQP link.
 func (s *Sender) Close(ctx context.Context) error {
 	return s.link.Close(ctx)

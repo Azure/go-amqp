@@ -133,6 +133,18 @@ func (r *Receiver) Address() string {
 	return r.link.source.Address
 }
 
+// LinkSourceFilterValue retrieves the specified link source filter value or nil if it doesn't exist.
+func (r *Receiver) LinkSourceFilterValue(name string) interface{} {
+	if r.link.source == nil {
+		return nil
+	}
+	filter, ok := r.link.source.Filter[symbol(name)]
+	if !ok {
+		return nil
+	}
+	return filter.value
+}
+
 // Close closes the Receiver and AMQP link.
 //
 // If ctx expires while waiting for servers response, ctx.Err() will be returned.

@@ -203,6 +203,8 @@ func attachLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 		// buffer receiver so that link.mux doesn't block
 		l.messages = make(chan Message, l.receiver.maxCredit)
 		l.unsettledMessages = map[string]struct{}{}
+		// copy the received filter values
+		l.source.Filter = resp.Source.Filter
 	} else {
 		// if dynamic address requested, copy assigned name to address
 		if l.dynamicAddr && resp.Target != nil {

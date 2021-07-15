@@ -224,6 +224,41 @@ func TestConnSASLXOAUTH2AuthFailsAdditionalErrorResponse(t *testing.T) {
 	}
 }
 
+func TestConnSASLExternal(t *testing.T) {
+	buf, err := peerResponse(
+		[]byte("AMQP\x03\x01\x00\x00"),
+		frames.Frame{
+			Type:    frameTypeSASL,
+			Channel: 0,
+			Body:    &frames.SASLMechanisms{Mechanisms: []encoding.Symbol{saslMechanismEXTERNAL}},
+		},
+		frames.Frame{
+			Type:    frameTypeSASL,
+			Channel: 0,
+			Body:    &frames.SASLOutcome{Code: encoding.CodeSASLOK},
+		},
+		[]byte("AMQP\x00\x01\x00\x00"),
+		frames.Frame{
+			Type:    frameTypeAMQP,
+			Channel: 0,
+			Body:    &frames.PerformOpen{},
+		},
+	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c := testconn.New(buf)
+	client, err := New(c,
+		ConnSASLExternal(),
+		ConnIdleTimeout(10*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+}
+
 func peerResponse(items ...interface{}) ([]byte, error) {
 	buf := make([]byte, 0)
 	for _, item := range items {

@@ -11,6 +11,7 @@ import (
 const (
 	saslMechanismPLAIN     encoding.Symbol = "PLAIN"
 	saslMechanismANONYMOUS encoding.Symbol = "ANONYMOUS"
+	saslMechanismEXTERNAL  encoding.Symbol = "EXTERNAL"
 	saslMechanismXOAUTH2   encoding.Symbol = "XOAUTH2"
 )
 
@@ -70,6 +71,36 @@ func ConnSASLAnonymous() ConnOption {
 				InitialResponse: []byte("anonymous"),
 			}
 			debug(1, "TX: %s", init)
+			c.err = c.writeFrame(frames.Frame{
+				Type: frameTypeSASL,
+				Body: init,
+			})
+			if c.err != nil {
+				return nil
+			}
+
+			// go to c.saslOutcome to handle the server response
+			return c.saslOutcome
+		}
+		return nil
+	}
+}
+
+// ConnSASLExternal enables SASL EXTERNAL authentication for the
+// connection if secured by TLS and offered by server.
+func ConnSASLExternal() ConnOption {
+	return func(c *conn) error {
+		// make handlers map if no other mechanism has
+		if c.saslHandlers == nil {
+			c.saslHandlers = make(map[encoding.Symbol]stateFunc)
+		}
+
+		// add the handler the the map
+		c.saslHandlers[saslMechanismEXTERNAL] = func() stateFunc {
+			init := &frames.SASLInit{
+				Mechanism:       saslMechanismEXTERNAL,
+				InitialResponse: []byte(""),
+			}
 			c.err = c.writeFrame(frames.Frame{
 				Type: frameTypeSASL,
 				Body: init,

@@ -26,6 +26,18 @@ type Sender struct {
 // additional messages can be sent while the current goroutine is waiting
 // for the confirmation.
 func (s *Sender) Send(ctx context.Context, msg *Message) error {
+	select {
+	case <-s.link.done:
+		// Do a quick check that the link is closed before we try to do anything. Without
+		// this the caller can get caught in an endless loop trying to use a link that
+		// has detached (and thus keeps returning s.link.err over and over again).
+		//
+		// By using ErrLinkClosed they will see something they can (and should be) programatically
+		// reacting to.
+		return ErrLinkClosed
+	default:
+	}
+
 	done, err := s.send(ctx, msg)
 	if err != nil {
 		return err

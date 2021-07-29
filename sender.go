@@ -16,6 +16,11 @@ type Sender struct {
 	nextDeliveryTag uint64
 }
 
+// Id() is the ID of the link used for this Sender.
+func (s *Sender) Id() string {
+	return s.link.key.name
+}
+
 // Send sends a Message.
 //
 // Blocks until the message is sent, ctx completes, or an error occurs.

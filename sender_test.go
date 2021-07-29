@@ -21,3 +21,11 @@ func TestClosedSenderReturnsErrClosed(t *testing.T) {
 	err = sender.Send(context.TODO(), &Message{})
 	require.EqualError(t, ErrLinkClosed, err.Error())
 }
+
+func TestSenderId(t *testing.T) {
+	link, err := newLink(newSession(nil, 0), &Receiver{}, nil)
+	require.NoError(t, err)
+
+	sender := &Sender{link: link}
+	require.NotEmpty(t, sender.Id())
+}

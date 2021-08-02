@@ -27,5 +27,5 @@ func TestSenderId(t *testing.T) {
 	require.NoError(t, err)
 
 	sender := &Sender{link: link}
-	require.NotEmpty(t, sender.Id())
+	require.NotEmpty(t, sender.ID())
 }

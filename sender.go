@@ -16,8 +16,8 @@ type Sender struct {
 	nextDeliveryTag uint64
 }
 
-// Id() is the ID of the link used for this Sender.
-func (s *Sender) Id() string {
+// ID() is the ID of the link used for this Sender.
+func (s *Sender) ID() string {
 	return s.link.key.name
 }
 

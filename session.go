@@ -448,7 +448,7 @@ func (s *Session) mux(remoteBegin *performBegin) {
 func (s *Session) muxFrameToLink(l *link, fr frameBody) {
 	select {
 	case l.rx <- fr:
-	case <-l.detach:
+	case <-l.detached:
 	case <-s.conn.done:
 	}
 }

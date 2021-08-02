@@ -17,7 +17,7 @@ func TestClosedSenderReturnsErrClosed(t *testing.T) {
 	// simulate the detach happening before the send. This happens in cases
 	// where we get an error back from the AMQP service (for instance, throttling)
 	// which calls link.muxDetach() (artifical detach)
-	close(link.detach)
+	close(link.detached)
 	require.NoError(t, err)
 
 	err = sender.Send(context.TODO(), &Message{})

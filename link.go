@@ -20,7 +20,7 @@ type link struct {
 	transfers     chan performTransfer // sender uses to send transfer frames
 	closeOnce     sync.Once            // closeOnce protects close from being closed multiple times
 	close         chan struct{}        // close signals the mux to shutdown.
-	detach        chan struct{}        // done is closed by mux/muxDetach when the link is fully detached.
+	detached      chan struct{}        // detached is closed by mux/muxDetach when the link is fully detached.
 	detachErrorMu sync.Mutex           // protects detachError
 	detachError   *Error               // error to send to remote on detach, set by closeWithError
 	session       *Session             // parent session
@@ -60,7 +60,7 @@ func newLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 		session:       s,
 		receiver:      r,
 		close:         make(chan struct{}),
-		detach:        make(chan struct{}),
+		detached:      make(chan struct{}),
 		receiverReady: make(chan struct{}, 1),
 	}
 
@@ -648,7 +648,7 @@ func (l *link) muxHandleFrame(fr frameBody) error {
 func (l *link) Close(ctx context.Context) error {
 	l.closeOnce.Do(func() { close(l.close) })
 	select {
-	case <-l.detach:
+	case <-l.detached:
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -681,7 +681,7 @@ func (l *link) muxDetach() {
 		}
 
 		// signal other goroutines that link is done
-		close(l.detach)
+		close(l.detached)
 
 		// unblock any in flight message dispositions
 		if l.receiver != nil {

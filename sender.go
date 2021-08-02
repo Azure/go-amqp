@@ -32,7 +32,7 @@ func (s *Sender) ID() string {
 // for the confirmation.
 func (s *Sender) Send(ctx context.Context, msg *Message) error {
 	select {
-	case <-s.link.done:
+	case <-s.link.detach:
 		// Do a quick check that the link is closed before we try to do anything. Without
 		// this the caller can get caught in an endless loop trying to use a link that
 		// has detached (and thus keeps returning s.link.err over and over again).
@@ -55,7 +55,7 @@ func (s *Sender) Send(ctx context.Context, msg *Message) error {
 			return state.Error
 		}
 		return nil
-	case <-s.link.done:
+	case <-s.link.detach:
 		return s.link.err
 	case <-ctx.Done():
 		return errorWrapf(ctx.Err(), "awaiting send")
@@ -124,7 +124,7 @@ func (s *Sender) send(ctx context.Context, msg *Message) (chan deliveryState, er
 
 		select {
 		case s.link.transfers <- fr:
-		case <-s.link.done:
+		case <-s.link.detach:
 			return nil, s.link.err
 		case <-ctx.Done():
 			return nil, errorWrapf(ctx.Err(), "awaiting send")

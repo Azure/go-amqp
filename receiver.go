@@ -73,7 +73,7 @@ func (r *Receiver) HandleMessage(ctx context.Context, handle func(*Message) erro
 	select {
 	case msg := <-r.link.messages:
 		return callHandler(&msg)
-	case <-r.link.done:
+	case <-r.link.detach:
 		return r.link.err
 	case <-ctx.Done():
 		return ctx.Err()
@@ -118,7 +118,7 @@ func (r *Receiver) Receive(ctx context.Context) (*Message, error) {
 		debug(3, "Receive() blocking %d", msg.deliveryID)
 		msg.receiver = r
 		return &msg, nil
-	case <-r.link.done:
+	case <-r.link.detach:
 		return nil, r.link.err
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -232,7 +232,7 @@ func (r *Receiver) dispositionBatcher() {
 			batchStarted = false
 			batchTimer.Stop()
 
-		case <-r.link.done:
+		case <-r.link.detach:
 			return
 		}
 	}

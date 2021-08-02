@@ -9,7 +9,7 @@ import (
 func makeLink(mode ReceiverSettleMode) *link {
 	return &link{
 		close:              make(chan struct{}),
-		done:               make(chan struct{}),
+		detach:               make(chan struct{}),
 		receiverReady:      make(chan struct{}, 1),
 		messages:           make(chan Message, 1),
 		receiverSettleMode: &mode,

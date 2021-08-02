@@ -21,7 +21,7 @@ func TestClosedSenderReturnsErrClosed(t *testing.T) {
 	require.NoError(t, err)
 
 	err = sender.Send(context.TODO(), &Message{})
-	require.EqualError(t, ErrLinkClosed, err.Error())
+	require.EqualError(t, ErrLinkDetached, err.Error())
 }
 
 func TestSenderId(t *testing.T) {

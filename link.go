@@ -12,19 +12,27 @@ import (
 //
 // May be used for sending or receiving.
 type link struct {
-	key           linkKey              // Name and direction
-	handle        uint32               // our handle
-	remoteHandle  uint32               // remote's handle
-	dynamicAddr   bool                 // request a dynamic link address from the server
-	rx            chan frameBody       // sessions sends frames for this link on this channel
-	transfers     chan performTransfer // sender uses to send transfer frames
-	closeOnce     sync.Once            // closeOnce protects close from being closed multiple times
-	close         chan struct{}        // close signals the mux to shutdown.
-	detached      chan struct{}        // detached is closed by mux/muxDetach when the link is fully detached.
-	detachErrorMu sync.Mutex           // protects detachError
-	detachError   *Error               // error to send to remote on detach, set by closeWithError
-	session       *Session             // parent session
-	receiver      *Receiver            // allows link options to modify Receiver
+	key          linkKey              // Name and direction
+	handle       uint32               // our handle
+	remoteHandle uint32               // remote's handle
+	dynamicAddr  bool                 // request a dynamic link address from the server
+	rx           chan frameBody       // sessions sends frames for this link on this channel
+	transfers    chan performTransfer // sender uses to send transfer frames
+	closeOnce    sync.Once            // closeOnce protects close from being closed multiple times
+
+	// NOTE: `close` and `detached` BOTH need to be checked to determine if the link
+	// is not in a "closed" state
+
+	// close signals the mux to shutdown. This indicates that `Close()` was called on this link.
+	close chan struct{}
+	// detached is closed by mux/muxDetach when the link is fully detached.
+	// This will be initiated if the service sends back an error or requests the link detach.
+	detached chan struct{}
+
+	detachErrorMu sync.Mutex // protects detachError
+	detachError   *Error     // error to send to remote on detach, set by closeWithError
+	session       *Session   // parent session
+	receiver      *Receiver  // allows link options to modify Receiver
 	source        *source
 	target        *target
 	properties    map[symbol]interface{} // additional properties sent upon link attach
@@ -638,6 +646,19 @@ func (l *link) muxHandleFrame(fr frameBody) error {
 	return nil
 }
 
+// Check checks the link state, returning an error if the link is closed (ErrLinkClosed) or if
+// it is in a detached state (ErrLinkDetached)
+func (l *link) Check() error {
+	select {
+	case <-l.detached:
+		return ErrLinkDetached
+	case <-l.close:
+		return ErrLinkClosed
+	default:
+		return nil
+	}
+}
+
 // close closes and requests deletion of the link.
 //
 // No operations on link are valid after close.
@@ -680,7 +701,7 @@ func (l *link) muxDetach() {
 			}
 		}
 
-		// signal other goroutines that link is done
+		// signal other goroutines that link is detached
 		close(l.detached)
 
 		// unblock any in flight message dispositions

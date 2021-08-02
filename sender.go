@@ -31,9 +31,7 @@ func (s *Sender) ID() string {
 // additional messages can be sent while the current goroutine is waiting
 // for the confirmation.
 func (s *Sender) Send(ctx context.Context, msg *Message) error {
-	err := s.link.Check()
-
-	if err != nil {
+	if err := s.link.Check(); err != nil {
 		return err
 	}
 

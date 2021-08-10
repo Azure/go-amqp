@@ -418,6 +418,7 @@ func (c *conn) mux() {
 				nextSession = newSessionResp{err: errorErrorf("reached connection channel max (%d)", c.channelMax)}
 				continue
 			}
+			debug(1, "NS(%d) new session", next)
 
 			// create the next session to send
 			nextSession = newSessionResp{session: newSession(c, uint16(next))}

@@ -8,6 +8,7 @@ import (
 	"math"
 	"reflect"
 	"strconv"
+	"sync"
 	"time"
 	"unicode/utf8"
 )
@@ -1765,6 +1766,7 @@ type Message struct {
 
 	// doneSignal is a channel that indicate when a message is considered acted upon by downstream handler
 	doneSignal chan struct{}
+	doneMutex  sync.Mutex
 }
 
 // NewMessage returns a *Message with data as the payload.
@@ -1782,8 +1784,11 @@ func NewMessage(data []byte) *Message {
 // done closes the internal doneSignal channel to let the receiver know that this message has been acted upon
 func (m *Message) done() {
 	// TODO: move initialization in ctor and use ctor everywhere?
+	m.doneMutex.Lock()
 	if m.doneSignal != nil {
 		close(m.doneSignal)
+		m.doneSignal = nil
+		m.doneMutex.Unlock()
 	}
 }
 

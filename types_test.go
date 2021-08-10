@@ -39,3 +39,19 @@ func TestMarshalArrayInt64AsSmallLongArray(t *testing.T) {
 
 	require.EqualValues(t, arrayInt64([]int64{math.MaxInt8, math.MinInt8}), unmarshalled)
 }
+
+func TestMessageCallDoneMultipleTimes(t *testing.T) {
+	messageNilDoneChannel := &Message{}
+	require.NotPanics(t, func() {
+		messageNilDoneChannel.done()
+		messageNilDoneChannel.done()
+	})
+
+	messageWithDoneChannel := &Message{
+		doneSignal: make(chan struct{}, 1),
+	}
+	require.NotPanics(t, func() {
+		messageWithDoneChannel.done()
+		messageWithDoneChannel.done()
+	})
+}

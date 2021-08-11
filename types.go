@@ -1786,9 +1786,12 @@ func (m *Message) done() {
 	if m.doneSignal == nil {
 		return
 	}
-	m.closeOnce.Do(func() {
-		close(m.doneSignal)
-	})
+	func(once *sync.Once) {
+		once.Do(func() {
+			close(m.doneSignal)
+		})
+	}(&m.closeOnce)
+
 }
 
 // GetData returns the first []byte from the Data field

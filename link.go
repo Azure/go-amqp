@@ -36,6 +36,11 @@ type link struct {
 	source        *source
 	target        *target
 	properties    map[symbol]interface{} // additional properties sent upon link attach
+	// Indicates whether we should allow detaches on disposition errors or not.
+	// Some AMQP servers (like Event Hubs) benefit from keeping the link open on disposition errors
+	// (for instance, if you're doing many parallel sends over the same link and you get back a
+	// throttling error, which is not fatal)
+	detachOnDispositionError bool
 
 	// "The delivery-count is initialized by the sender when a link endpoint is created,
 	// and is incremented whenever a message is sent. Only the sender MAY independently
@@ -64,12 +69,13 @@ type link struct {
 
 func newLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 	l := &link{
-		key:           linkKey{randString(40), role(r != nil)},
-		session:       s,
-		receiver:      r,
-		close:         make(chan struct{}),
-		detached:      make(chan struct{}),
-		receiverReady: make(chan struct{}, 1),
+		key:                      linkKey{randString(40), role(r != nil)},
+		session:                  s,
+		receiver:                 r,
+		close:                    make(chan struct{}),
+		detached:                 make(chan struct{}),
+		receiverReady:            make(chan struct{}, 1),
+		detachOnDispositionError: true,
 	}
 
 	// configure options
@@ -541,7 +547,7 @@ func (l *link) muxReceive(fr performTransfer) error {
 func (l *link) muxHandleFrame(fr frameBody) error {
 	var (
 		isSender               = l.receiver == nil
-		errOnRejectDisposition = isSender && (l.receiverSettleMode == nil || *l.receiverSettleMode == ModeFirst)
+		errOnRejectDisposition = l.detachOnDispositionError && (isSender && (l.receiverSettleMode == nil || *l.receiverSettleMode == ModeFirst))
 	)
 
 	switch fr := fr.(type) {

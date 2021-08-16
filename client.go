@@ -608,6 +608,17 @@ func LinkSourceTimeout(timeout uint32) LinkOption {
 	}
 }
 
+// LinkDetachOnDispositionError controls whether you detach on disposition
+// errors (subject to some simple logic) or do NOT detach at all on disposition
+// errors.
+// Defaults to true.
+func LinkDetachOnDispositionError(detachOnDispositionError bool) LinkOption {
+	return func(l *link) error {
+		l.detachOnDispositionError = detachOnDispositionError
+		return nil
+	}
+}
+
 const maxTransferFrameHeader = 66 // determined by calcMaxTransferFrameHeader
 
 func calcMaxTransferFrameHeader() int {

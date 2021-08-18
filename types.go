@@ -8,7 +8,6 @@ import (
 	"math"
 	"reflect"
 	"strconv"
-	"sync"
 	"time"
 	"unicode/utf8"
 )
@@ -1766,7 +1765,6 @@ type Message struct {
 
 	// doneSignal is a channel that indicate when a message is considered acted upon by downstream handler
 	doneSignal chan struct{}
-	closeOnce  sync.Once
 }
 
 // NewMessage returns a *Message with data as the payload.
@@ -1786,12 +1784,15 @@ func (m *Message) done() {
 	if m.doneSignal == nil {
 		return
 	}
-	func(once *sync.Once) {
-		once.Do(func() {
-			close(m.doneSignal)
-		})
-	}(&m.closeOnce)
-
+	// protect against concurrent dispositions called on a message by the user-implemented handler.
+	// panic recovery was chosen as the simplest, least invasive method due to the Message type being public API.
+	defer func() {
+		if r := recover(); r != nil {
+			debug(3, "msg.done() - panic closing doneSignal. Likely already closed", r)
+		}
+	}()
+	close(m.doneSignal)
+	m.doneSignal = nil
 }
 
 // GetData returns the first []byte from the Data field

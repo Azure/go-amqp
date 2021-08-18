@@ -2,6 +2,7 @@ package amqp
 
 import (
 	"math"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -41,17 +42,37 @@ func TestMarshalArrayInt64AsSmallLongArray(t *testing.T) {
 }
 
 func TestMessageCallDoneMultipleTimes(t *testing.T) {
-	messageNilDoneChannel := &Message{}
-	require.NotPanics(t, func() {
-		messageNilDoneChannel.done()
-		messageNilDoneChannel.done()
-	})
-
-	messageWithDoneChannel := &Message{
-		doneSignal: make(chan struct{}, 1),
+	tests := []struct {
+		name       string
+		message    *Message
+		iterations int
+	}{
+		{
+			name:       "Channel Not Initialized",
+			message:    &Message{},
+			iterations: 100,
+		},
+		{
+			name: "Channel Initialized",
+			message: &Message{
+				doneSignal: make(chan struct{}, 1),
+			},
+			iterations: 100,
+		},
 	}
-	require.NotPanics(t, func() {
-		messageWithDoneChannel.done()
-		messageWithDoneChannel.done()
-	})
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			require.NotPanics(t, func() {
+				g := sync.WaitGroup{}
+				for i := 0; i < test.iterations; i++ {
+					go func(waitID int) {
+						g.Add(1)
+						test.message.done()
+						g.Done()
+					}(i)
+				}
+				g.Wait()
+			})
+		})
+	}
 }

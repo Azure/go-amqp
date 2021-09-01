@@ -1,3 +1,4 @@
+//go:build local
 // +build local
 
 package amqp_test

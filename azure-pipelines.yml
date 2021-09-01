@@ -14,7 +14,7 @@ jobs:
           go.version: '1.16.7'
         Linux_Go117:
           vm.image: 'ubuntu-18.04'
-          go.version: '1.17.0'
+          go.version: '1.17'
 
     pool:
       vmImage: '$(vm.image)'

@@ -131,7 +131,7 @@ func TestReceiver_HandleMessageModeSecond_removeFromUnsettledMapOnDisposition(t 
 	select {
 	case _, ok := <-msg.doneSignal:
 		if !ok {
-			// channel was closed
+			t.Log("channel was closed")
 		}
 	default:
 		t.Fatal("expected closed of doneSignal")

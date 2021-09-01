@@ -1,13 +1,11 @@
 package amqp
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"math"
 	"math/rand"
 	"net"
 	"net/url"
@@ -620,33 +618,3 @@ func LinkDetachOnDispositionError(detachOnDispositionError bool) LinkOption {
 }
 
 const maxTransferFrameHeader = 66 // determined by calcMaxTransferFrameHeader
-
-func calcMaxTransferFrameHeader() int {
-	var buf buffer
-
-	maxUint32 := uint32(math.MaxUint32)
-	receiverSettleMode := ReceiverSettleMode(0)
-	err := writeFrame(&buf, frame{
-		type_:   frameTypeAMQP,
-		channel: math.MaxUint16,
-		body: &performTransfer{
-			Handle:             maxUint32,
-			DeliveryID:         &maxUint32,
-			DeliveryTag:        bytes.Repeat([]byte{'a'}, 32),
-			MessageFormat:      &maxUint32,
-			Settled:            true,
-			More:               true,
-			ReceiverSettleMode: &receiverSettleMode,
-			State:              nil, // TODO: determine whether state should be included in size
-			Resume:             true,
-			Aborted:            true,
-			Batchable:          true,
-			// Payload omitted as it is appended directly without any header
-		},
-	})
-	if err != nil {
-		panic(err)
-	}
-
-	return buf.len()
-}

@@ -2525,7 +2525,7 @@ type saslChallenge struct {
 }
 
 func (sc *saslChallenge) String() string {
-	return fmt.Sprint("Challenge{Challenge: ********}")
+	return "Challenge{Challenge: ********}"
 }
 
 func (sc *saslChallenge) frameBody() {}
@@ -2554,7 +2554,7 @@ type saslResponse struct {
 }
 
 func (sr *saslResponse) String() string {
-	return fmt.Sprint("Response{Response: ********}")
+	return "Response{Response: ********}"
 }
 
 func (sr *saslResponse) frameBody() {}

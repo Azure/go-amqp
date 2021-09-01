@@ -225,6 +225,9 @@ func TestIssue173(t *testing.T) {
 	}
 	var got time.Time
 	err = unmarshal(&buf, &got)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if d := testDiff(want, got); d != "" {
 		t.Fatal(d)
 	}

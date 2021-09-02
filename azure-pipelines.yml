@@ -26,9 +26,7 @@ jobs:
 
       - script: |
           set -e
-          echo $(go env GOPATH)/bin
           export gopathbin=$(go env GOPATH)/bin
-          echo $gopathbin
           echo "##vso[task.prependpath]$gopathbin"
           go get github.com/jstemmer/go-junit-report
           go get github.com/axw/gocov/gocov
@@ -37,7 +35,6 @@ jobs:
         displayName: 'Install Dependencies'
 
       - script: |
-          echo $PATH
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.42.0
           golangci-lint --version
           golangci-lint run
@@ -88,11 +85,11 @@ jobs:
       - task: PublishTestResults@2
         inputs:
           testRunner: JUnit
-          testResultsFiles: $(sdkPath)/report.xml
+          testResultsFiles: report.xml
           failTaskOnFailedTests: true
 
       - task: PublishCodeCoverageResults@1
         inputs:
           codeCoverageTool: Cobertura 
-          summaryFileLocation: $(sdkPath)/coverage.xml
-          additionalCodeCoverageFiles: $(sdkPath)/coverage.html
+          summaryFileLocation: coverage.xml
+          additionalCodeCoverageFiles: coverage.html

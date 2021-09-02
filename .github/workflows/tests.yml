@@ -38,7 +38,7 @@ jobs:
       env:
         GOPATH: ${{ runner.workspace }}/go
       run: |
-        go get -t -v -d -tags "integration gofuzz" .
+        go get -t -v -d -tags "integration" .
 
     - name: Test
       working-directory: ${{ runner.workspace }}/go/src/pack.ag/amqp

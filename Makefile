@@ -16,16 +16,16 @@ fuzzclean:
 	rm -f $(FUZZ_DIR)/*.zip
 
 test:
-	TEST_CORPUS=1 go test -tags gofuzz -race -run=Corpus
-	go test -tags gofuzz -v -race ./...
+	TEST_CORPUS=1 go test -race -run=Corpus
+	go test -v -race ./...
 
 #integration:
 	#go test -tags "integration pkgerrors" -count=1 -v -race .
 
 test386:
-	TEST_CORPUS=1 go test -tags "gofuzz" -count=1 -v .
+	TEST_CORPUS=1 go test -count=1 -v .
 
 ci: test386 coverage
 
 coverage:
-	TEST_CORPUS=1 go test -tags "gofuzz" -cover -coverprofile=cover.out -v
+	TEST_CORPUS=1 go test -cover -coverprofile=cover.out -v

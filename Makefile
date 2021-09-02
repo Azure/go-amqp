@@ -20,7 +20,7 @@ test:
 	go test -tags gofuzz -v -race ./...
 
 #integration:
-	#go test -tags "integration pkgerrors" -count=1 -v -race .
+	#go test -tags "integration" -count=1 -v -race .
 
 test386:
 	TEST_CORPUS=1 go test -tags "gofuzz" -count=1 -v .

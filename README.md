@@ -122,13 +122,6 @@ func main() {
 
 Feel free to send PRs adding additional projects. Listed projects are not limited to those that use this library as long as they are potentially useful to people who are looking at an AMQP library.
 
-### Other Notes
-
-By default, this package depends only on the standard library. Building with the
-`pkgerrors` tag will cause errors to be created/wrapped by the github.com/pkg/errors
-library. This can be useful for debugging and when used in a project using
-github.com/pkg/errors.
-
 # Contributing
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a

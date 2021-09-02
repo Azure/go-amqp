@@ -3,6 +3,7 @@ package amqp
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"sync"
 	"sync/atomic"
 )
@@ -50,7 +51,7 @@ func (s *Sender) Send(ctx context.Context, msg *Message) error {
 	case <-s.link.detached:
 		return s.link.err
 	case <-ctx.Done():
-		return errorWrapf(ctx.Err(), "awaiting send")
+		return fmt.Errorf("awaiting send: %v", ctx.Err())
 	}
 }
 
@@ -58,7 +59,7 @@ func (s *Sender) Send(ctx context.Context, msg *Message) error {
 // locking the transfer confirmation that happens in Send.
 func (s *Sender) send(ctx context.Context, msg *Message) (chan deliveryState, error) {
 	if len(msg.DeliveryTag) > maxDeliveryTagLength {
-		return nil, errorErrorf("delivery tag is over the allowed %v bytes, len: %v", maxDeliveryTagLength, len(msg.DeliveryTag))
+		return nil, fmt.Errorf("delivery tag is over the allowed %v bytes, len: %v", maxDeliveryTagLength, len(msg.DeliveryTag))
 	}
 
 	s.mu.Lock()
@@ -71,7 +72,7 @@ func (s *Sender) send(ctx context.Context, msg *Message) (chan deliveryState, er
 	}
 
 	if s.link.maxMessageSize != 0 && uint64(s.buf.len()) > s.link.maxMessageSize {
-		return nil, errorErrorf("encoded message size exceeds max of %d", s.link.maxMessageSize)
+		return nil, fmt.Errorf("encoded message size exceeds max of %d", s.link.maxMessageSize)
 	}
 
 	var (
@@ -119,7 +120,7 @@ func (s *Sender) send(ctx context.Context, msg *Message) (chan deliveryState, er
 		case <-s.link.detached:
 			return nil, s.link.err
 		case <-ctx.Done():
-			return nil, errorWrapf(ctx.Err(), "awaiting send")
+			return nil, fmt.Errorf("awaiting send: %v", ctx.Err())
 		}
 
 		// clear values that are only required on first message

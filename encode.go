@@ -2,6 +2,8 @@ package amqp
 
 import (
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"math"
 	"time"
 	"unicode/utf8"
@@ -25,7 +27,7 @@ func writeFrame(buf *buffer, fr frame) error {
 
 	// validate size
 	if uint(buf.len()) > math.MaxUint32 {
-		return errorNew("frame too large")
+		return errors.New("frame too large")
 	}
 
 	// retrieve raw bytes
@@ -215,7 +217,7 @@ func marshal(wr *buffer, i interface{}) error {
 	case marshaler:
 		return t.marshal(wr)
 	default:
-		return errorErrorf("marshal not implemented for %T", i)
+		return fmt.Errorf("marshal not implemented for %T", i)
 	}
 	return nil
 }
@@ -378,7 +380,7 @@ func writeDescriptor(wr *buffer, code amqpType) {
 
 func writeString(wr *buffer, str string) error {
 	if !utf8.ValidString(str) {
-		return errorNew("not a valid UTF-8 string")
+		return errors.New("not a valid UTF-8 string")
 	}
 	l := len(str)
 
@@ -400,7 +402,7 @@ func writeString(wr *buffer, str string) error {
 		return nil
 
 	default:
-		return errorNew("too long")
+		return errors.New("too long")
 	}
 }
 
@@ -425,7 +427,7 @@ func writeBinary(wr *buffer, bin []byte) error {
 		return nil
 
 	default:
-		return errorNew("too long")
+		return errors.New("too long")
 	}
 }
 
@@ -518,7 +520,7 @@ func writeMap(wr *buffer, m interface{}) error {
 			case int:
 				writeInt64(wr, int64(key))
 			default:
-				return errorErrorf("unsupported Annotations key type %T", key)
+				return fmt.Errorf("unsupported Annotations key type %T", key)
 			}
 
 			err := marshal(wr, val)
@@ -527,11 +529,11 @@ func writeMap(wr *buffer, m interface{}) error {
 			}
 		}
 	default:
-		return errorErrorf("unsupported map type %T", m)
+		return fmt.Errorf("unsupported map type %T", m)
 	}
 
 	if uint(pairs) > math.MaxUint32-4 {
-		return errorNew("map contains too many elements")
+		return errors.New("map contains too many elements")
 	}
 
 	// overwrite placeholder size and length

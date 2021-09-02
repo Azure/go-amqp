@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"net"
@@ -78,7 +79,7 @@ func ConnTLSConfig(tc *tls.Config) ConnOption {
 func ConnIdleTimeout(d time.Duration) ConnOption {
 	return func(c *conn) error {
 		if d < 0 {
-			return errorNew("idle timeout cannot be negative")
+			return errors.New("idle timeout cannot be negative")
 		}
 		c.idleTimeout = d
 		return nil
@@ -94,7 +95,7 @@ func ConnIdleTimeout(d time.Duration) ConnOption {
 func ConnMaxFrameSize(n uint32) ConnOption {
 	return func(c *conn) error {
 		if n < 512 {
-			return errorNew("max frame size must be 512 or greater")
+			return errors.New("max frame size must be 512 or greater")
 		}
 		c.maxFrameSize = n
 		return nil
@@ -120,10 +121,10 @@ func ConnConnectTimeout(d time.Duration) ConnOption {
 func ConnMaxSessions(n int) ConnOption {
 	return func(c *conn) error {
 		if n < 1 {
-			return errorNew("max sessions cannot be less than 1")
+			return errors.New("max sessions cannot be less than 1")
 		}
 		if n > 65536 {
-			return errorNew("max sessions cannot be greater than 65536")
+			return errors.New("max sessions cannot be greater than 65536")
 		}
 		c.channelMax = uint16(n - 1)
 		return nil
@@ -136,7 +137,7 @@ func ConnMaxSessions(n int) ConnOption {
 func ConnProperty(key, value string) ConnOption {
 	return func(c *conn) error {
 		if key == "" {
-			return errorNew("connection property key must not be empty")
+			return errors.New("connection property key must not be empty")
 		}
 		if c.properties == nil {
 			c.properties = make(map[symbol]interface{})
@@ -386,7 +387,7 @@ func (c *conn) mux() {
 			}
 
 			if !ok {
-				c.err = errorErrorf("unexpected frame: %#v", fr.body)
+				c.err = fmt.Errorf("unexpected frame: %#v", fr.body)
 				continue
 			}
 
@@ -415,7 +416,7 @@ func (c *conn) mux() {
 			// get next available channel
 			next, ok := channels.next()
 			if !ok {
-				nextSession = newSessionResp{err: errorErrorf("reached connection channel max (%d)", c.channelMax)}
+				nextSession = newSessionResp{err: fmt.Errorf("reached connection channel max (%d)", c.channelMax)}
 				continue
 			}
 
@@ -526,7 +527,7 @@ func (c *conn) connReader() {
 
 		// check size is reasonable
 		if currentHeader.Size > math.MaxInt32 { // make max size configurable
-			c.connErr <- errorNew("payload too large")
+			c.connErr <- errors.New("payload too large")
 			return
 		}
 
@@ -646,7 +647,7 @@ func (c *conn) writeFrame(fr frame) error {
 	// validate the frame isn't exceeding peer's max frame size
 	requiredFrameSize := c.txBuf.len()
 	if uint64(requiredFrameSize) > uint64(c.peerMaxFrameSize) {
-		return errorErrorf("%T frame size %d larger than peer's max frame size", fr, requiredFrameSize, c.peerMaxFrameSize)
+		return fmt.Errorf("%T frame size %d larger than peer's max frame size %d", fr, requiredFrameSize, c.peerMaxFrameSize)
 	}
 
 	// write to network
@@ -723,7 +724,7 @@ func (c *conn) exchangeProtoHeader(pID protoID) stateFunc {
 	}
 
 	if pID != p.ProtoID {
-		c.err = errorErrorf("unexpected protocol header %#00x, expected %#00x", p.ProtoID, pID)
+		c.err = fmt.Errorf("unexpected protocol header %#00x, expected %#00x", p.ProtoID, pID)
 		return nil
 	}
 
@@ -736,7 +737,7 @@ func (c *conn) exchangeProtoHeader(pID protoID) stateFunc {
 	case protoSASL:
 		return c.negotiateSASL
 	default:
-		c.err = errorErrorf("unknown protocol ID %#02x", p.ProtoID)
+		c.err = fmt.Errorf("unknown protocol ID %#02x", p.ProtoID)
 		return nil
 	}
 }
@@ -754,7 +755,7 @@ func (c *conn) readProtoHeader() (protoHeader, error) {
 	case err := <-c.connErr:
 		return p, err
 	case fr := <-c.rxFrame:
-		return p, errorErrorf("unexpected frame %#v", fr)
+		return p, fmt.Errorf("unexpected frame %#v", fr)
 	case <-deadline:
 		return p, ErrTimeout
 	}
@@ -826,7 +827,7 @@ func (c *conn) openAMQP() stateFunc {
 	}
 	o, ok := fr.body.(*performOpen)
 	if !ok {
-		c.err = errorErrorf("unexpected frame type %T", fr.body)
+		c.err = fmt.Errorf("unexpected frame type %T", fr.body)
 		return nil
 	}
 	debug(1, "RX: %s", o)
@@ -858,7 +859,7 @@ func (c *conn) negotiateSASL() stateFunc {
 	}
 	sm, ok := fr.body.(*saslMechanisms)
 	if !ok {
-		c.err = errorErrorf("unexpected frame type %T", fr.body)
+		c.err = fmt.Errorf("unexpected frame type %T", fr.body)
 		return nil
 	}
 	debug(1, "RX: %s", sm)
@@ -871,7 +872,7 @@ func (c *conn) negotiateSASL() stateFunc {
 	}
 
 	// no match
-	c.err = errorErrorf("no supported auth mechanism (%v)", sm.Mechanisms) // TODO: send "auth not supported" frame?
+	c.err = fmt.Errorf("no supported auth mechanism (%v)", sm.Mechanisms) // TODO: send "auth not supported" frame?
 	return nil
 }
 
@@ -889,14 +890,14 @@ func (c *conn) saslOutcome() stateFunc {
 	}
 	so, ok := fr.body.(*saslOutcome)
 	if !ok {
-		c.err = errorErrorf("unexpected frame type %T", fr.body)
+		c.err = fmt.Errorf("unexpected frame type %T", fr.body)
 		return nil
 	}
 	debug(1, "RX: %s", so)
 
 	// check if auth succeeded
 	if so.Code != codeSASLOK {
-		c.err = errorErrorf("SASL PLAIN auth failed with code %#00x: %s", so.Code, so.AdditionalData) // implement Stringer for so.Code
+		c.err = fmt.Errorf("SASL PLAIN auth failed with code %#00x: %s", so.Code, so.AdditionalData) // implement Stringer for so.Code
 		return nil
 	}
 
@@ -921,7 +922,7 @@ func (c *conn) readFrame() (frame, error) {
 	case err := <-c.connErr:
 		return fr, err
 	case p := <-c.rxProto:
-		return fr, errorErrorf("unexpected protocol header %#v", p)
+		return fr, fmt.Errorf("unexpected protocol header %#v", p)
 	case <-deadline:
 		return fr, ErrTimeout
 	}

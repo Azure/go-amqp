@@ -170,7 +170,7 @@ func (s saslXOAUTH2Handler) step() stateFunc {
 	case *saslOutcome:
 		// check if auth succeeded
 		if v.Code != codeSASLOK {
-			s.conn.err = errorErrorf("SASL XOAUTH2 auth failed with code %#00x: %s : %s",
+			s.conn.err = fmt.Errorf("SASL XOAUTH2 auth failed with code %#00x: %s : %s",
 				v.Code, v.AdditionalData, s.errorResponse)
 			return nil
 		}
@@ -191,12 +191,12 @@ func (s saslXOAUTH2Handler) step() stateFunc {
 			})
 			return s.step
 		} else {
-			s.conn.err = errorErrorf("SASL XOAUTH2 unexpected additional error response received during "+
+			s.conn.err = fmt.Errorf("SASL XOAUTH2 unexpected additional error response received during "+
 				"exchange. Initial error response: %s, additional response: %s", s.errorResponse, v.Challenge)
 			return nil
 		}
 	default:
-		s.conn.err = errorErrorf("unexpected frame type %T", fr.body)
+		s.conn.err = fmt.Errorf("unexpected frame type %T", fr.body)
 		return nil
 	}
 }

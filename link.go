@@ -3,6 +3,7 @@ package amqp
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -164,7 +165,7 @@ func attachLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 	debug(3, "RX: %s", fr)
 	resp, ok := fr.(*performAttach)
 	if !ok {
-		return nil, errorErrorf("unexpected attach response: %#v", fr)
+		return nil, fmt.Errorf("unexpected attach response: %#v", fr)
 	}
 
 	// If the remote encounters an error during the attach it returns an Attach
@@ -186,7 +187,7 @@ func attachLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 
 		detach, ok := fr.(*performDetach)
 		if !ok {
-			return nil, errorErrorf("unexpected frame while waiting for detach: %#v", fr)
+			return nil, fmt.Errorf("unexpected frame while waiting for detach: %#v", fr)
 		}
 
 		// send return detach
@@ -198,7 +199,7 @@ func attachLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 		s.txFrame(fr, nil)
 
 		if detach.Error == nil {
-			return nil, errorErrorf("received detach with no error specified")
+			return nil, fmt.Errorf("received detach with no error specified")
 		}
 		return nil, detach.Error
 	}
@@ -425,7 +426,7 @@ func (l *link) muxReceive(fr performTransfer) error {
 				Condition:   ErrorNotAllowed,
 				Description: msg,
 			})
-			return errorNew(msg)
+			return errors.New(msg)
 		}
 		if fr.MessageFormat == nil {
 			msg := "received message without a message-format"
@@ -433,7 +434,7 @@ func (l *link) muxReceive(fr performTransfer) error {
 				Condition:   ErrorNotAllowed,
 				Description: msg,
 			})
-			return errorNew(msg)
+			return errors.New(msg)
 		}
 		if fr.DeliveryTag == nil {
 			msg := "received message without a delivery-tag"
@@ -441,7 +442,7 @@ func (l *link) muxReceive(fr performTransfer) error {
 				Condition:   ErrorNotAllowed,
 				Description: msg,
 			})
-			return errorNew(msg)
+			return errors.New(msg)
 		}
 	} else {
 		// this is a continuation of a multipart message
@@ -458,7 +459,7 @@ func (l *link) muxReceive(fr performTransfer) error {
 				Condition:   ErrorNotAllowed,
 				Description: msg,
 			})
-			return errorNew(msg)
+			return errors.New(msg)
 		}
 		if fr.MessageFormat != nil && *fr.MessageFormat != l.msg.Format {
 			msg := fmt.Sprintf(
@@ -469,7 +470,7 @@ func (l *link) muxReceive(fr performTransfer) error {
 				Condition:   ErrorNotAllowed,
 				Description: msg,
 			})
-			return errorNew(msg)
+			return errors.New(msg)
 		}
 		if fr.DeliveryTag != nil && !bytes.Equal(fr.DeliveryTag, l.msg.DeliveryTag) {
 			msg := fmt.Sprintf(
@@ -480,7 +481,7 @@ func (l *link) muxReceive(fr performTransfer) error {
 				Condition:   ErrorNotAllowed,
 				Description: msg,
 			})
-			return errorNew(msg)
+			return errors.New(msg)
 		}
 	}
 
@@ -501,7 +502,7 @@ func (l *link) muxReceive(fr performTransfer) error {
 			Condition:   ErrorMessageSizeExceeded,
 			Description: msg,
 		})
-		return errorNew(msg)
+		return errors.New(msg)
 	}
 
 	// add the payload the the buffer
@@ -560,7 +561,7 @@ func (l *link) muxHandleFrame(fr frameBody) error {
 				Condition:   ErrorNotAllowed,
 				Description: "sender cannot process transfer frame",
 			})
-			return errorErrorf("sender received transfer frame")
+			return fmt.Errorf("sender received transfer frame")
 		}
 
 		return l.muxReceive(*fr)
@@ -603,13 +604,13 @@ func (l *link) muxHandleFrame(fr frameBody) error {
 		debug(1, "RX: %s", fr)
 		// don't currently support link detach and reattach
 		if !fr.Closed {
-			return errorErrorf("non-closing detach not supported: %+v", fr)
+			return fmt.Errorf("non-closing detach not supported: %+v", fr)
 		}
 
 		// set detach received and close link
 		l.detachReceived = true
 
-		return errorWrapf(&DetachError{fr.Error}, "received detach frame")
+		return fmt.Errorf("received detach frame %v", &DetachError{fr.Error})
 
 	case *performDisposition:
 		debug(3, "RX: %s", fr)

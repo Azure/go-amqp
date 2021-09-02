@@ -193,14 +193,14 @@ func (s *Session) mux(remoteBegin *performBegin) {
 		case l := <-s.allocateHandle:
 			// Check if link name already exists, if so then an error should be returned
 			if linksByKey[l.key] != nil {
-				l.err = errorErrorf("link with name '%v' already exists", l.key.name)
+				l.err = fmt.Errorf("link with name '%v' already exists", l.key.name)
 				l.rx <- nil
 				continue
 			}
 
 			next, ok := handles.next()
 			if !ok {
-				l.err = errorErrorf("reached session handle max (%d)", s.handleMax)
+				l.err = fmt.Errorf("reached session handle max (%d)", s.handleMax)
 				l.rx <- nil
 				continue
 			}
@@ -386,7 +386,7 @@ func (s *Session) mux(remoteBegin *performBegin) {
 
 			case *performEnd:
 				s.txFrame(&performEnd{}, nil)
-				s.err = errorErrorf("session ended by server: %s", body.Error)
+				s.err = fmt.Errorf("session ended by server: %s", body.Error)
 				return
 
 			default:

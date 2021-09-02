@@ -79,7 +79,7 @@ func Dial(addr string, opts ...ConnOption) (*Client, error) {
 		c.tlsNegotiation = false
 		c.net, err = tls.DialWithDialer(dialer, "tcp", net.JoinHostPort(host, port), c.tlsConfig)
 	default:
-		return nil, errorErrorf("unsupported scheme %q", u.Scheme)
+		return nil, fmt.Errorf("unsupported scheme %q", u.Scheme)
 	}
 	if err != nil {
 		return nil, err
@@ -148,7 +148,7 @@ func (c *Client) NewSession(opts ...SessionOption) (*Session, error) {
 	begin, ok := fr.body.(*performBegin)
 	if !ok {
 		_ = s.Close(context.Background()) // deallocate session on error
-		return nil, errorErrorf("unexpected begin response: %+v", fr.body)
+		return nil, fmt.Errorf("unexpected begin response: %+v", fr.body)
 	}
 
 	// start Session multiplexor
@@ -193,10 +193,10 @@ func SessionOutgoingWindow(window uint32) SessionOption {
 func SessionMaxLinks(n int) SessionOption {
 	return func(s *Session) error {
 		if n < 1 {
-			return errorNew("max sessions cannot be less than 1")
+			return errors.New("max sessions cannot be less than 1")
 		}
 		if int64(n) > 4294967296 {
-			return errorNew("max sessions cannot be greater than 4294967296")
+			return errors.New("max sessions cannot be greater than 4294967296")
 		}
 		s.handleMax = uint32(n - 1)
 		return nil
@@ -301,7 +301,7 @@ func LinkPropertyInt32(key string, value int32) LinkOption {
 func linkProperty(key string, value interface{}) LinkOption {
 	return func(l *link) error {
 		if key == "" {
-			return errorNew("link property key must not be empty")
+			return errors.New("link property key must not be empty")
 		}
 		if l.properties == nil {
 			l.properties = make(map[symbol]interface{})
@@ -376,7 +376,7 @@ func LinkAddressDynamic() LinkOption {
 func LinkCredit(credit uint32) LinkOption {
 	return func(l *link) error {
 		if l.receiver == nil {
-			return errorNew("LinkCredit is not valid for Sender")
+			return errors.New("LinkCredit is not valid for Sender")
 		}
 
 		l.receiver.maxCredit = credit
@@ -414,7 +414,7 @@ func LinkBatchMaxAge(d time.Duration) LinkOption {
 func LinkSenderSettle(mode SenderSettleMode) LinkOption {
 	return func(l *link) error {
 		if mode > ModeMixed {
-			return errorErrorf("invalid SenderSettlementMode %d", mode)
+			return fmt.Errorf("invalid SenderSettlementMode %d", mode)
 		}
 		l.senderSettleMode = &mode
 		return nil
@@ -430,7 +430,7 @@ func LinkSenderSettle(mode SenderSettleMode) LinkOption {
 func LinkReceiverSettle(mode ReceiverSettleMode) LinkOption {
 	return func(l *link) error {
 		if mode > ModeSecond {
-			return errorErrorf("invalid ReceiverSettlementMode %d", mode)
+			return fmt.Errorf("invalid ReceiverSettlementMode %d", mode)
 		}
 		l.receiverSettleMode = &mode
 		return nil
@@ -510,7 +510,7 @@ func LinkMaxMessageSize(size uint64) LinkOption {
 func LinkTargetDurability(d Durability) LinkOption {
 	return func(l *link) error {
 		if d > DurabilityUnsettledState {
-			return errorErrorf("invalid Durability %d", d)
+			return fmt.Errorf("invalid Durability %d", d)
 		}
 
 		if l.target == nil {
@@ -561,7 +561,7 @@ func LinkTargetTimeout(timeout uint32) LinkOption {
 func LinkSourceDurability(d Durability) LinkOption {
 	return func(l *link) error {
 		if d > DurabilityUnsettledState {
-			return errorErrorf("invalid Durability %d", d)
+			return fmt.Errorf("invalid Durability %d", d)
 		}
 
 		if l.source == nil {

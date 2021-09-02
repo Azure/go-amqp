@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math"
 	"reflect"
@@ -216,7 +217,7 @@ func (o *performOpen) marshal(wr *buffer) error {
 
 func (o *performOpen) unmarshal(r *buffer) error {
 	return unmarshalComposite(r, typeCodeOpen, []unmarshalField{
-		{field: &o.ContainerID, handleNull: func() error { return errorNew("Open.ContainerID is required") }},
+		{field: &o.ContainerID, handleNull: func() error { return errors.New("Open.ContainerID is required") }},
 		{field: &o.Hostname},
 		{field: &o.MaxFrameSize, handleNull: func() error { o.MaxFrameSize = 4294967295; return nil }},
 		{field: &o.ChannelMax, handleNull: func() error { o.ChannelMax = 65535; return nil }},
@@ -339,9 +340,9 @@ func (b *performBegin) marshal(wr *buffer) error {
 func (b *performBegin) unmarshal(r *buffer) error {
 	return unmarshalComposite(r, typeCodeBegin, []unmarshalField{
 		{field: &b.RemoteChannel},
-		{field: &b.NextOutgoingID, handleNull: func() error { return errorNew("Begin.NextOutgoingID is required") }},
-		{field: &b.IncomingWindow, handleNull: func() error { return errorNew("Begin.IncomingWindow is required") }},
-		{field: &b.OutgoingWindow, handleNull: func() error { return errorNew("Begin.OutgoingWindow is required") }},
+		{field: &b.NextOutgoingID, handleNull: func() error { return errors.New("Begin.NextOutgoingID is required") }},
+		{field: &b.IncomingWindow, handleNull: func() error { return errors.New("Begin.IncomingWindow is required") }},
+		{field: &b.OutgoingWindow, handleNull: func() error { return errors.New("Begin.OutgoingWindow is required") }},
 		{field: &b.HandleMax, handleNull: func() error { b.HandleMax = 4294967295; return nil }},
 		{field: &b.OfferedCapabilities},
 		{field: &b.DesiredCapabilities},
@@ -543,9 +544,9 @@ func (a *performAttach) marshal(wr *buffer) error {
 
 func (a *performAttach) unmarshal(r *buffer) error {
 	return unmarshalComposite(r, typeCodeAttach, []unmarshalField{
-		{field: &a.Name, handleNull: func() error { return errorNew("Attach.Name is required") }},
-		{field: &a.Handle, handleNull: func() error { return errorNew("Attach.Handle is required") }},
-		{field: &a.Role, handleNull: func() error { return errorNew("Attach.Role is required") }},
+		{field: &a.Name, handleNull: func() error { return errors.New("Attach.Name is required") }},
+		{field: &a.Handle, handleNull: func() error { return errors.New("Attach.Handle is required") }},
+		{field: &a.Role, handleNull: func() error { return errors.New("Attach.Role is required") }},
 		{field: &a.SenderSettleMode},
 		{field: &a.ReceiverSettleMode},
 		{field: &a.Source},
@@ -1122,9 +1123,9 @@ func (f *performFlow) marshal(wr *buffer) error {
 func (f *performFlow) unmarshal(r *buffer) error {
 	return unmarshalComposite(r, typeCodeFlow, []unmarshalField{
 		{field: &f.NextIncomingID},
-		{field: &f.IncomingWindow, handleNull: func() error { return errorNew("Flow.IncomingWindow is required") }},
-		{field: &f.NextOutgoingID, handleNull: func() error { return errorNew("Flow.NextOutgoingID is required") }},
-		{field: &f.OutgoingWindow, handleNull: func() error { return errorNew("Flow.OutgoingWindow is required") }},
+		{field: &f.IncomingWindow, handleNull: func() error { return errors.New("Flow.IncomingWindow is required") }},
+		{field: &f.NextOutgoingID, handleNull: func() error { return errors.New("Flow.NextOutgoingID is required") }},
+		{field: &f.OutgoingWindow, handleNull: func() error { return errors.New("Flow.OutgoingWindow is required") }},
 		{field: &f.Handle},
 		{field: &f.DeliveryCount},
 		{field: &f.LinkCredit},
@@ -1345,7 +1346,7 @@ func (t *performTransfer) marshal(wr *buffer) error {
 
 func (t *performTransfer) unmarshal(r *buffer) error {
 	err := unmarshalComposite(r, typeCodeTransfer, []unmarshalField{
-		{field: &t.Handle, handleNull: func() error { return errorNew("Transfer.Handle is required") }},
+		{field: &t.Handle, handleNull: func() error { return errors.New("Transfer.Handle is required") }},
 		{field: &t.DeliveryID},
 		{field: &t.DeliveryTag},
 		{field: &t.MessageFormat},
@@ -1441,8 +1442,8 @@ func (d *performDisposition) marshal(wr *buffer) error {
 
 func (d *performDisposition) unmarshal(r *buffer) error {
 	return unmarshalComposite(r, typeCodeDisposition, []unmarshalField{
-		{field: &d.Role, handleNull: func() error { return errorNew("Disposition.Role is required") }},
-		{field: &d.First, handleNull: func() error { return errorNew("Disposition.Handle is required") }},
+		{field: &d.Role, handleNull: func() error { return errors.New("Disposition.Role is required") }},
+		{field: &d.First, handleNull: func() error { return errors.New("Disposition.Handle is required") }},
 		{field: &d.Last},
 		{field: &d.Settled},
 		{field: &d.State},
@@ -1492,7 +1493,7 @@ func (d *performDetach) marshal(wr *buffer) error {
 
 func (d *performDetach) unmarshal(r *buffer) error {
 	return unmarshalComposite(r, typeCodeDetach, []unmarshalField{
-		{field: &d.Handle, handleNull: func() error { return errorNew("Detach.Handle is required") }},
+		{field: &d.Handle, handleNull: func() error { return errors.New("Detach.Handle is required") }},
 		{field: &d.Closed},
 		{field: &d.Error},
 	}...)
@@ -1581,7 +1582,7 @@ func (e *Error) marshal(wr *buffer) error {
 
 func (e *Error) unmarshal(r *buffer) error {
 	return unmarshalComposite(r, typeCodeError, []unmarshalField{
-		{field: &e.Condition, handleNull: func() error { return errorNew("Error.Condition is required") }},
+		{field: &e.Condition, handleNull: func() error { return errors.New("Error.Condition is required") }},
 		{field: &e.Description},
 		{field: &e.Info},
 	}...)
@@ -2007,7 +2008,7 @@ func (m *Message) unmarshal(r *buffer) error {
 			section = &m.Value
 
 		default:
-			return errorErrorf("unknown message section %#02x", type_)
+			return fmt.Errorf("unknown message section %#02x", type_)
 		}
 
 		if discardHeader {
@@ -2026,11 +2027,11 @@ func (m *Message) unmarshal(r *buffer) error {
 // modifying any data.
 func peekMessageType(buf []byte) (uint8, error) {
 	if len(buf) < 3 {
-		return 0, errorNew("invalid message")
+		return 0, errors.New("invalid message")
 	}
 
 	if buf[0] != 0 {
-		return 0, errorErrorf("invalid composite header %02x", buf[0])
+		return 0, fmt.Errorf("invalid composite header %02x", buf[0])
 	}
 
 	// copied from readUlong to avoid allocations
@@ -2041,17 +2042,17 @@ func peekMessageType(buf []byte) (uint8, error) {
 
 	if t == typeCodeSmallUlong {
 		if len(buf[2:]) == 0 {
-			return 0, errorNew("invalid ulong")
+			return 0, errors.New("invalid ulong")
 		}
 		return buf[2], nil
 	}
 
 	if t != typeCodeUlong {
-		return 0, errorErrorf("invalid type for uint32 %02x", t)
+		return 0, fmt.Errorf("invalid type for uint32 %02x", t)
 	}
 
 	if len(buf[2:]) < 8 {
-		return 0, errorNew("invalid ulong")
+		return 0, errors.New("invalid ulong")
 	}
 	v := binary.BigEndian.Uint64(buf[2:10])
 
@@ -2317,8 +2318,8 @@ func (sr *stateReceived) marshal(wr *buffer) error {
 
 func (sr *stateReceived) unmarshal(r *buffer) error {
 	return unmarshalComposite(r, typeCodeStateReceived, []unmarshalField{
-		{field: &sr.SectionNumber, handleNull: func() error { return errorNew("StateReceiver.SectionNumber is required") }},
-		{field: &sr.SectionOffset, handleNull: func() error { return errorNew("StateReceiver.SectionOffset is required") }},
+		{field: &sr.SectionNumber, handleNull: func() error { return errors.New("StateReceiver.SectionNumber is required") }},
+		{field: &sr.SectionOffset, handleNull: func() error { return errors.New("StateReceiver.SectionOffset is required") }},
 	}...)
 }
 
@@ -2468,7 +2469,7 @@ func (si *saslInit) marshal(wr *buffer) error {
 
 func (si *saslInit) unmarshal(r *buffer) error {
 	return unmarshalComposite(r, typeCodeSASLInit, []unmarshalField{
-		{field: &si.Mechanism, handleNull: func() error { return errorNew("saslInit.Mechanism is required") }},
+		{field: &si.Mechanism, handleNull: func() error { return errors.New("saslInit.Mechanism is required") }},
 		{field: &si.InitialResponse},
 		{field: &si.Hostname},
 	}...)
@@ -2503,7 +2504,7 @@ func (sm *saslMechanisms) marshal(wr *buffer) error {
 
 func (sm *saslMechanisms) unmarshal(r *buffer) error {
 	return unmarshalComposite(r, typeCodeSASLMechanism,
-		unmarshalField{field: &sm.Mechanisms, handleNull: func() error { return errorNew("saslMechanisms.Mechanisms is required") }},
+		unmarshalField{field: &sm.Mechanisms, handleNull: func() error { return errors.New("saslMechanisms.Mechanisms is required") }},
 	)
 }
 
@@ -2538,7 +2539,7 @@ func (sc *saslChallenge) marshal(wr *buffer) error {
 
 func (sc *saslChallenge) unmarshal(r *buffer) error {
 	return unmarshalComposite(r, typeCodeSASLChallenge, []unmarshalField{
-		{field: &sc.Challenge, handleNull: func() error { return errorNew("saslChallenge.Challenge is required") }},
+		{field: &sc.Challenge, handleNull: func() error { return errors.New("saslChallenge.Challenge is required") }},
 	}...)
 }
 
@@ -2567,7 +2568,7 @@ func (sr *saslResponse) marshal(wr *buffer) error {
 
 func (sr *saslResponse) unmarshal(r *buffer) error {
 	return unmarshalComposite(r, typeCodeSASLResponse, []unmarshalField{
-		{field: &sr.Response, handleNull: func() error { return errorNew("saslResponse.Response is required") }},
+		{field: &sr.Response, handleNull: func() error { return errors.New("saslResponse.Response is required") }},
 	}...)
 }
 
@@ -2595,7 +2596,7 @@ func (so *saslOutcome) marshal(wr *buffer) error {
 
 func (so *saslOutcome) unmarshal(r *buffer) error {
 	return unmarshalComposite(r, typeCodeSASLOutcome, []unmarshalField{
-		{field: &so.Code, handleNull: func() error { return errorNew("saslOutcome.AdditionalData is required") }},
+		{field: &so.Code, handleNull: func() error { return errors.New("saslOutcome.AdditionalData is required") }},
 		{field: &so.AdditionalData},
 	}...)
 }
@@ -2627,7 +2628,7 @@ func (s symbol) marshal(wr *buffer) error {
 		wr.writeUint32(uint32(l))
 		wr.writeString(string(s))
 	default:
-		return errorNew("too long")
+		return errors.New("too long")
 	}
 	return nil
 }
@@ -2676,7 +2677,7 @@ func (m *mapAnyAny) unmarshal(r *buffer) error {
 		// be a function, map, or slice.
 		switch reflect.ValueOf(key).Kind() {
 		case reflect.Slice, reflect.Func, reflect.Map:
-			return errorNew("invalid map key")
+			return errors.New("invalid map key")
 		}
 
 		mm[key] = value
@@ -2799,7 +2800,7 @@ func (p *lifetimePolicy) unmarshal(r *buffer) error {
 		return err
 	}
 	if fields != 0 {
-		return errorErrorf("invalid size %d for lifetime-policy")
+		return fmt.Errorf("invalid size %d for lifetime-policy", fields)
 	}
 	*p = lifetimePolicy(typ)
 	return nil
@@ -2982,7 +2983,7 @@ func (e ExpiryPolicy) validate() error {
 		ExpiryNever:
 		return nil
 	default:
-		return errorErrorf("unknown expiry-policy %q", e)
+		return fmt.Errorf("unknown expiry-policy %q", e)
 	}
 }
 
@@ -3026,7 +3027,7 @@ func (t *describedType) unmarshal(r *buffer) error {
 	}
 
 	if b != 0x0 {
-		return errorErrorf("invalid described type header %02x", b)
+		return fmt.Errorf("invalid described type header %02x", b)
 	}
 
 	err = unmarshal(r, &t.descriptor)
@@ -3069,12 +3070,12 @@ func (a *ArrayUByte) unmarshal(r *buffer) error {
 		return err
 	}
 	if type_ != typeCodeUbyte {
-		return errorErrorf("invalid type for []uint16 %02x", type_)
+		return fmt.Errorf("invalid type for []uint16 %02x", type_)
 	}
 
 	buf, ok := r.next(length)
 	if !ok {
-		return errorErrorf("invalid length %d", length)
+		return fmt.Errorf("invalid length %d", length)
 	}
 	*a = append([]byte(nil), buf...)
 
@@ -3106,12 +3107,12 @@ func (a *arrayInt8) unmarshal(r *buffer) error {
 		return err
 	}
 	if type_ != typeCodeByte {
-		return errorErrorf("invalid type for []uint16 %02x", type_)
+		return fmt.Errorf("invalid type for []uint16 %02x", type_)
 	}
 
 	buf, ok := r.next(length)
 	if !ok {
-		return errorErrorf("invalid length %d", length)
+		return fmt.Errorf("invalid length %d", length)
 	}
 
 	aa := (*a)[:0]
@@ -3154,13 +3155,13 @@ func (a *arrayUint16) unmarshal(r *buffer) error {
 		return err
 	}
 	if type_ != typeCodeUshort {
-		return errorErrorf("invalid type for []uint16 %02x", type_)
+		return fmt.Errorf("invalid type for []uint16 %02x", type_)
 	}
 
 	const typeSize = 2
 	buf, ok := r.next(length * typeSize)
 	if !ok {
-		return errorErrorf("invalid length %d", length)
+		return fmt.Errorf("invalid length %d", length)
 	}
 
 	aa := (*a)[:0]
@@ -3205,13 +3206,13 @@ func (a *arrayInt16) unmarshal(r *buffer) error {
 		return err
 	}
 	if type_ != typeCodeShort {
-		return errorErrorf("invalid type for []uint16 %02x", type_)
+		return fmt.Errorf("invalid type for []uint16 %02x", type_)
 	}
 
 	const typeSize = 2
 	buf, ok := r.next(length * typeSize)
 	if !ok {
-		return errorErrorf("invalid length %d", length)
+		return fmt.Errorf("invalid length %d", length)
 	}
 
 	aa := (*a)[:0]
@@ -3286,7 +3287,7 @@ func (a *arrayUint32) unmarshal(r *buffer) error {
 	case typeCodeSmallUint:
 		buf, ok := r.next(length)
 		if !ok {
-			return errorNew("invalid length")
+			return errors.New("invalid length")
 		}
 
 		if int64(cap(aa)) < length {
@@ -3302,7 +3303,7 @@ func (a *arrayUint32) unmarshal(r *buffer) error {
 		const typeSize = 4
 		buf, ok := r.next(length * typeSize)
 		if !ok {
-			return errorErrorf("invalid length %d", length)
+			return fmt.Errorf("invalid length %d", length)
 		}
 
 		if int64(cap(aa)) < length {
@@ -3317,7 +3318,7 @@ func (a *arrayUint32) unmarshal(r *buffer) error {
 			bufIdx += 4
 		}
 	default:
-		return errorErrorf("invalid type for []uint32 %02x", type_)
+		return fmt.Errorf("invalid type for []uint32 %02x", type_)
 	}
 
 	*a = aa
@@ -3370,7 +3371,7 @@ func (a *arrayInt32) unmarshal(r *buffer) error {
 	case typeCodeSmallint:
 		buf, ok := r.next(length)
 		if !ok {
-			return errorNew("invalid length")
+			return errors.New("invalid length")
 		}
 
 		if int64(cap(aa)) < length {
@@ -3386,7 +3387,7 @@ func (a *arrayInt32) unmarshal(r *buffer) error {
 		const typeSize = 4
 		buf, ok := r.next(length * typeSize)
 		if !ok {
-			return errorErrorf("invalid length %d", length)
+			return fmt.Errorf("invalid length %d", length)
 		}
 
 		if int64(cap(aa)) < length {
@@ -3401,7 +3402,7 @@ func (a *arrayInt32) unmarshal(r *buffer) error {
 			bufIdx += 4
 		}
 	default:
-		return errorErrorf("invalid type for []int32 %02x", type_)
+		return fmt.Errorf("invalid type for []int32 %02x", type_)
 	}
 
 	*a = aa
@@ -3463,7 +3464,7 @@ func (a *arrayUint64) unmarshal(r *buffer) error {
 	case typeCodeSmallUlong:
 		buf, ok := r.next(length)
 		if !ok {
-			return errorNew("invalid length")
+			return errors.New("invalid length")
 		}
 
 		if int64(cap(aa)) < length {
@@ -3479,7 +3480,7 @@ func (a *arrayUint64) unmarshal(r *buffer) error {
 		const typeSize = 8
 		buf, ok := r.next(length * typeSize)
 		if !ok {
-			return errorNew("invalid length")
+			return errors.New("invalid length")
 		}
 
 		if int64(cap(aa)) < length {
@@ -3494,7 +3495,7 @@ func (a *arrayUint64) unmarshal(r *buffer) error {
 			bufIdx += 8
 		}
 	default:
-		return errorErrorf("invalid type for []uint64 %02x", type_)
+		return fmt.Errorf("invalid type for []uint64 %02x", type_)
 	}
 
 	*a = aa
@@ -3547,7 +3548,7 @@ func (a *arrayInt64) unmarshal(r *buffer) error {
 	case typeCodeSmalllong:
 		buf, ok := r.next(length)
 		if !ok {
-			return errorNew("invalid length")
+			return errors.New("invalid length")
 		}
 
 		if int64(cap(aa)) < length {
@@ -3563,7 +3564,7 @@ func (a *arrayInt64) unmarshal(r *buffer) error {
 		const typeSize = 8
 		buf, ok := r.next(length * typeSize)
 		if !ok {
-			return errorNew("invalid length")
+			return errors.New("invalid length")
 		}
 
 		if int64(cap(aa)) < length {
@@ -3578,7 +3579,7 @@ func (a *arrayInt64) unmarshal(r *buffer) error {
 			bufIdx += 8
 		}
 	default:
-		return errorErrorf("invalid type for []uint64 %02x", type_)
+		return fmt.Errorf("invalid type for []uint64 %02x", type_)
 	}
 
 	*a = aa
@@ -3610,13 +3611,13 @@ func (a *arrayFloat) unmarshal(r *buffer) error {
 		return err
 	}
 	if type_ != typeCodeFloat {
-		return errorErrorf("invalid type for []float32 %02x", type_)
+		return fmt.Errorf("invalid type for []float32 %02x", type_)
 	}
 
 	const typeSize = 4
 	buf, ok := r.next(length * typeSize)
 	if !ok {
-		return errorErrorf("invalid length %d", length)
+		return fmt.Errorf("invalid length %d", length)
 	}
 
 	aa := (*a)[:0]
@@ -3662,13 +3663,13 @@ func (a *arrayDouble) unmarshal(r *buffer) error {
 		return err
 	}
 	if type_ != typeCodeDouble {
-		return errorErrorf("invalid type for []float64 %02x", type_)
+		return fmt.Errorf("invalid type for []float64 %02x", type_)
 	}
 
 	const typeSize = 8
 	buf, ok := r.next(length * typeSize)
 	if !ok {
-		return errorErrorf("invalid length %d", length)
+		return fmt.Errorf("invalid length %d", length)
 	}
 
 	aa := (*a)[:0]
@@ -3728,7 +3729,7 @@ func (a *arrayBool) unmarshal(r *buffer) error {
 	case typeCodeBool:
 		buf, ok := r.next(length)
 		if !ok {
-			return errorNew("invalid length")
+			return errors.New("invalid length")
 		}
 
 		for i, value := range buf {
@@ -3748,7 +3749,7 @@ func (a *arrayBool) unmarshal(r *buffer) error {
 			aa[i] = false
 		}
 	default:
-		return errorErrorf("invalid type for []bool %02x", type_)
+		return fmt.Errorf("invalid type for []bool %02x", type_)
 	}
 
 	*a = aa
@@ -3764,7 +3765,7 @@ func (a arrayString) marshal(wr *buffer) error {
 	)
 	for _, element := range a {
 		if !utf8.ValidString(element) {
-			return errorNew("not a valid UTF-8 string")
+			return errors.New("not a valid UTF-8 string")
 		}
 
 		elementsSizeTotal += len(element)
@@ -3799,7 +3800,7 @@ func (a *arrayString) unmarshal(r *buffer) error {
 
 	const typeSize = 2 // assume all strings are at least 2 bytes
 	if length*typeSize > int64(r.len()) {
-		return errorErrorf("invalid length %d", length)
+		return fmt.Errorf("invalid length %d", length)
 	}
 
 	aa := (*a)[:0]
@@ -3823,7 +3824,7 @@ func (a *arrayString) unmarshal(r *buffer) error {
 
 			buf, ok := r.next(int64(size))
 			if !ok {
-				return errorNew("invalid length")
+				return errors.New("invalid length")
 			}
 
 			aa[i] = string(buf)
@@ -3832,18 +3833,18 @@ func (a *arrayString) unmarshal(r *buffer) error {
 		for i := range aa {
 			buf, ok := r.next(4)
 			if !ok {
-				return errorNew("invalid length")
+				return errors.New("invalid length")
 			}
 			size := int64(binary.BigEndian.Uint32(buf))
 
 			buf, ok = r.next(size)
 			if !ok {
-				return errorNew("invalid length")
+				return errors.New("invalid length")
 			}
 			aa[i] = string(buf)
 		}
 	default:
-		return errorErrorf("invalid type for []string %02x", type_)
+		return fmt.Errorf("invalid type for []string %02x", type_)
 	}
 
 	*a = aa
@@ -3890,7 +3891,7 @@ func (a *arraySymbol) unmarshal(r *buffer) error {
 
 	const typeSize = 2 // assume all symbols are at least 2 bytes
 	if length*typeSize > int64(r.len()) {
-		return errorErrorf("invalid length %d", length)
+		return fmt.Errorf("invalid length %d", length)
 	}
 
 	aa := (*a)[:0]
@@ -3914,7 +3915,7 @@ func (a *arraySymbol) unmarshal(r *buffer) error {
 
 			buf, ok := r.next(int64(size))
 			if !ok {
-				return errorNew("invalid length")
+				return errors.New("invalid length")
 			}
 			aa[i] = symbol(buf)
 		}
@@ -3922,18 +3923,18 @@ func (a *arraySymbol) unmarshal(r *buffer) error {
 		for i := range aa {
 			buf, ok := r.next(4)
 			if !ok {
-				return errorNew("invalid length")
+				return errors.New("invalid length")
 			}
 			size := int64(binary.BigEndian.Uint32(buf))
 
 			buf, ok = r.next(size)
 			if !ok {
-				return errorNew("invalid length")
+				return errors.New("invalid length")
 			}
 			aa[i] = symbol(buf)
 		}
 	default:
-		return errorErrorf("invalid type for []symbol %02x", type_)
+		return fmt.Errorf("invalid type for []symbol %02x", type_)
 	}
 
 	*a = aa
@@ -3980,7 +3981,7 @@ func (a *arrayBinary) unmarshal(r *buffer) error {
 
 	const typeSize = 2 // assume all binary is at least 2 bytes
 	if length*typeSize > int64(r.len()) {
-		return errorErrorf("invalid length %d", length)
+		return fmt.Errorf("invalid length %d", length)
 	}
 
 	aa := (*a)[:0]
@@ -4004,7 +4005,7 @@ func (a *arrayBinary) unmarshal(r *buffer) error {
 
 			buf, ok := r.next(int64(size))
 			if !ok {
-				return errorErrorf("invalid length %d", length)
+				return fmt.Errorf("invalid length %d", length)
 			}
 			aa[i] = append([]byte(nil), buf...)
 		}
@@ -4012,18 +4013,18 @@ func (a *arrayBinary) unmarshal(r *buffer) error {
 		for i := range aa {
 			buf, ok := r.next(4)
 			if !ok {
-				return errorNew("invalid length")
+				return errors.New("invalid length")
 			}
 			size := binary.BigEndian.Uint32(buf)
 
 			buf, ok = r.next(int64(size))
 			if !ok {
-				return errorNew("invalid length")
+				return errors.New("invalid length")
 			}
 			aa[i] = append([]byte(nil), buf...)
 		}
 	default:
-		return errorErrorf("invalid type for [][]byte %02x", type_)
+		return fmt.Errorf("invalid type for [][]byte %02x", type_)
 	}
 
 	*a = aa
@@ -4056,13 +4057,13 @@ func (a *arrayTimestamp) unmarshal(r *buffer) error {
 		return err
 	}
 	if type_ != typeCodeTimestamp {
-		return errorErrorf("invalid type for []time.Time %02x", type_)
+		return fmt.Errorf("invalid type for []time.Time %02x", type_)
 	}
 
 	const typeSize = 8
 	buf, ok := r.next(length * typeSize)
 	if !ok {
-		return errorErrorf("invalid length %d", length)
+		return fmt.Errorf("invalid length %d", length)
 	}
 
 	aa := (*a)[:0]
@@ -4108,13 +4109,13 @@ func (a *arrayUUID) unmarshal(r *buffer) error {
 		return err
 	}
 	if type_ != typeCodeUUID {
-		return errorErrorf("invalid type for []UUID %#02x", type_)
+		return fmt.Errorf("invalid type for []UUID %#02x", type_)
 	}
 
 	const typeSize = 16
 	buf, ok := r.next(length * typeSize)
 	if !ok {
-		return errorErrorf("invalid length %d", length)
+		return fmt.Errorf("invalid length %d", length)
 	}
 
 	aa := (*a)[:0]
@@ -4176,7 +4177,7 @@ func (l *list) unmarshal(r *buffer) error {
 
 	// assume that all types are at least 1 byte
 	if length > int64(r.len()) {
-		return errorErrorf("invalid length %d", length)
+		return fmt.Errorf("invalid length %d", length)
 	}
 
 	ll := *l

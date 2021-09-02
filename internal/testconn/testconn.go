@@ -73,7 +73,7 @@ func (c *Conn) SetReadDeadline(t time.Time) error {
 	if t.IsZero() {
 		return nil
 	}
-	c.readDeadline = time.AfterFunc(t.Sub(time.Now()), func() {
+	c.readDeadline = time.AfterFunc(time.Until(t), func() {
 		select {
 		case c.err <- errors.New("timeout"):
 		case <-c.done:

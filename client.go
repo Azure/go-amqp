@@ -134,7 +134,9 @@ func (c *Client) NewSession(opts ...SessionOption) (*Session, error) {
 		HandleMax:      s.handleMax,
 	}
 	debug(1, "TX: %s", begin)
-	s.txFrame(begin, nil)
+	if err := s.txFrame(begin, nil); err != nil {
+		return nil, err
+	}
 
 	// wait for response
 	var fr frame
@@ -224,7 +226,8 @@ var pkgRand = &lockedRand{
 // randBytes returns a base64 encoded string of n bytes.
 func randString(n int) string {
 	b := make([]byte, n)
-	pkgRand.Read(b)
+	// from math/rand, cannot fail
+	_, _ = pkgRand.Read(b)
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 

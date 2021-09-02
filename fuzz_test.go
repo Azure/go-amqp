@@ -39,7 +39,9 @@ func fuzzConn(data []byte) int {
 		return 0
 	}
 
-	msg.Accept(context.Background())
+	if err = msg.Accept(context.Background()); err != nil {
+		return 0
+	}
 
 	ctx, close := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer close()
@@ -192,8 +194,8 @@ func fuzzUnmarshal(data []byte) int {
 	}
 
 	for _, t := range types {
-		unmarshal(&buffer{b: data}, t)
-		readAny(&buffer{b: data})
+		_ = unmarshal(&buffer{b: data}, t)
+		_, _ = readAny(&buffer{b: data})
 	}
 	return 0
 }

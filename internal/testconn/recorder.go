@@ -19,8 +19,8 @@ func NewRecorder(w io.WriteCloser, conn net.Conn) Recorder {
 
 func (r Recorder) Read(b []byte) (int, error) {
 	n, err := r.Conn.Read(b)
-	r.w.Write(b[:n])
-	r.w.Write([]byte("SPLIT\n"))
+	_, _ = r.w.Write(b[:n])
+	_, _ = r.w.Write([]byte("SPLIT\n"))
 	return n, err
 }
 

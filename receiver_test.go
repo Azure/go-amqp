@@ -126,7 +126,6 @@ func TestReceiver_HandleMessageModeSecond_removeFromUnsettledMapOnDisposition(t 
 	if r.link.countUnsettled() != 0 {
 		t.Errorf("the message should be removed from unsettled map")
 	}
-	loop = false
 	// ensure channel was closed
 	select {
 	case _, ok := <-msg.doneSignal:

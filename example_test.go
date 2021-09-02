@@ -73,7 +73,9 @@ func Example() {
 			}
 
 			// Accept message
-			msg.Accept(context.Background())
+			if err = msg.Accept(context.Background()); err != nil {
+				log.Fatalf("Failure accepting message: %v", err)
+			}
 
 			fmt.Printf("Message received: %s\n", msg.GetData())
 		}

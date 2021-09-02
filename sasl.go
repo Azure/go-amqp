@@ -8,9 +8,7 @@ import (
 const (
 	codeSASLOK      saslCode = iota // Connection authentication succeeded.
 	codeSASLAuth                    // Connection authentication failed due to an unspecified problem with the supplied credentials.
-	codeSASLSys                     // Connection authentication failed due to a system error.
 	codeSASLSysPerm                 // Connection authentication failed due to a system error that is unlikely to be corrected without intervention.
-	codeSASLSysTemp                 // Connection authentication failed due to a transient system error.
 )
 
 // SASL Mechanisms

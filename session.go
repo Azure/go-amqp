@@ -156,6 +156,10 @@ func (s *Session) mux(remoteBegin *performBegin) {
 		txTransfer := s.txTransfer
 		// disable txTransfer if flow control windows have been exceeded
 		if remoteIncomingWindow == 0 || s.outgoingWindow == 0 {
+			debug(1, "TX(Session): Disabling txTransfer - window exceeded. remoteIncomingWindow:",
+				remoteIncomingWindow,
+				"outgoingWindow:",
+				s.outgoingWindow)
 			txTransfer = nil
 		}
 
@@ -291,6 +295,7 @@ func (s *Session) mux(remoteBegin *performBegin) {
 				// initial-outgoing-id(endpoint) + incoming-window(flow) - next-outgoing-id(endpoint)"
 				remoteIncomingWindow = body.IncomingWindow - nextOutgoingID
 				remoteIncomingWindow += *body.NextIncomingID
+				debug(3, "RX(Session) Flow - remoteOutgoingWindow: %d remoteIncomingWindow: %d nextOutgoingID: %d", remoteOutgoingWindow, remoteIncomingWindow, nextOutgoingID)
 
 				// Send to link if handle is set
 				if body.Handle != nil {
@@ -338,7 +343,10 @@ func (s *Session) mux(remoteBegin *performBegin) {
 				// as decrementing the remote-outgoing-window, and MAY
 				// (depending on policy) decrement its incoming-window."
 				nextIncomingID++
-				remoteOutgoingWindow--
+				// don't loop to intmax
+				if remoteOutgoingWindow > 0 {
+					remoteOutgoingWindow--
+				}
 				link, ok := links[body.Handle]
 				if !ok {
 					continue
@@ -351,10 +359,11 @@ func (s *Session) mux(remoteBegin *performBegin) {
 
 				// if this message is received unsettled and link rcv-settle-mode == second, add to handlesByRemoteDeliveryID
 				if !body.Settled && body.DeliveryID != nil && link.receiverSettleMode != nil && *link.receiverSettleMode == ModeSecond {
-					debug(1, "TX: adding handle to handlesByRemoteDeliveryID. linkCredit: %d", link.linkCredit)
+					debug(1, "TX(Session): adding handle to handlesByRemoteDeliveryID. linkCredit: %d", link.linkCredit)
 					handlesByRemoteDeliveryID[*body.DeliveryID] = body.Handle
 				}
 
+				debug(3, "TX(Session) Flow? remoteOutgoingWindow(%d) < s.incomingWindow(%d)/2\n", remoteOutgoingWindow, s.incomingWindow)
 				// Update peer's outgoing window if half has been consumed.
 				if remoteOutgoingWindow < s.incomingWindow/2 {
 					nID := nextIncomingID
@@ -366,7 +375,6 @@ func (s *Session) mux(remoteBegin *performBegin) {
 					}
 					debug(1, "TX(Session): %s", flow)
 					s.txFrame(flow, nil)
-					remoteOutgoingWindow = s.incomingWindow
 				}
 
 			case *performDetach:
@@ -422,7 +430,10 @@ func (s *Session) mux(remoteBegin *performBegin) {
 			// its next-outgoing-id, decrement its remote-incoming-window,
 			// and MAY (depending on policy) decrement its outgoing-window."
 			nextOutgoingID++
-			remoteIncomingWindow--
+			// don't decrement if we're at 0 or we could loop to int max
+			if remoteIncomingWindow != 0 {
+				remoteIncomingWindow--
+			}
 
 		case fr := <-s.tx:
 			switch fr := fr.(type) {
@@ -434,7 +445,6 @@ func (s *Session) mux(remoteBegin *performBegin) {
 				fr.OutgoingWindow = s.outgoingWindow
 				debug(1, "TX(Session) - tx: %s", fr)
 				s.txFrame(fr, nil)
-				remoteOutgoingWindow = s.incomingWindow
 			case *performTransfer:
 				panic("transfer frames must use txTransfer")
 			default:

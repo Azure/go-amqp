@@ -26,7 +26,10 @@ jobs:
 
       - script: |
           set -e
-          echo '##vso[task.prependpath]$(go env GOPATH)/bin'
+          echo $(go env GOPATH)/bin
+          export gopathbin=$(go env GOPATH)/bin
+          echo $gopathbin
+          echo "##vso[task.prependpath]$gopathbin"
           go get github.com/jstemmer/go-junit-report
           go get github.com/axw/gocov/gocov
           go get github.com/AlekSi/gocov-xml
@@ -34,6 +37,7 @@ jobs:
         displayName: 'Install Dependencies'
 
       - script: |
+          echo $PATH
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.42.0
           golangci-lint --version
           golangci-lint run

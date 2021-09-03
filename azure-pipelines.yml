@@ -74,6 +74,7 @@ jobs:
           set -e
           echo '##[command]Starting broker at $(AMQP_BROKER_ADDR)'
           $(Pipeline.Workspace)/azure-amqp/bin/Debug/TestAmqpBroker/net461/TestAmqpBroker.exe $AMQP_BROKER_ADDR &
+          echo '##[section]Starting tests'
           go test -tags -race -v -coverprofile=coverage.txt -covermode atomic ./... 2>&1 | go-junit-report > report.xml
           gocov convert coverage.txt > coverage.json
           gocov-xml < coverage.json > coverage.xml

@@ -2,7 +2,7 @@ variables:
   GOPATH: '$(system.defaultWorkingDirectory)/work'
   sdkPath: '$(GOPATH)/src/github.com/$(build.repository.name)'
   GO111MODULE: 'on'
-  AMQP_BROKER_ADDR: "amqp://localhost:25672"
+  AMQP_BROKER_ADDR: 'amqp://localhost:25672'
 
 jobs:
   - job: 'goamqp'
@@ -66,6 +66,7 @@ jobs:
           git clone https://github.com/Azure/azure-amqp $(Pipeline.Workspace)/azure-amqp
           pushd $(Pipeline.Workspace)/azure-amqp/test/TestAmqpBroker
           dotnet restore
+          echo '##[command]Starting broker at $(AMQP_BROKER_ADDR)'
           dotnet run --framework net461 -- $(AMQP_BROKER_ADDR)&
         displayName: 'Clone and Run Broker'
 

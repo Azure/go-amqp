@@ -298,7 +298,6 @@ func (l *link) doFlow() (ok bool, enableOutgoingTransfers bool) {
 	// enable outgoing transfers case if sender and credits are available
 	case isSender && l.linkCredit > 0:
 		debug(1, "Link Mux isSender: credit: %d, deliveryCount: %d, messages: %d, unsettled: %d", l.linkCredit, l.deliveryCount, len(l.messages), l.countUnsettled())
-		// outgoingTransfers = l.transfers
 		return true, true
 
 	case isReceiver && l.receiver.manualCreditor != nil:
@@ -585,8 +584,8 @@ func (l *link) muxReceive(fr performTransfer) error {
 // drain will cause a flow frame with 'drain' set to true when
 // the next flow frame is sent in 'mux()'.
 func (l *link) drain(ctx context.Context) error {
-	if l.receiver.manualCreditor == nil {
-		return errors.New("drain can only be used with links using manual credit management")
+	if l.receiver == nil || l.receiver.manualCreditor == nil {
+		return errors.New("drain can only be used with receiver links using manual credit management")
 	}
 
 	// cause mux() to check our flow conditions.
@@ -599,8 +598,8 @@ func (l *link) drain(ctx context.Context) error {
 }
 
 func (l *link) addCredit(credit uint32) error {
-	if l.receiver.manualCreditor == nil {
-		return errors.New("addCredit can only be used with links using manual credit management")
+	if l.receiver == nil || l.receiver.manualCreditor == nil {
+		return errors.New("addCredit can only be used with receiver links using manual credit management")
 	}
 
 	if err := l.receiver.manualCreditor.AddCredit(credit); err != nil {

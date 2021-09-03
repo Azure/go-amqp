@@ -2,6 +2,7 @@ variables:
   GOPATH: '$(system.defaultWorkingDirectory)/work'
   sdkPath: '$(GOPATH)/src/github.com/$(build.repository.name)'
   GO111MODULE: 'on'
+  AMQP_BROKER_ADDR: "amqp://localhost:5672"
 
 jobs:
   - job: 'goamqp'
@@ -53,6 +54,19 @@ jobs:
           go vet ./...
         workingDirectory: '$(sdkPath)'
         displayName: 'Vet'
+
+      - task: UseDotNet@2
+        displayName: 'Use .NET Core sdk'
+        inputs:
+          packageType: sdk
+          version: 3.1.x
+          installationPath: $(Agent.ToolsDirectory)/dotnet
+
+      - script: |
+          git clone https://github.com/Azure/azure-amqp $(Pipeline.Workspace)/azure-amqp
+          pushd $(Pipeline.Workspace)/azure-amqp/test/TestAmqpBroker
+          dotnet run --framework netcoreapp3.1 -- $(AMQP_BROKER_ADDR)&
+        displayName: 'Clone and Run Broker'
 
       - script: |
           set -e

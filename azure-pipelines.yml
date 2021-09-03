@@ -2,7 +2,7 @@ variables:
   GOPATH: '$(system.defaultWorkingDirectory)/work'
   sdkPath: '$(GOPATH)/src/github.com/$(build.repository.name)'
   GO111MODULE: 'on'
-  AMQP_BROKER_ADDR: 'amqp://localhost:25672'
+  AMQP_BROKER_ADDR: 'amqp://127.0.0.1:25672'
 
 jobs:
   - job: 'goamqp'

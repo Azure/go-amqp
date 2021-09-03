@@ -67,6 +67,7 @@ jobs:
           pushd $(Pipeline.Workspace)/azure-amqp/test/TestAmqpBroker
           dotnet restore
           dotnet build
+          chmod +x $(Pipeline.Workspace)/azure-amqp/bin/Debug/TestAmqpBroker/net461/TestAmqpBroker.exe
         displayName: 'Clone and Build Broker'
 
       - script: |

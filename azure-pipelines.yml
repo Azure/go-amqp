@@ -65,6 +65,7 @@ jobs:
       - script: |
           git clone https://github.com/Azure/azure-amqp $(Pipeline.Workspace)/azure-amqp
           pushd $(Pipeline.Workspace)/azure-amqp/test/TestAmqpBroker
+          dotnet restore
           dotnet run --framework netcoreapp3.1 -- $(AMQP_BROKER_ADDR)&
         displayName: 'Clone and Run Broker'
 

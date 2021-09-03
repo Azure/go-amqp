@@ -69,7 +69,8 @@ func (s *Session) Close(ctx context.Context) error {
 	return s.err
 }
 
-// txFrame sends a frame to the connWriter
+// txFrame sends a frame to the connWriter.
+// it returns an error if the connection has been closed.
 func (s *Session) txFrame(p frameBody, done chan deliveryState) error {
 	return s.conn.wantWriteFrame(frame{
 		type_:   frameTypeAMQP,
@@ -171,7 +172,6 @@ func (s *Session) mux(remoteBegin *performBegin) {
 
 		// session is being closed by user
 		case <-s.close:
-			// session is closing, we don't care about the error
 			_ = s.txFrame(&performEnd{}, nil)
 
 			// discard frames until End is received or conn closed
@@ -269,15 +269,12 @@ func (s *Session) mux(remoteBegin *performBegin) {
 					// This is a protocol error:
 					//       "[...] MUST be set if the peer has received
 					//        the begin frame for the session"
-					if err := s.txFrame(&performEnd{
+					_ = s.txFrame(&performEnd{
 						Error: &Error{
 							Condition:   ErrorNotAllowed,
 							Description: "next-incoming-id not set after session established",
 						},
-					}, nil); err != nil {
-						s.err = err
-						return
-					}
+					}, nil)
 					s.err = errors.New("protocol error: received flow without next-incoming-id after session established")
 					return
 				}
@@ -321,10 +318,7 @@ func (s *Session) mux(remoteBegin *performBegin) {
 						OutgoingWindow: s.outgoingWindow,
 					}
 					debug(1, "TX: %s", resp)
-					if err := s.txFrame(resp, nil); err != nil {
-						s.err = err
-						return
-					}
+					_ = s.txFrame(resp, nil)
 				}
 
 			case *performAttach:
@@ -381,10 +375,7 @@ func (s *Session) mux(remoteBegin *performBegin) {
 						OutgoingWindow: s.outgoingWindow,
 					}
 					debug(1, "TX(Session): %s", flow)
-					if err := s.txFrame(flow, nil); err != nil {
-						s.err = err
-						return
-					}
+					_ = s.txFrame(flow, nil)
 				}
 
 			case *performDetach:
@@ -395,10 +386,7 @@ func (s *Session) mux(remoteBegin *performBegin) {
 				s.muxFrameToLink(link, fr.body)
 
 			case *performEnd:
-				if err := s.txFrame(&performEnd{}, nil); err != nil {
-					s.err = err
-					return
-				}
+				_ = s.txFrame(&performEnd{}, nil)
 				s.err = fmt.Errorf("session ended by server: %s", body.Error)
 				return
 
@@ -437,10 +425,7 @@ func (s *Session) mux(remoteBegin *performBegin) {
 			}
 
 			debug(2, "TX(Session) - txtransfer: %s", fr)
-			if err := s.txFrame(fr, fr.done); err != nil {
-				s.err = err
-				return
-			}
+			_ = s.txFrame(fr, fr.done)
 
 			// "Upon sending a transfer, the sending endpoint will increment
 			// its next-outgoing-id, decrement its remote-incoming-window,
@@ -460,18 +445,12 @@ func (s *Session) mux(remoteBegin *performBegin) {
 				fr.NextOutgoingID = nextOutgoingID
 				fr.OutgoingWindow = s.outgoingWindow
 				debug(1, "TX(Session) - tx: %s", fr)
-				if err := s.txFrame(fr, nil); err != nil {
-					s.err = err
-					return
-				}
+				_ = s.txFrame(fr, nil)
 			case *performTransfer:
 				panic("transfer frames must use txTransfer")
 			default:
 				debug(1, "TX(Session) - default: %s", fr)
-				if err := s.txFrame(fr, nil); err != nil {
-					s.err = err
-					return
-				}
+				_ = s.txFrame(fr, nil)
 			}
 		}
 	}

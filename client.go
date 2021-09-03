@@ -134,9 +134,7 @@ func (c *Client) NewSession(opts ...SessionOption) (*Session, error) {
 		HandleMax:      s.handleMax,
 	}
 	debug(1, "TX: %s", begin)
-	if err := s.txFrame(begin, nil); err != nil {
-		return nil, err
-	}
+	_ = s.txFrame(begin, nil)
 
 	// wait for response
 	var fr frame

@@ -56,17 +56,17 @@ jobs:
         displayName: 'Vet'
 
       - task: UseDotNet@2
-        displayName: 'Use .NET Core sdk'
+        displayName: 'Use .NET sdk'
         inputs:
           packageType: sdk
-          version: 3.1.x
+          version: 5.0.x
           installationPath: $(Agent.ToolsDirectory)/dotnet
 
       - script: |
           git clone https://github.com/Azure/azure-amqp $(Pipeline.Workspace)/azure-amqp
           pushd $(Pipeline.Workspace)/azure-amqp/test/TestAmqpBroker
           dotnet restore
-          dotnet run --framework netcoreapp3.1 -- $(AMQP_BROKER_ADDR)&
+          dotnet run --framework net5.0 -- $(AMQP_BROKER_ADDR)&
         displayName: 'Clone and Run Broker'
 
       - script: |

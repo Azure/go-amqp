@@ -66,12 +66,15 @@ jobs:
           git clone https://github.com/Azure/azure-amqp $(Pipeline.Workspace)/azure-amqp
           pushd $(Pipeline.Workspace)/azure-amqp/test/TestAmqpBroker
           dotnet restore
-          echo '##[command]Starting broker at $(AMQP_BROKER_ADDR)'
-          dotnet run --framework net461 -- $(AMQP_BROKER_ADDR)&
-        displayName: 'Clone and Run Broker'
+          dotnet build
+        displayName: 'Clone and Build Broker'
 
       - script: |
           set -e
+          pushd $(Pipeline.Workspace)/azure-amqp/test/TestAmqpBroker
+          echo '##[command]Starting broker at $(AMQP_BROKER_ADDR)'
+          dotnet run --framework net461 -- $(AMQP_BROKER_ADDR)&
+          popd
           go test -tags -race -v -coverprofile=coverage.txt -covermode atomic ./... 2>&1 | go-junit-report > report.xml
           gocov convert coverage.txt > coverage.json
           gocov-xml < coverage.json > coverage.xml

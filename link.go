@@ -102,7 +102,11 @@ func attachLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 	// buffer rx to linkCredit so that conn.mux won't block
 	// attempting to send to a slow reader
 	if isReceiver {
-		l.rx = make(chan frameBody, l.linkCredit)
+		if l.receiver.manualCreditor != nil {
+			l.rx = make(chan frameBody, l.receiver.maxCredit)
+		} else {
+			l.rx = make(chan frameBody, l.linkCredit)
+		}
 	} else {
 		l.rx = make(chan frameBody, 1)
 	}
@@ -301,10 +305,24 @@ Loop:
 			debug(1, "Link Mux isSender: credit: %d, deliveryCount: %d, messages: %d, unsettled: %d", l.linkCredit, l.deliveryCount, len(l.messages), l.countUnsettled())
 			outgoingTransfers = l.transfers
 
+		case isReceiver && l.receiver.manualCreditor != nil:
+			{
+				drain, credits := l.receiver.manualCreditor.FlowBits()
+
+				if drain || credits > 0 {
+					newCredits := credits + l.linkCredit
+					// send a flow frame.
+					l.err = l.muxFlow(newCredits, drain)
+				}
+			}
+
 		// if receiver && half maxCredits have been processed, send more credits
 		case isReceiver && l.linkCredit+uint32(l.countUnsettled()) <= l.receiver.maxCredit/2:
 			debug(1, "FLOW Link Mux half: source: %s, inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s", l.source.Address, len(l.receiver.inFlight.m), l.linkCredit, l.deliveryCount, len(l.messages), l.countUnsettled(), l.receiver.maxCredit, l.receiverSettleMode.String())
-			l.err = l.muxFlow()
+
+			linkCredit := l.receiver.maxCredit - uint32(l.countUnsettled())
+			l.err = l.muxFlow(linkCredit, false)
+
 			if l.err != nil {
 				return
 			}
@@ -334,9 +352,10 @@ Loop:
 					// decrement link-credit after entire message transferred
 					if !tr.More {
 						l.deliveryCount++
-						l.linkCredit--
+
+						newCredit := atomic.AddUint32(&l.linkCredit, ^uint32(0))
 						// we are the sender and we keep track of the peer's link credit
-						debug(3, "TX(link): key:%s, decremented linkCredit: %d", l.key.name, l.linkCredit)
+						debug(3, "TX(link): key:%s, decremented linkCredit: %d", l.key.name, newCredit)
 					}
 					continue Loop
 				case fr := <-l.rx:
@@ -366,19 +385,19 @@ Loop:
 }
 
 // muxFlow sends tr to the session mux.
-func (l *link) muxFlow() error {
-	// copy because sent by pointer below; prevent race
+// l.linkCredit will also be updated to `linkCredit`
+func (l *link) muxFlow(linkCredit uint32, drain bool) error {
 	var (
-		linkCredit    = l.receiver.maxCredit - uint32(l.countUnsettled())
 		deliveryCount = l.deliveryCount
 	)
 
-	debug(3, "link.muxFlow(): len(l.messages):%d - linkCredit: %d - deliveryCount: %d, inFlight: %d", len(l.messages), l.linkCredit, deliveryCount, len(l.receiver.inFlight.m))
+	debug(3, "link.muxFlow(): len(l.messages):%d - linkCredit: %d - deliveryCount: %d, inFlight: %d", len(l.messages), linkCredit, deliveryCount, len(l.receiver.inFlight.m))
 
 	fr := &performFlow{
 		Handle:        &l.handle,
 		DeliveryCount: &deliveryCount,
-		LinkCredit:    &linkCredit, // max number of messages
+		LinkCredit:    &linkCredit, // max number of messages,
+		Drain:         drain,
 	}
 	debug(3, "TX: %s", fr)
 
@@ -386,7 +405,7 @@ func (l *link) muxFlow() error {
 	// because incoming messages handled while waiting to transmit
 	// flow increment deliveryCount. This causes the credit to become
 	// out of sync with the server.
-	l.linkCredit = linkCredit
+	atomic.StoreUint32(&l.linkCredit, linkCredit)
 
 	// Ensure the session mux is not blocked
 	for {
@@ -539,8 +558,35 @@ func (l *link) muxReceive(fr performTransfer) error {
 
 	// decrement link-credit after entire message received
 	l.deliveryCount++
-	l.linkCredit--
+
+	atomic.AddUint32(&l.linkCredit, ^uint32(0))
+	//l.linkCredit--
+
 	debug(1, "deliveryID %d before exit - deliveryCount : %d - linkCredit: %d, len(messages): %d", l.msg.deliveryID, l.deliveryCount, l.linkCredit, len(l.messages))
+	return nil
+}
+
+// drain will cause a flow frame with 'drain' set to true when
+// the next flow frame is sent in 'mux()'.
+func (l *link) drain(ctx context.Context) error {
+	if l.receiver.manualCreditor == nil {
+		return errors.New("drain can only be used with links using manual credit management")
+	}
+
+	return l.receiver.manualCreditor.Drain(ctx)
+}
+
+func (l *link) addCredit(credit uint32) error {
+	if err := l.receiver.manualCreditor.AddCredit(credit); err != nil {
+		return err
+	}
+
+	// cause mux() to check our flow conditions.
+	select {
+	case l.receiverReady <- struct{}{}:
+	default:
+	}
+
 	return nil
 }
 
@@ -577,16 +623,22 @@ func (l *link) muxHandleFrame(fr frameBody) error {
 				// what ActiveMQ does.
 				linkCredit += *fr.DeliveryCount
 			}
-			l.linkCredit = linkCredit
+			atomic.StoreUint32(&l.linkCredit, linkCredit)
 		}
 
 		if !fr.Echo {
+			// if the 'drain' flag has been set in the frame sent to the _receiver_ then
+			// we signal whomever is waiting (the service has seen and acknowledged our drain)
+			if fr.Drain && l.receiver.manualCreditor != nil {
+				l.receiver.manualCreditor.EndDrain()
+				atomic.StoreUint32(&l.linkCredit, 0) // we have no active credits at this point.
+			}
 			return nil
 		}
 
 		var (
 			// copy because sent by pointer below; prevent race
-			linkCredit    = l.linkCredit
+			linkCredit    = atomic.LoadUint32(&l.linkCredit)
 			deliveryCount = l.deliveryCount
 		)
 
@@ -780,4 +832,10 @@ Loop:
 			return
 		}
 	}
+}
+
+type flowFrame struct {
+	mu             sync.Mutex
+	drain          bool
+	pendingCredits uint32
 }

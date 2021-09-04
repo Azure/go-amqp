@@ -18,8 +18,8 @@ type manualCreditor struct {
 	drained chan struct{}
 }
 
-var ErrLinkDraining = errors.New("link is currently draining, no credits can be added")
-var ErrAlreadyDraining = errors.New("drain already in process")
+var errLinkDraining = errors.New("link is currently draining, no credits can be added")
+var errAlreadyDraining = errors.New("drain already in process")
 
 // EndDrain ends the current drain, unblocking any active Drain calls.
 func (mc *manualCreditor) EndDrain() {
@@ -53,7 +53,7 @@ func (mc *manualCreditor) Drain(ctx context.Context) error {
 
 	if mc.drained != nil {
 		mc.mu.Unlock()
-		return ErrAlreadyDraining
+		return errAlreadyDraining
 	}
 
 	mc.drained = make(chan struct{})
@@ -76,7 +76,7 @@ func (mc *manualCreditor) AddCredit(credits uint32) error {
 	defer mc.mu.Unlock()
 
 	if mc.drained != nil {
-		return ErrLinkDraining
+		return errLinkDraining
 	}
 
 	mc.creditsToAdd += credits

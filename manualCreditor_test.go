@@ -66,9 +66,9 @@ func TestManualCreditorDrain(t *testing.T) {
 	require.False(t, err1 == nil && err2 == nil)
 
 	if err1 == nil {
-		require.Error(t, err2, ErrAlreadyDraining.Error())
+		require.Error(t, err2, errAlreadyDraining.Error())
 	} else {
-		require.Error(t, err1, ErrAlreadyDraining.Error())
+		require.Error(t, err1, errAlreadyDraining.Error())
 	}
 }
 
@@ -95,7 +95,7 @@ func TestManualCreditorAddCreditsWhileDrainingFails(t *testing.T) {
 	time.Sleep(time.Second * 2)
 
 	// drain is still active, so...
-	require.Error(t, mc.AddCredit(1), ErrLinkDraining.Error())
+	require.Error(t, mc.AddCredit(1), errLinkDraining.Error())
 
 	mc.EndDrain()
 	wg.Wait()

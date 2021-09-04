@@ -858,9 +858,3 @@ Loop:
 		}
 	}
 }
-
-type flowFrame struct {
-	mu             sync.Mutex
-	drain          bool
-	pendingCredits uint32
-}

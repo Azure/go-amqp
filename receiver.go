@@ -81,10 +81,13 @@ func (r *Receiver) HandleMessage(ctx context.Context, handle func(*Message) erro
 	}
 }
 
+// AddCredit adds credits to the current link.
 func (r *Receiver) AddCredit(credit uint32) error {
 	return r.link.addCredit(credit)
 }
 
+// Drain sets the drain flag on the next flow frame and
+// waits for the drain to be acknowledged.
 func (r *Receiver) Drain(ctx context.Context) error {
 	return r.link.drain(ctx)
 }

@@ -81,8 +81,8 @@ func (r *Receiver) HandleMessage(ctx context.Context, handle func(*Message) erro
 	}
 }
 
-func (r *Receiver) AddCredit(credit uint32) {
-	r.link.addCredit(credit)
+func (r *Receiver) AddCredit(credit uint32) error {
+	return r.link.addCredit(credit)
 }
 
 func (r *Receiver) Drain(ctx context.Context) error {

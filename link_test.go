@@ -163,9 +163,11 @@ func TestLinkFlowWithDrain(t *testing.T) {
 		}
 
 		// simulate the return of the flow from the service
-		l.muxHandleFrame(&performFlow{
+		err := l.muxHandleFrame(&performFlow{
 			Drain: true,
 		})
+
+		require.NoError(t, err)
 	}()
 
 	l.linkCredit = 1

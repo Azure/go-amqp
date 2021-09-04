@@ -11,7 +11,7 @@ import (
 
 func TestManualCreditorAddCredits(t *testing.T) {
 	mc := manualCreditor{}
-	mc.AddCredit(3)
+	require.NoError(t, mc.AddCredit(3))
 
 	drain, credits := mc.FlowBits()
 	require.False(t, drain)
@@ -28,7 +28,7 @@ func TestManualCreditorDrain(t *testing.T) {
 	defer cancel()
 
 	mc := manualCreditor{}
-	mc.AddCredit(3)
+	require.NoError(t, mc.AddCredit(3))
 
 	// only one drain allowed at a time.
 	drainRoutines := sync.WaitGroup{}
@@ -77,7 +77,7 @@ func TestManualCreditorAddCreditsWhileDrainingFails(t *testing.T) {
 	defer cancel()
 
 	mc := manualCreditor{}
-	mc.AddCredit(3)
+	require.NoError(t, mc.AddCredit(3))
 
 	// only one drain allowed at a time.
 	drainRoutines := sync.WaitGroup{}

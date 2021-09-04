@@ -391,7 +391,7 @@ func LinkCredit(credit uint32) LinkOption {
 func LinkWithManualCredits() LinkOption {
 	return func(l *link) error {
 		if l.receiver == nil {
-			return errorNew("LinkWithManualCredits is not valid for Sender")
+			return errors.New("LinkWithManualCredits is not valid for Sender")
 		}
 
 		l.receiver.manualCreditor = &manualCreditor{}

@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestManualCreditorAddCredits(t *testing.T) {
+func TestManualCreditorIssueCredits(t *testing.T) {
 	mc := manualCreditor{}
-	require.NoError(t, mc.AddCredit(3))
+	require.NoError(t, mc.IssueCredit(3))
 
 	drain, credits := mc.FlowBits()
 	require.False(t, drain)
@@ -28,7 +28,7 @@ func TestManualCreditorDrain(t *testing.T) {
 	defer cancel()
 
 	mc := manualCreditor{}
-	require.NoError(t, mc.AddCredit(3))
+	require.NoError(t, mc.IssueCredit(3))
 
 	// only one drain allowed at a time.
 	drainRoutines := sync.WaitGroup{}
@@ -72,12 +72,12 @@ func TestManualCreditorDrain(t *testing.T) {
 	}
 }
 
-func TestManualCreditorAddCreditsWhileDrainingFails(t *testing.T) {
+func TestManualCreditorIssueCreditsWhileDrainingFails(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*2)
 	defer cancel()
 
 	mc := manualCreditor{}
-	require.NoError(t, mc.AddCredit(3))
+	require.NoError(t, mc.IssueCredit(3))
 
 	// only one drain allowed at a time.
 	drainRoutines := sync.WaitGroup{}
@@ -95,7 +95,7 @@ func TestManualCreditorAddCreditsWhileDrainingFails(t *testing.T) {
 	time.Sleep(time.Second * 2)
 
 	// drain is still active, so...
-	require.Error(t, mc.AddCredit(1), errLinkDraining.Error())
+	require.Error(t, mc.IssueCredit(1), errLinkDraining.Error())
 
 	mc.EndDrain()
 	wg.Wait()

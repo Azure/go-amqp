@@ -20,7 +20,7 @@ type Receiver struct {
 	dispositions   chan messageDisposition // message dispositions are sent on this channel when batching is enabled
 	maxCredit      uint32                  // maximum allowed inflight messages
 	inFlight       inFlight                // used to track message disposition when rcv-settle-mode == second
-	manualCreditor *manualCreditor         // allows for credits to be managed manually (via calls to AddCredit/Drain)
+	manualCreditor *manualCreditor         // allows for credits to be managed manually (via calls to IssueCredit/DrainCredit)
 }
 
 // HandleMessage takes in a func to handle the incoming message.
@@ -81,15 +81,16 @@ func (r *Receiver) HandleMessage(ctx context.Context, handle func(*Message) erro
 	}
 }
 
-// AddCredit adds credits to the current link.
-func (r *Receiver) AddCredit(credit uint32) error {
-	return r.link.addCredit(credit)
+// IssueCredit adds credits to be requested in the next flow
+// request.
+func (r *Receiver) IssueCredit(credit uint32) error {
+	return r.link.issueCredit(credit)
 }
 
-// Drain sets the drain flag on the next flow frame and
+// DrainCredit sets the drain flag on the next flow frame and
 // waits for the drain to be acknowledged.
-func (r *Receiver) Drain(ctx context.Context) error {
-	return r.link.drain(ctx)
+func (r *Receiver) DrainCredit(ctx context.Context) error {
+	return r.link.drainCredit(ctx)
 }
 
 // Receive returns the next message from the sender.

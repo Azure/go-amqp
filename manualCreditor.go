@@ -69,9 +69,9 @@ func (mc *manualCreditor) Drain(ctx context.Context) error {
 	}
 }
 
-// AddCredit queues up additional credits to be requested at the next
+// IssueCredit queues up additional credits to be requested at the next
 // call of FlowBits()
-func (mc *manualCreditor) AddCredit(credits uint32) error {
+func (mc *manualCreditor) IssueCredit(credits uint32) error {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
 

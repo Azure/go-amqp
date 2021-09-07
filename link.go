@@ -581,9 +581,9 @@ func (l *link) muxReceive(fr performTransfer) error {
 	return nil
 }
 
-// drain will cause a flow frame with 'drain' set to true when
+// drainCredit will cause a flow frame with 'drain' set to true when
 // the next flow frame is sent in 'mux()'.
-func (l *link) drain(ctx context.Context) error {
+func (l *link) drainCredit(ctx context.Context) error {
 	if l.receiver == nil || l.receiver.manualCreditor == nil {
 		return errors.New("drain can only be used with receiver links using manual credit management")
 	}
@@ -597,12 +597,12 @@ func (l *link) drain(ctx context.Context) error {
 	return l.receiver.manualCreditor.Drain(ctx)
 }
 
-func (l *link) addCredit(credit uint32) error {
+func (l *link) issueCredit(credit uint32) error {
 	if l.receiver == nil || l.receiver.manualCreditor == nil {
-		return errors.New("addCredit can only be used with receiver links using manual credit management")
+		return errors.New("issueCredit can only be used with receiver links using manual credit management")
 	}
 
-	if err := l.receiver.manualCreditor.AddCredit(credit); err != nil {
+	if err := l.receiver.manualCreditor.IssueCredit(credit); err != nil {
 		return err
 	}
 

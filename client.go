@@ -386,8 +386,8 @@ func LinkCredit(credit uint32) LinkOption {
 }
 
 // LinkWithManualCredits enables manual credit management for this link.
-// Credits can be added with AddCredit(), and links can also be drained
-// with Drain().
+// Credits can be added with IssueCredit(), and links can also be drained
+// with DrainCredit().
 func LinkWithManualCredits() LinkOption {
 	return func(l *link) error {
 		if l.receiver == nil {

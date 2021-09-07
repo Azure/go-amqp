@@ -17,11 +17,11 @@ func TestLinkFlowForSender(t *testing.T) {
 	l := newTestLink(t)
 	l.receiver = nil
 
-	err := l.drain(context.Background())
+	err := l.drainCredit(context.Background())
 	require.Error(t, err, "drain can only be used with receiver links using manual credit management")
 
-	err = l.addCredit(1)
-	require.Error(t, err, "addCredit can only be used with receiver links using manual credit management")
+	err = l.issueCredit(1)
+	require.Error(t, err, "issueCredit can only be used with receiver links using manual credit management")
 
 	// and flow goes through the non-manual credit path
 	require.EqualValues(t, 0, l.linkCredit, "No link credits have been added")
@@ -39,11 +39,11 @@ func TestLinkFlowForSender(t *testing.T) {
 func TestLinkFlowThatNeedsToReplenishCredits(t *testing.T) {
 	l := newTestLink(t)
 
-	err := l.drain(context.Background())
+	err := l.drainCredit(context.Background())
 	require.Error(t, err, "drain can only be used with receiver links using manual credit management")
 
-	err = l.addCredit(1)
-	require.Error(t, err, "addCredit can only be used with receiver links using manual credit management")
+	err = l.issueCredit(1)
+	require.Error(t, err, "issueCredit can only be used with receiver links using manual credit management")
 
 	// and flow goes through the non-manual credit path
 	require.EqualValues(t, 0, l.linkCredit, "No link credits have been added")
@@ -76,11 +76,11 @@ func TestLinkFlowThatNeedsToReplenishCredits(t *testing.T) {
 func TestLinkFlowWithZeroCredits(t *testing.T) {
 	l := newTestLink(t)
 
-	err := l.drain(context.Background())
+	err := l.drainCredit(context.Background())
 	require.Error(t, err, "drain can only be used with receiver links using manual credit management")
 
-	err = l.addCredit(1)
-	require.Error(t, err, "addCredit can only be used with receiver links using manual credit management")
+	err = l.issueCredit(1)
+	require.Error(t, err, "issueCredit can only be used with receiver links using manual credit management")
 
 	// and flow goes through the non-manual credit path
 	require.EqualValues(t, 0, l.linkCredit, "No link credits have been added")
@@ -114,7 +114,7 @@ func TestLinkFlowDrain(t *testing.T) {
 		l.receiver.manualCreditor.EndDrain()
 	}()
 
-	require.NoError(t, l.drain(context.Background()))
+	require.NoError(t, l.drainCredit(context.Background()))
 }
 
 func TestLinkFlowWithManualCreditor(t *testing.T) {
@@ -122,7 +122,7 @@ func TestLinkFlowWithManualCreditor(t *testing.T) {
 	require.NoError(t, LinkWithManualCredits()(l))
 
 	l.linkCredit = 1
-	require.NoError(t, l.addCredit(100))
+	require.NoError(t, l.issueCredit(100))
 
 	ok, enableOutgoingTransfers := l.doFlow()
 	require.True(t, ok)
@@ -171,7 +171,7 @@ func TestLinkFlowWithDrain(t *testing.T) {
 	}()
 
 	l.linkCredit = 1
-	require.NoError(t, l.drain(context.Background()))
+	require.NoError(t, l.drainCredit(context.Background()))
 }
 
 func TestLinkFlowWithManualCreditorAndNoFlowNeeded(t *testing.T) {

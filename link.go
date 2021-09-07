@@ -367,10 +367,9 @@ Loop:
 					// decrement link-credit after entire message transferred
 					if !tr.More {
 						l.deliveryCount++
-
-						newCredit := atomic.AddUint32(&l.linkCredit, ^uint32(0))
+						l.linkCredit--
 						// we are the sender and we keep track of the peer's link credit
-						debug(3, "TX(link): key:%s, decremented linkCredit: %d", l.key.name, newCredit)
+						debug(3, "TX(link): key:%s, decremented linkCredit: %d", l.key.name, l.linkCredit)
 					}
 					continue Loop
 				case fr := <-l.rx:
@@ -420,7 +419,7 @@ func (l *link) muxFlow(linkCredit uint32, drain bool) error {
 	// because incoming messages handled while waiting to transmit
 	// flow increment deliveryCount. This causes the credit to become
 	// out of sync with the server.
-	atomic.StoreUint32(&l.linkCredit, linkCredit)
+	l.linkCredit = linkCredit
 
 	// Ensure the session mux is not blocked
 	for {
@@ -573,10 +572,7 @@ func (l *link) muxReceive(fr performTransfer) error {
 
 	// decrement link-credit after entire message received
 	l.deliveryCount++
-
-	atomic.AddUint32(&l.linkCredit, ^uint32(0))
-	//l.linkCredit--
-
+	l.linkCredit--
 	debug(1, "deliveryID %d before exit - deliveryCount : %d - linkCredit: %d, len(messages): %d", l.msg.deliveryID, l.deliveryCount, l.linkCredit, len(l.messages))
 	return nil
 }
@@ -648,7 +644,7 @@ func (l *link) muxHandleFrame(fr frameBody) error {
 				// what ActiveMQ does.
 				linkCredit += *fr.DeliveryCount
 			}
-			atomic.StoreUint32(&l.linkCredit, linkCredit)
+			l.linkCredit = linkCredit
 		}
 
 		if !fr.Echo {
@@ -656,14 +652,14 @@ func (l *link) muxHandleFrame(fr frameBody) error {
 			// we signal whomever is waiting (the service has seen and acknowledged our drain)
 			if fr.Drain && l.receiver.manualCreditor != nil {
 				l.receiver.manualCreditor.EndDrain()
-				atomic.StoreUint32(&l.linkCredit, 0) // we have no active credits at this point.
+				l.linkCredit = 0 // we have no active credits at this point.
 			}
 			return nil
 		}
 
 		var (
 			// copy because sent by pointer below; prevent race
-			linkCredit    = atomic.LoadUint32(&l.linkCredit)
+			linkCredit    = l.linkCredit
 			deliveryCount = l.deliveryCount
 		)
 

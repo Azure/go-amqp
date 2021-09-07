@@ -89,8 +89,8 @@ func TestLinkFlowWithZeroCredits(t *testing.T) {
 	l.receiver.maxCredit = 2
 	l.linkCredit = 0
 	l.unsettledMessages = map[string]struct{}{
-		"hello":  struct{}{},
-		"hello2": struct{}{},
+		"hello":  {},
+		"hello2": {},
 	}
 
 	ok, enableOutgoingTransfers := l.doFlow()

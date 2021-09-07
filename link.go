@@ -288,6 +288,11 @@ func (l *link) setSettleModes(resp *performAttach) error {
 	return nil
 }
 
+// doFlow handles the logical 'flow' event for a link.
+// For receivers it will send (if needed) an AMQP flow frame, via `muxFlow`. If a fatal error
+// occurs it will be set in `l.err` and 'ok' will be false.
+// For senders it will indicate if we should try to send any outgoing transfers (the logical
+// equivalent of a flow for a sender) by returning true for 'enableOutgoingTransfers'.
 func (l *link) doFlow() (ok bool, enableOutgoingTransfers bool) {
 	var (
 		isReceiver = l.receiver != nil

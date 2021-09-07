@@ -301,14 +301,15 @@ func (l *link) doFlow() (ok bool, enableOutgoingTransfers bool) {
 		return true, true
 
 	case isReceiver && l.receiver.manualCreditor != nil:
-		{
-			drain, credits := l.receiver.manualCreditor.FlowBits()
+		drain, credits := l.receiver.manualCreditor.FlowBits()
 
-			if drain || credits > 0 {
-				newCredits := credits + l.linkCredit
-				// send a flow frame.
-				l.err = l.muxFlow(newCredits, drain)
-			}
+		if drain || credits > 0 {
+			debug(1, "FLOW Link Mux (manual): source: %s, inflight: %d, credit: %d, creditsToAdd: %d, drain: %v, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s",
+				l.source.Address, len(l.receiver.inFlight.m), l.linkCredit, credits, drain, l.deliveryCount, len(l.messages), l.countUnsettled(), l.receiver.maxCredit, l.receiverSettleMode.String())
+
+			newCredits := credits + l.linkCredit
+			// send a flow frame.
+			l.err = l.muxFlow(newCredits, drain)
 		}
 
 	// if receiver && half maxCredits have been processed, send more credits

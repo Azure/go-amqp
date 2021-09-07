@@ -157,9 +157,8 @@ func (s *Session) mux(remoteBegin *performBegin) {
 		txTransfer := s.txTransfer
 		// disable txTransfer if flow control windows have been exceeded
 		if remoteIncomingWindow == 0 || s.outgoingWindow == 0 {
-			debug(1, "TX(Session): Disabling txTransfer - window exceeded. remoteIncomingWindow:",
+			debug(1, "TX(Session): Disabling txTransfer - window exceeded. remoteIncomingWindow: %d outgoingWindow:%d",
 				remoteIncomingWindow,
-				"outgoingWindow:",
 				s.outgoingWindow)
 			txTransfer = nil
 		}

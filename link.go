@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 
 	"github.com/Azure/go-amqp/internal/buffer"
+	"github.com/Azure/go-amqp/internal/encoding"
 )
 
 type role bool
@@ -25,14 +26,14 @@ func (rl role) String() string {
 	return "Sender"
 }
 
-func (rl *role) unmarshal(r *buffer.Buffer) error {
-	b, err := readBool(r)
+func (rl *role) Unmarshal(r *buffer.Buffer) error {
+	b, err := encoding.ReadBool(r)
 	*rl = role(b)
 	return err
 }
 
-func (rl role) marshal(wr *buffer.Buffer) error {
-	return marshal(wr, (bool)(rl))
+func (rl role) Marshal(wr *buffer.Buffer) error {
+	return encoding.Marshal(wr, (bool)(rl))
 }
 
 // link is a unidirectional route.
@@ -62,7 +63,7 @@ type link struct {
 	receiver      *Receiver  // allows link options to modify Receiver
 	source        *source
 	target        *target
-	properties    map[symbol]interface{} // additional properties sent upon link attach
+	properties    map[encoding.Symbol]interface{} // additional properties sent upon link attach
 	// Indicates whether we should allow detaches on disposition errors or not.
 	// Some AMQP servers (like Event Hubs) benefit from keeping the link open on disposition errors
 	// (for instance, if you're doing many parallel sends over the same link and you get back a
@@ -584,7 +585,7 @@ func (l *link) muxReceive(fr performTransfer) error {
 	}
 
 	// last frame in message
-	err := l.msg.unmarshal(&l.buf)
+	err := l.msg.Unmarshal(&l.buf)
 	if err != nil {
 		return err
 	}
@@ -724,7 +725,7 @@ func (l *link) muxHandleFrame(fr frameBody) error {
 		if l.receiver != nil {
 			// bubble disposition error up to the receiver
 			var dispositionError error
-			if state, ok := fr.State.(*stateRejected); ok {
+			if state, ok := fr.State.(*encoding.StateRejected); ok {
 				dispositionError = state.Error
 			}
 			l.receiver.inFlight.remove(fr.First, fr.Last, dispositionError)
@@ -733,7 +734,7 @@ func (l *link) muxHandleFrame(fr frameBody) error {
 		// If sending async and a message is rejected, cause a link error.
 		//
 		// This isn't ideal, but there isn't a clear better way to handle it.
-		if fr, ok := fr.State.(*stateRejected); ok && errOnRejectDisposition {
+		if fr, ok := fr.State.(*encoding.StateRejected); ok && errOnRejectDisposition {
 			return fr.Error
 		}
 

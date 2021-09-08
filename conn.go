@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Azure/go-amqp/internal/buffer"
+	"github.com/Azure/go-amqp/internal/encoding"
 )
 
 // Default connection options
@@ -145,9 +146,9 @@ func ConnProperty(key, value string) ConnOption {
 			return errors.New("connection property key must not be empty")
 		}
 		if c.properties == nil {
-			c.properties = make(map[symbol]interface{})
+			c.properties = make(map[encoding.Symbol]interface{})
 		}
-		c.properties[symbol(key)] = value
+		c.properties[encoding.Symbol(key)] = value
 		return nil
 	}
 }
@@ -173,16 +174,16 @@ type conn struct {
 	tlsConfig      *tls.Config // TLS config, default used if nil (ServerName set to Client.hostname)
 
 	// SASL
-	saslHandlers map[symbol]stateFunc // map of supported handlers keyed by SASL mechanism, SASL not negotiated if nil
-	saslComplete bool                 // SASL negotiation complete
+	saslHandlers map[encoding.Symbol]stateFunc // map of supported handlers keyed by SASL mechanism, SASL not negotiated if nil
+	saslComplete bool                          // SASL negotiation complete
 
 	// local settings
-	maxFrameSize uint32                 // max frame size to accept
-	channelMax   uint16                 // maximum number of channels to allow
-	hostname     string                 // hostname of remote server (set explicitly or parsed from URL)
-	idleTimeout  time.Duration          // maximum period between receiving frames
-	properties   map[symbol]interface{} // additional properties sent upon connection open
-	containerID  string                 // set explicitly or randomly generated
+	maxFrameSize uint32                          // max frame size to accept
+	channelMax   uint16                          // maximum number of channels to allow
+	hostname     string                          // hostname of remote server (set explicitly or parsed from URL)
+	idleTimeout  time.Duration                   // maximum period between receiving frames
+	properties   map[encoding.Symbol]interface{} // additional properties sent upon connection open
+	containerID  string                          // set explicitly or randomly generated
 
 	// peer settings
 	peerIdleTimeout  time.Duration // maximum period between sending frames
@@ -1022,58 +1023,58 @@ func parseProtoHeader(r *buffer.Buffer) (protoHeader, error) {
 func parseFrameBody(r *buffer.Buffer) (frameBody, error) {
 	payload := r.Bytes()
 
-	if r.Len() < 3 || payload[0] != 0 || amqpType(payload[1]) != typeCodeSmallUlong {
+	if r.Len() < 3 || payload[0] != 0 || encoding.AMQPType(payload[1]) != encoding.TypeCodeSmallUlong {
 		return nil, errors.New("invalid frame body header")
 	}
 
-	switch pType := amqpType(payload[2]); pType {
-	case typeCodeOpen:
+	switch pType := encoding.AMQPType(payload[2]); pType {
+	case encoding.TypeCodeOpen:
 		t := new(performOpen)
-		err := t.unmarshal(r)
+		err := t.Unmarshal(r)
 		return t, err
-	case typeCodeBegin:
+	case encoding.TypeCodeBegin:
 		t := new(performBegin)
-		err := t.unmarshal(r)
+		err := t.Unmarshal(r)
 		return t, err
-	case typeCodeAttach:
+	case encoding.TypeCodeAttach:
 		t := new(performAttach)
-		err := t.unmarshal(r)
+		err := t.Unmarshal(r)
 		return t, err
-	case typeCodeFlow:
+	case encoding.TypeCodeFlow:
 		t := new(performFlow)
-		err := t.unmarshal(r)
+		err := t.Unmarshal(r)
 		return t, err
-	case typeCodeTransfer:
+	case encoding.TypeCodeTransfer:
 		t := new(performTransfer)
-		err := t.unmarshal(r)
+		err := t.Unmarshal(r)
 		return t, err
-	case typeCodeDisposition:
+	case encoding.TypeCodeDisposition:
 		t := new(performDisposition)
-		err := t.unmarshal(r)
+		err := t.Unmarshal(r)
 		return t, err
-	case typeCodeDetach:
+	case encoding.TypeCodeDetach:
 		t := new(performDetach)
-		err := t.unmarshal(r)
+		err := t.Unmarshal(r)
 		return t, err
-	case typeCodeEnd:
+	case encoding.TypeCodeEnd:
 		t := new(performEnd)
-		err := t.unmarshal(r)
+		err := t.Unmarshal(r)
 		return t, err
-	case typeCodeClose:
+	case encoding.TypeCodeClose:
 		t := new(performClose)
-		err := t.unmarshal(r)
+		err := t.Unmarshal(r)
 		return t, err
-	case typeCodeSASLMechanism:
+	case encoding.TypeCodeSASLMechanism:
 		t := new(saslMechanisms)
-		err := t.unmarshal(r)
+		err := t.Unmarshal(r)
 		return t, err
-	case typeCodeSASLChallenge:
+	case encoding.TypeCodeSASLChallenge:
 		t := new(saslChallenge)
-		err := t.unmarshal(r)
+		err := t.Unmarshal(r)
 		return t, err
-	case typeCodeSASLOutcome:
+	case encoding.TypeCodeSASLOutcome:
 		t := new(saslOutcome)
-		err := t.unmarshal(r)
+		err := t.Unmarshal(r)
 		return t, err
 	default:
 		return nil, fmt.Errorf("unknown preformative type %02x", pType)
@@ -1091,7 +1092,7 @@ func writeFrame(buf *buffer.Buffer, fr frame) error {
 	buf.AppendUint16(fr.channel) // channel
 
 	// write AMQP frame body
-	err := marshal(buf, fr.body)
+	err := encoding.Marshal(buf, fr.body)
 	if err != nil {
 		return err
 	}

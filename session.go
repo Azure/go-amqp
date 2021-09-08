@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+
+	"github.com/Azure/go-amqp/internal/encoding"
 )
 
 // Session is an AMQP session.
@@ -71,7 +73,7 @@ func (s *Session) Close(ctx context.Context) error {
 
 // txFrame sends a frame to the connWriter.
 // it returns an error if the connection has been closed.
-func (s *Session) txFrame(p frameBody, done chan deliveryState) error {
+func (s *Session) txFrame(p frameBody, done chan encoding.DeliveryState) error {
 	return s.conn.wantWriteFrame(frame{
 		type_:   frameTypeAMQP,
 		channel: s.channel,
@@ -144,7 +146,7 @@ func (s *Session) mux(remoteBegin *performBegin) {
 		deliveryIDByHandle        = make(map[uint32]uint32) // mapping of handles to latest deliveryID
 		handlesByRemoteDeliveryID = make(map[uint32]uint32) // mapping of remote deliveryID to handles
 
-		settlementByDeliveryID = make(map[uint32]chan deliveryState)
+		settlementByDeliveryID = make(map[uint32]chan encoding.DeliveryState)
 
 		// flow control values
 		nextOutgoingID       uint32

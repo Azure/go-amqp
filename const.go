@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/Azure/go-amqp/internal/buffer"
+	"github.com/Azure/go-amqp/internal/encoding"
 )
 
 // Sender Settlement Modes
@@ -41,12 +42,12 @@ func (m *SenderSettleMode) String() string {
 	}
 }
 
-func (m SenderSettleMode) marshal(wr *buffer.Buffer) error {
-	return marshal(wr, uint8(m))
+func (m SenderSettleMode) Marshal(wr *buffer.Buffer) error {
+	return encoding.Marshal(wr, uint8(m))
 }
 
-func (m *SenderSettleMode) unmarshal(r *buffer.Buffer) error {
-	n, err := readUbyte(r)
+func (m *SenderSettleMode) Unmarshal(r *buffer.Buffer) error {
+	n, err := encoding.ReadUbyte(r)
 	*m = SenderSettleMode(n)
 	return err
 }
@@ -89,12 +90,12 @@ func (m *ReceiverSettleMode) String() string {
 	}
 }
 
-func (m ReceiverSettleMode) marshal(wr *buffer.Buffer) error {
-	return marshal(wr, uint8(m))
+func (m ReceiverSettleMode) Marshal(wr *buffer.Buffer) error {
+	return encoding.Marshal(wr, uint8(m))
 }
 
-func (m *ReceiverSettleMode) unmarshal(r *buffer.Buffer) error {
-	n, err := readUbyte(r)
+func (m *ReceiverSettleMode) Unmarshal(r *buffer.Buffer) error {
+	n, err := encoding.ReadUbyte(r)
 	*m = ReceiverSettleMode(n)
 	return err
 }
@@ -141,12 +142,12 @@ func (d *Durability) String() string {
 	}
 }
 
-func (d Durability) marshal(wr *buffer.Buffer) error {
-	return marshal(wr, uint32(d))
+func (d Durability) Marshal(wr *buffer.Buffer) error {
+	return encoding.Marshal(wr, uint32(d))
 }
 
-func (d *Durability) unmarshal(r *buffer.Buffer) error {
-	return unmarshal(r, (*uint32)(d))
+func (d *Durability) Unmarshal(r *buffer.Buffer) error {
+	return encoding.Unmarshal(r, (*uint32)(d))
 }
 
 // Expiry Policies
@@ -173,7 +174,7 @@ const (
 // then the count down is aborted. If the conditions for the
 // terminus-expiry-policy are subsequently re-met, the expiry timer restarts
 // from its originally configured timeout value.
-type ExpiryPolicy symbol
+type ExpiryPolicy encoding.Symbol
 
 func (e ExpiryPolicy) validate() error {
 	switch e {
@@ -187,12 +188,12 @@ func (e ExpiryPolicy) validate() error {
 	}
 }
 
-func (e ExpiryPolicy) marshal(wr *buffer.Buffer) error {
-	return symbol(e).marshal(wr)
+func (e ExpiryPolicy) Marshal(wr *buffer.Buffer) error {
+	return encoding.Symbol(e).Marshal(wr)
 }
 
-func (e *ExpiryPolicy) unmarshal(r *buffer.Buffer) error {
-	err := unmarshal(r, (*symbol)(e))
+func (e *ExpiryPolicy) Unmarshal(r *buffer.Buffer) error {
+	err := encoding.Unmarshal(r, (*encoding.Symbol)(e))
 	if err != nil {
 		return err
 	}

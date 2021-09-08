@@ -2,6 +2,8 @@ package amqp
 
 import (
 	"testing"
+
+	"github.com/Azure/go-amqp/internal/encoding"
 )
 
 func TestConnOptions(t *testing.T) {
@@ -9,7 +11,7 @@ func TestConnOptions(t *testing.T) {
 		label string
 		opts  []ConnOption
 
-		wantProperties map[symbol]interface{}
+		wantProperties map[encoding.Symbol]interface{}
 	}{
 		{
 			label: "no options",
@@ -22,7 +24,7 @@ func TestConnOptions(t *testing.T) {
 				ConnProperty("x-opt-test1", "test3"),
 			},
 
-			wantProperties: map[symbol]interface{}{
+			wantProperties: map[encoding.Symbol]interface{}{
 				"x-opt-test1": "test3",
 				"x-opt-test2": "test2",
 			},

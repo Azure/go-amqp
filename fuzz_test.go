@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Azure/go-amqp/internal/buffer"
+	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/testconn"
 	"github.com/fortytw2/leaktest"
 )
@@ -110,8 +111,6 @@ func fuzzUnmarshal(data []byte) int {
 		new(*source),
 		new(target),
 		new(*target),
-		new(Error),
-		new(*Error),
 		new(saslCode),
 		new(*saslCode),
 		new(saslMechanisms),
@@ -128,75 +127,13 @@ func fuzzUnmarshal(data []byte) int {
 		new(*MessageHeader),
 		new(MessageProperties),
 		new(*MessageProperties),
-		new(stateReceived),
-		new(*stateReceived),
-		new(stateAccepted),
-		new(*stateAccepted),
-		new(stateRejected),
-		new(*stateRejected),
-		new(stateReleased),
-		new(*stateReleased),
-		new(stateModified),
-		new(*stateModified),
-		new(mapAnyAny),
-		new(*mapAnyAny),
-		new(mapStringAny),
-		new(*mapStringAny),
-		new(mapSymbolAny),
-		new(*mapSymbolAny),
-		new(unsettled),
-		new(*unsettled),
-		new(milliseconds),
-		new(*milliseconds),
-		new(bool),
-		new(*bool),
-		new(int8),
-		new(*int8),
-		new(int16),
-		new(*int16),
-		new(int32),
-		new(*int32),
-		new(int64),
-		new(*int64),
-		new(uint8),
-		new(*uint8),
-		new(uint16),
-		new(*uint16),
-		new(uint32),
-		new(*uint32),
-		new(uint64),
-		new(*uint64),
-		new(time.Time),
-		new(*time.Time),
-		new(time.Duration),
-		new(*time.Duration),
-		new(symbol),
-		new(*symbol),
-		new([]byte),
-		new(*[]byte),
-		new([]string),
-		new(*[]string),
-		new([]symbol),
-		new(*[]symbol),
-		new(map[interface{}]interface{}),
-		new(*map[interface{}]interface{}),
-		new(map[string]interface{}),
-		new(*map[string]interface{}),
-		new(map[symbol]interface{}),
-		new(*map[symbol]interface{}),
-		new(interface{}),
-		new(*interface{}),
-		new(ErrorCondition),
-		new(*ErrorCondition),
 		new(role),
 		new(*role),
-		new(UUID),
-		new(*UUID),
 	}
 
 	for _, t := range types {
-		_ = unmarshal(buffer.New(data), t)
-		_, _ = readAny(buffer.New(data))
+		_ = encoding.Unmarshal(buffer.New(data), t)
+		_, _ = encoding.ReadAny(buffer.New(data))
 	}
 	return 0
 }
@@ -591,7 +528,7 @@ func TestFuzzConnCorpus(t *testing.T) {
 		t.Skip("set TEST_CORPUS to enable")
 	}
 
-	for _, path := range testDirFiles(t, "fuzz/conn/corpus") {
+	for _, path := range testDirFiles(t, "internal/encoding/testdata/fuzz/conn/corpus") {
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			data, err := ioutil.ReadFile(path)
 			if err != nil {
@@ -609,7 +546,7 @@ func TestFuzzMarshalCorpus(t *testing.T) {
 		t.Skip("set TEST_CORPUS to enable")
 	}
 
-	for _, path := range testDirFiles(t, "fuzz/marshal/corpus") {
+	for _, path := range testDirFiles(t, "internal/encoding/testdata/fuzz/marshal/corpus") {
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			data, err := ioutil.ReadFile(path)
 			if err != nil {

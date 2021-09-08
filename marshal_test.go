@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Azure/go-amqp/internal/buffer"
+	"github.com/Azure/go-amqp/internal/encoding"
 )
 
 var exampleFrames = []struct {
@@ -32,7 +33,7 @@ var exampleFrames = []struct {
 				Settled:            true,
 				More:               true,
 				ReceiverSettleMode: rcvSettle(ModeSecond),
-				State:              &stateReceived{},
+				State:              &encoding.StateReceived{},
 				Resume:             true,
 				Aborted:            true,
 				Batchable:          true,
@@ -133,7 +134,7 @@ func BenchmarkMarshal(b *testing.B) {
 			var buf buffer.Buffer
 
 			for i := 0; i < b.N; i++ {
-				err := marshal(&buf, typ)
+				err := encoding.Marshal(&buf, typ)
 				if err != nil {
 					b.Error(fmt.Sprintf("%+v", err))
 				}
@@ -148,7 +149,7 @@ func BenchmarkUnmarshal(b *testing.B) {
 	for _, type_ := range allTypes {
 		b.Run(fmt.Sprintf("%T", type_), func(b *testing.B) {
 			var buf buffer.Buffer
-			err := marshal(&buf, type_)
+			err := encoding.Marshal(&buf, type_)
 			if err != nil {
 				b.Error(fmt.Sprintf("%+v", err))
 			}
@@ -159,7 +160,7 @@ func BenchmarkUnmarshal(b *testing.B) {
 			b.ReportAllocs()
 
 			for i := 0; i < b.N; i++ {
-				err = unmarshal(buffer.New(data), newType)
+				err = encoding.Unmarshal(buffer.New(data), newType)
 				if err != nil {
 					b.Error(fmt.Sprintf("%v", err))
 				}
@@ -174,7 +175,7 @@ func TestMarshalUnmarshal(t *testing.T) {
 	for _, type_ := range allTypes {
 		t.Run(fmt.Sprintf("%T", type_), func(t *testing.T) {
 			var buf buffer.Buffer
-			err := marshal(&buf, type_)
+			err := encoding.Marshal(&buf, type_)
 			if err != nil {
 				t.Fatal(fmt.Sprintf("%+v", err))
 			}
@@ -192,7 +193,7 @@ func TestMarshalUnmarshal(t *testing.T) {
 
 			// handle special case around nil type
 			if type_ == nil {
-				err = unmarshal(&buf, nil)
+				err = encoding.Unmarshal(&buf, nil)
 				if err != nil {
 					t.Fatal(fmt.Sprintf("%+v", err))
 					return
@@ -201,7 +202,7 @@ func TestMarshalUnmarshal(t *testing.T) {
 			}
 
 			newType := reflect.New(reflect.TypeOf(type_))
-			err = unmarshal(&buf, newType.Interface())
+			err = encoding.Unmarshal(&buf, newType.Interface())
 			if err != nil {
 				t.Fatal(fmt.Sprintf("%+v", err))
 				return
@@ -221,12 +222,12 @@ func TestIssue173(t *testing.T) {
 	// NOTE: Dates after the Unix Epoch don't trigger the bug, only
 	// dates that negative Unix time show the problem.
 	want := time.Date(1969, 03, 21, 0, 0, 0, 0, time.UTC)
-	err := marshal(&buf, want)
+	err := encoding.Marshal(&buf, want)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var got time.Time
-	err = unmarshal(&buf, &got)
+	err = encoding.Unmarshal(&buf, &got)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,12 +240,12 @@ func TestReadAny(t *testing.T) {
 	for _, type_ := range generalTypes {
 		t.Run(fmt.Sprintf("%T", type_), func(t *testing.T) {
 			var buf buffer.Buffer
-			err := marshal(&buf, type_)
+			err := encoding.Marshal(&buf, type_)
 			if err != nil {
 				t.Errorf("%+v", err)
 			}
 
-			got, err := readAny(&buf)
+			got, err := encoding.ReadAny(&buf)
 			if err != nil {
 				t.Fatalf("%+v", err)
 			}
@@ -267,11 +268,11 @@ var (
 			Hostname:            "bar.host",
 			MaxFrameSize:        4200,
 			ChannelMax:          13,
-			OutgoingLocales:     []symbol{"fooLocale"},
-			IncomingLocales:     []symbol{"barLocale"},
-			OfferedCapabilities: []symbol{"fooCap"},
-			DesiredCapabilities: []symbol{"barCap"},
-			Properties: map[symbol]interface{}{
+			OutgoingLocales:     []encoding.Symbol{"fooLocale"},
+			IncomingLocales:     []encoding.Symbol{"barLocale"},
+			OfferedCapabilities: []encoding.Symbol{"fooCap"},
+			DesiredCapabilities: []encoding.Symbol{"barCap"},
+			Properties: map[encoding.Symbol]interface{}{
 				"fooProp": int32(45),
 			},
 		},
@@ -281,9 +282,9 @@ var (
 			IncomingWindow:      9876654,
 			OutgoingWindow:      123555,
 			HandleMax:           9757,
-			OfferedCapabilities: []symbol{"fooCap"},
-			DesiredCapabilities: []symbol{"barCap"},
-			Properties: map[symbol]interface{}{
+			OfferedCapabilities: []encoding.Symbol{"fooCap"},
+			DesiredCapabilities: []encoding.Symbol{"barCap"},
+			Properties: map[encoding.Symbol]interface{}{
 				"fooProp": int32(45),
 			},
 		},
@@ -299,18 +300,18 @@ var (
 				ExpiryPolicy: ExpiryLinkDetach,
 				Timeout:      635,
 				Dynamic:      true,
-				DynamicNodeProperties: map[symbol]interface{}{
-					"lifetime-policy": deleteOnClose,
+				DynamicNodeProperties: map[encoding.Symbol]interface{}{
+					"lifetime-policy": encoding.DeleteOnClose,
 				},
 				DistributionMode: "some-mode",
-				Filter: filter{
-					"foo:filter": &describedType{
-						descriptor: "foo:filter",
-						value:      "bar value",
+				Filter: encoding.Filter{
+					"foo:filter": &encoding.DescribedType{
+						Descriptor: "foo:filter",
+						Value:      "bar value",
 					},
 				},
-				Outcomes:     []symbol{"amqp:accepted:list"},
-				Capabilities: []symbol{"barCap"},
+				Outcomes:     []encoding.Symbol{"amqp:accepted:list"},
+				Capabilities: []encoding.Symbol{"barCap"},
 			},
 			Target: &target{
 				Address:      "fooAddr",
@@ -318,26 +319,26 @@ var (
 				ExpiryPolicy: ExpiryLinkDetach,
 				Timeout:      635,
 				Dynamic:      true,
-				DynamicNodeProperties: map[symbol]interface{}{
-					"lifetime-policy": deleteOnClose,
+				DynamicNodeProperties: map[encoding.Symbol]interface{}{
+					"lifetime-policy": encoding.DeleteOnClose,
 				},
-				Capabilities: []symbol{"barCap"},
+				Capabilities: []encoding.Symbol{"barCap"},
 			},
-			Unsettled: unsettled{
-				"fooDeliveryTag": &stateAccepted{},
+			Unsettled: encoding.Unsettled{
+				"fooDeliveryTag": &encoding.StateAccepted{},
 			},
 			IncompleteUnsettled:  true,
 			InitialDeliveryCount: 3184,
 			MaxMessageSize:       75983,
-			OfferedCapabilities:  []symbol{"fooCap"},
-			DesiredCapabilities:  []symbol{"barCap"},
-			Properties: map[symbol]interface{}{
+			OfferedCapabilities:  []encoding.Symbol{"fooCap"},
+			DesiredCapabilities:  []encoding.Symbol{"barCap"},
+			Properties: map[encoding.Symbol]interface{}{
 				"fooProp": int32(45),
 			},
 		},
 		role(true),
-		&unsettled{
-			"fooDeliveryTag": &stateAccepted{},
+		&encoding.Unsettled{
+			"fooDeliveryTag": &encoding.StateAccepted{},
 		},
 		&source{
 			Address:      "fooAddr",
@@ -345,18 +346,18 @@ var (
 			ExpiryPolicy: ExpiryLinkDetach,
 			Timeout:      635,
 			Dynamic:      true,
-			DynamicNodeProperties: map[symbol]interface{}{
-				"lifetime-policy": deleteOnClose,
+			DynamicNodeProperties: map[encoding.Symbol]interface{}{
+				"lifetime-policy": encoding.DeleteOnClose,
 			},
 			DistributionMode: "some-mode",
-			Filter: filter{
-				"foo:filter": &describedType{
-					descriptor: "foo:filter",
-					value:      "bar value",
+			Filter: encoding.Filter{
+				"foo:filter": &encoding.DescribedType{
+					Descriptor: "foo:filter",
+					Value:      "bar value",
 				},
 			},
-			Outcomes:     []symbol{"amqp:accepted:list"},
-			Capabilities: []symbol{"barCap"},
+			Outcomes:     []encoding.Symbol{"amqp:accepted:list"},
+			Capabilities: []encoding.Symbol{"barCap"},
 		},
 		&target{
 			Address:      "fooAddr",
@@ -364,10 +365,10 @@ var (
 			ExpiryPolicy: ExpiryLinkDetach,
 			Timeout:      635,
 			Dynamic:      true,
-			DynamicNodeProperties: map[symbol]interface{}{
-				"lifetime-policy": deleteOnClose,
+			DynamicNodeProperties: map[encoding.Symbol]interface{}{
+				"lifetime-policy": encoding.DeleteOnClose,
 			},
-			Capabilities: []symbol{"barCap"},
+			Capabilities: []encoding.Symbol{"barCap"},
 		},
 		&performFlow{
 			NextIncomingID: uint32Ptr(354),
@@ -380,7 +381,7 @@ var (
 			Available:      uint32Ptr(878321),
 			Drain:          true,
 			Echo:           true,
-			Properties: map[symbol]interface{}{
+			Properties: map[encoding.Symbol]interface{}{
 				"fooProp": int32(45),
 			},
 		},
@@ -392,7 +393,7 @@ var (
 			Settled:            true,
 			More:               true,
 			ReceiverSettleMode: rcvSettle(ModeSecond),
-			State:              &stateReceived{},
+			State:              &encoding.StateReceived{},
 			Resume:             true,
 			Aborted:            true,
 			Batchable:          true,
@@ -403,7 +404,7 @@ var (
 			First:     5644444,
 			Last:      uint32Ptr(423),
 			Settled:   true,
-			State:     &stateReleased{},
+			State:     &encoding.StateReleased{},
 			Batchable: true,
 		},
 		&performDetach{
@@ -470,10 +471,10 @@ var (
 				FirstAcquirer: true,
 				DeliveryCount: 32,
 			},
-			DeliveryAnnotations: Annotations{
+			DeliveryAnnotations: encoding.Annotations{
 				int64(42): "answer",
 			},
-			Annotations: Annotations{
+			Annotations: encoding.Annotations{
 				int64(42): "answer",
 			},
 			Properties: &MessageProperties{
@@ -499,7 +500,7 @@ var (
 				[]byte("More payload."),
 			},
 			Value: uint8(42),
-			Footer: Annotations{
+			Footer: encoding.Annotations{
 				"hash": []uint8{0, 1, 2, 34, 5, 6, 7, 8, 9, 0},
 			},
 		},
@@ -525,12 +526,12 @@ var (
 			GroupSequence:      89324,
 			ReplyToGroupID:     "barGroup",
 		},
-		&stateReceived{
+		&encoding.StateReceived{
 			SectionNumber: 234,
 			SectionOffset: 8973,
 		},
-		&stateAccepted{},
-		&stateRejected{
+		&encoding.StateAccepted{},
+		&encoding.StateRejected{
 			Error: &Error{
 				Condition:   ErrorStolen,
 				Description: "foo description",
@@ -540,15 +541,15 @@ var (
 				},
 			},
 		},
-		&stateReleased{},
-		&stateModified{
+		&encoding.StateReleased{},
+		&encoding.StateModified{
 			DeliveryFailed:    true,
 			UndeliverableHere: true,
-			MessageAnnotations: Annotations{
+			MessageAnnotations: encoding.Annotations{
 				"more": "annotations",
 			},
 		},
-		lifetimePolicy(typeCodeDeleteOnClose),
+		encoding.LifetimePolicy(encoding.TypeCodeDeleteOnClose),
 		SenderSettleMode(1),
 		ReceiverSettleMode(1),
 		&saslInit{
@@ -557,7 +558,7 @@ var (
 			Hostname:        "me",
 		},
 		&saslMechanisms{
-			Mechanisms: []symbol{"FOO", "BAR", "BAZ"},
+			Mechanisms: []encoding.Symbol{"FOO", "BAR", "BAZ"},
 		},
 		&saslChallenge{
 			Challenge: []byte("BAR\x00CHALLENGE\x00"),
@@ -569,16 +570,16 @@ var (
 			Code:           codeSASLSysPerm,
 			AdditionalData: []byte("here's some info for you..."),
 		},
-		milliseconds(10 * time.Second),
-		symbol("a symbol"),
-		map[symbol]interface{}{
+		encoding.Milliseconds(10 * time.Second),
+		encoding.Symbol("a symbol"),
+		map[encoding.Symbol]interface{}{
 			"hash": []uint8{0, 1, 2, 34, 5, 6, 7, 8, 9, 0},
 		},
 	}
 
 	generalTypes = []interface{}{
 		nil,
-		UUID{1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16},
+		encoding.UUID{1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16},
 		bool(true),
 		int8(math.MaxInt8),
 		int8(math.MinInt8),
@@ -600,9 +601,9 @@ var (
 		float64(-math.Pi),
 		float64(math.NaN()),
 		float64(-math.NaN()),
-		describedType{
-			descriptor: binary.BigEndian.Uint64([]byte{0x00, 0x00, 0x46, 0x8C, 0x00, 0x00, 0x00, 0x04}),
-			value:      "amqp.annotation.x-opt-offset > '312'",
+		encoding.DescribedType{
+			Descriptor: binary.BigEndian.Uint64([]byte{0x00, 0x00, 0x46, 0x8C, 0x00, 0x00, 0x00, 0x04}),
+			Value:      "amqp.annotation.x-opt-offset > '312'",
 		},
 		map[interface{}]interface{}{
 			int32(-1234): []uint8{0, 1, 2, 34, 5, 6, 7, 8, 9, 0},
@@ -610,7 +611,7 @@ var (
 		map[string]interface{}{
 			"hash": []uint8{0, 1, 2, 34, 5, 6, 7, 8, 9, 0},
 		},
-		ArrayUByte{1, 2, 3, math.MaxUint8, 0},
+		encoding.ArrayUByte{1, 2, 3, math.MaxUint8, 0},
 		[]int8{1, 2, 3, math.MaxInt8, math.MinInt8},
 		[]uint16{1, 2, 3, math.MaxUint16, 0},
 		[]uint16{1, 2, 3, math.MaxInt8, 0},
@@ -628,10 +629,10 @@ var (
 		[]float64{math.Pi, -math.Pi, math.NaN(), -math.NaN()},
 		[]bool{true, false, true, false},
 		[]string{"FOO", "BAR", "BAZ"},
-		[]symbol{"FOO", "BAR", "BAZ"},
+		[]encoding.Symbol{"FOO", "BAR", "BAZ"},
 		[][]byte{[]byte("FOO"), []byte("BAR"), []byte("BAZ")},
 		[]time.Time{time.Date(2018, 01, 27, 16, 16, 59, 0, time.UTC)},
-		[]UUID{
+		[]encoding.UUID{
 			{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
 			{16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 31},
 		},

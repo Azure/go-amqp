@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"sync"
 	"time"
+
+	"github.com/Azure/go-amqp/internal/encoding"
 )
 
 var (
@@ -305,9 +307,9 @@ func linkProperty(key string, value interface{}) LinkOption {
 			return errors.New("link property key must not be empty")
 		}
 		if l.properties == nil {
-			l.properties = make(map[symbol]interface{})
+			l.properties = make(map[encoding.Symbol]interface{})
 		}
-		l.properties[symbol(key)] = value
+		l.properties[encoding.Symbol(key)] = value
 		return nil
 	}
 }
@@ -332,9 +334,9 @@ func LinkSourceCapabilities(capabilities ...string) LinkOption {
 		}
 
 		// Convert string to symbol
-		symbolCapabilities := make([]symbol, len(capabilities))
+		symbolCapabilities := make([]encoding.Symbol, len(capabilities))
 		for i, v := range capabilities {
-			symbolCapabilities[i] = symbol(v)
+			symbolCapabilities[i] = encoding.Symbol(v)
 		}
 
 		l.source.Capabilities = append(l.source.Capabilities, symbolCapabilities...)
@@ -488,19 +490,19 @@ func LinkSourceFilter(name string, code uint64, value interface{}) LinkOption {
 			l.source = new(source)
 		}
 		if l.source.Filter == nil {
-			l.source.Filter = make(map[symbol]*describedType)
+			l.source.Filter = make(map[encoding.Symbol]*encoding.DescribedType)
 		}
 
 		var descriptor interface{}
 		if code != 0 {
 			descriptor = code
 		} else {
-			descriptor = symbol(name)
+			descriptor = encoding.Symbol(name)
 		}
 
-		l.source.Filter[symbol(name)] = &describedType{
-			descriptor: descriptor,
-			value:      value,
+		l.source.Filter[encoding.Symbol(name)] = &encoding.DescribedType{
+			Descriptor: descriptor,
+			Value:      value,
 		}
 		return nil
 	}

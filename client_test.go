@@ -3,6 +3,8 @@ package amqp
 import (
 	"encoding/binary"
 	"testing"
+
+	"github.com/Azure/go-amqp/internal/encoding"
 )
 
 func TestLinkOptions(t *testing.T) {
@@ -11,7 +13,7 @@ func TestLinkOptions(t *testing.T) {
 		opts  []LinkOption
 
 		wantSource     *source
-		wantProperties map[symbol]interface{}
+		wantProperties map[encoding.Symbol]interface{}
 	}{
 		{
 			label: "no options",
@@ -29,18 +31,18 @@ func TestLinkOptions(t *testing.T) {
 			},
 
 			wantSource: &source{
-				Filter: map[symbol]*describedType{
+				Filter: map[encoding.Symbol]*encoding.DescribedType{
 					"apache.org:selector-filter:string": {
-						descriptor: binary.BigEndian.Uint64([]byte{0x00, 0x00, 0x46, 0x8C, 0x00, 0x00, 0x00, 0x04}),
-						value:      "amqp.annotation.x-opt-offset > '100'",
+						Descriptor: binary.BigEndian.Uint64([]byte{0x00, 0x00, 0x46, 0x8C, 0x00, 0x00, 0x00, 0x04}),
+						Value:      "amqp.annotation.x-opt-offset > '100'",
 					},
 					"com.microsoft:session-filter": {
-						descriptor: binary.BigEndian.Uint64([]byte{0x00, 0x00, 0x00, 0x13, 0x70, 0x00, 0x00, 0x0C}),
-						value:      "123",
+						Descriptor: binary.BigEndian.Uint64([]byte{0x00, 0x00, 0x00, 0x13, 0x70, 0x00, 0x00, 0x0C}),
+						Value:      "123",
 					},
 				},
 			},
-			wantProperties: map[symbol]interface{}{
+			wantProperties: map[encoding.Symbol]interface{}{
 				"x-opt-test1": "test3",
 				"x-opt-test2": "test2",
 				"x-opt-test4": int64(1),
@@ -54,10 +56,10 @@ func TestLinkOptions(t *testing.T) {
 			},
 
 			wantSource: &source{
-				Filter: map[symbol]*describedType{
+				Filter: map[encoding.Symbol]*encoding.DescribedType{
 					"com.microsoft:session-filter": {
-						descriptor: binary.BigEndian.Uint64([]byte{0x00, 0x00, 0x00, 0x13, 0x70, 0x00, 0x00, 0x0C}),
-						value:      nil,
+						Descriptor: binary.BigEndian.Uint64([]byte{0x00, 0x00, 0x00, 0x13, 0x70, 0x00, 0x00, 0x0C}),
+						Value:      nil,
 					},
 				},
 			},
@@ -68,7 +70,7 @@ func TestLinkOptions(t *testing.T) {
 				LinkSourceCapabilities("cap1", "cap2", "cap3"),
 			},
 			wantSource: &source{
-				Capabilities: []symbol{"cap1", "cap2", "cap3"},
+				Capabilities: []encoding.Symbol{"cap1", "cap2", "cap3"},
 			},
 		},
 	}

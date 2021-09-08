@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Azure/go-amqp/internal/buffer"
+	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/testconn"
 )
 
@@ -81,7 +82,7 @@ func TestConnSASLXOAUTH2AuthSuccess(t *testing.T) {
 		frame{
 			type_:   frameTypeSASL,
 			channel: 0,
-			body:    &saslMechanisms{Mechanisms: []symbol{saslMechanismXOAUTH2}},
+			body:    &saslMechanisms{Mechanisms: []encoding.Symbol{saslMechanismXOAUTH2}},
 		},
 		frame{
 			type_:   frameTypeSASL,
@@ -116,7 +117,7 @@ func TestConnSASLXOAUTH2AuthFail(t *testing.T) {
 		frame{
 			type_:   frameTypeSASL,
 			channel: 0,
-			body:    &saslMechanisms{Mechanisms: []symbol{saslMechanismXOAUTH2}},
+			body:    &saslMechanisms{Mechanisms: []encoding.Symbol{saslMechanismXOAUTH2}},
 		},
 		frame{
 			type_:   frameTypeSASL,
@@ -150,7 +151,7 @@ func TestConnSASLXOAUTH2AuthFailWithErrorResponse(t *testing.T) {
 		frame{
 			type_:   frameTypeSASL,
 			channel: 0,
-			body:    &saslMechanisms{Mechanisms: []symbol{saslMechanismXOAUTH2}},
+			body:    &saslMechanisms{Mechanisms: []encoding.Symbol{saslMechanismXOAUTH2}},
 		},
 		frame{
 			type_:   frameTypeSASL,
@@ -189,7 +190,7 @@ func TestConnSASLXOAUTH2AuthFailsAdditionalErrorResponse(t *testing.T) {
 		frame{
 			type_:   frameTypeSASL,
 			channel: 0,
-			body:    &saslMechanisms{Mechanisms: []symbol{saslMechanismXOAUTH2}},
+			body:    &saslMechanisms{Mechanisms: []encoding.Symbol{saslMechanismXOAUTH2}},
 		},
 		frame{
 			type_:   frameTypeSASL,

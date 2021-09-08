@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 
 	"github.com/Azure/go-amqp/internal/buffer"
+	"github.com/Azure/go-amqp/internal/encoding"
 )
 
 // Sender sends messages on a single AMQP link.
@@ -46,7 +47,7 @@ func (s *Sender) Send(ctx context.Context, msg *Message) error {
 	// wait for transfer to be confirmed
 	select {
 	case state := <-done:
-		if state, ok := state.(*stateRejected); ok {
+		if state, ok := state.(*encoding.StateRejected); ok {
 			return state.Error
 		}
 		return nil
@@ -59,7 +60,7 @@ func (s *Sender) Send(ctx context.Context, msg *Message) error {
 
 // send is separated from Send so that the mutex unlock can be deferred without
 // locking the transfer confirmation that happens in Send.
-func (s *Sender) send(ctx context.Context, msg *Message) (chan deliveryState, error) {
+func (s *Sender) send(ctx context.Context, msg *Message) (chan encoding.DeliveryState, error) {
 	const maxDeliveryTagLength = 32
 	if len(msg.DeliveryTag) > maxDeliveryTagLength {
 		return nil, fmt.Errorf("delivery tag is over the allowed %v bytes, len: %v", maxDeliveryTagLength, len(msg.DeliveryTag))
@@ -69,7 +70,7 @@ func (s *Sender) send(ctx context.Context, msg *Message) (chan deliveryState, er
 	defer s.mu.Unlock()
 
 	s.buf.Reset()
-	err := msg.marshal(&s.buf)
+	err := msg.Marshal(&s.buf)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +116,7 @@ func (s *Sender) send(ctx context.Context, msg *Message) (chan deliveryState, er
 			fr.Settled = senderSettled
 
 			// set done on last frame
-			fr.done = make(chan deliveryState, 1)
+			fr.done = make(chan encoding.DeliveryState, 1)
 		}
 
 		select {

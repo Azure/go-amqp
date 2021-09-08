@@ -1,4 +1,4 @@
-package amqp
+package encoding
 
 import (
 	"math"
@@ -17,11 +17,11 @@ func TestMarshalArrayInt64AsLongArray(t *testing.T) {
 	ai := arrayInt64([]int64{math.MaxInt8 + 1})
 
 	buff := &buffer.Buffer{}
-	require.NoError(t, ai.marshal(buff))
+	require.NoError(t, ai.Marshal(buff))
 	require.EqualValues(t, amqpArrayHeaderLength+8, buff.Len(), "Expected an AMQP header (4 bytes) + 8 bytes for a long")
 
 	unmarshalled := arrayInt64{}
-	require.NoError(t, unmarshalled.unmarshal(buff))
+	require.NoError(t, unmarshalled.Unmarshal(buff))
 
 	require.EqualValues(t, arrayInt64([]int64{math.MaxInt8 + 1}), unmarshalled)
 }
@@ -32,11 +32,11 @@ func TestMarshalArrayInt64AsSmallLongArray(t *testing.T) {
 	ai := arrayInt64([]int64{math.MaxInt8, math.MinInt8})
 
 	buff := &buffer.Buffer{}
-	require.NoError(t, ai.marshal(buff))
+	require.NoError(t, ai.Marshal(buff))
 	require.EqualValues(t, amqpArrayHeaderLength+1+1, buff.Len(), "Expected an AMQP header (4 bytes) + 1 byte apiece for the two values")
 
 	unmarshalled := arrayInt64{}
-	require.NoError(t, unmarshalled.unmarshal(buff))
+	require.NoError(t, unmarshalled.Unmarshal(buff))
 
 	require.EqualValues(t, arrayInt64([]int64{math.MaxInt8, math.MinInt8}), unmarshalled)
 }

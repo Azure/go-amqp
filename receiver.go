@@ -5,6 +5,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/Azure/go-amqp/internal/encoding"
 )
 
 type messageDisposition struct {
@@ -151,11 +153,11 @@ func (r *Receiver) LinkSourceFilterValue(name string) interface{} {
 	if r.link.source == nil {
 		return nil
 	}
-	filter, ok := r.link.source.Filter[symbol(name)]
+	filter, ok := r.link.source.Filter[encoding.Symbol(name)]
 	if !ok {
 		return nil
 	}
-	return filter.value
+	return filter.Value
 }
 
 // Close closes the Receiver and AMQP link.
@@ -191,12 +193,12 @@ func (r *Receiver) dispositionBatcher() {
 		case msgDis := <-r.dispositions:
 
 			// not accepted or batch out of order
-			_, isAccept := msgDis.state.(*stateAccepted)
+			_, isAccept := msgDis.state.(*encoding.StateAccepted)
 			if !isAccept || (batchStarted && last+1 != msgDis.id) {
 				// send the current batch, if any
 				if batchStarted {
 					lastCopy := last
-					err := r.sendDisposition(first, &lastCopy, &stateAccepted{})
+					err := r.sendDisposition(first, &lastCopy, &encoding.StateAccepted{})
 					if err != nil {
 						r.inFlight.remove(first, &lastCopy, err)
 					}
@@ -225,7 +227,7 @@ func (r *Receiver) dispositionBatcher() {
 			// send batch if current size == batchSize
 			if last-first+1 >= batchSize {
 				lastCopy := last
-				err := r.sendDisposition(first, &lastCopy, &stateAccepted{})
+				err := r.sendDisposition(first, &lastCopy, &encoding.StateAccepted{})
 				if err != nil {
 					r.inFlight.remove(first, &lastCopy, err)
 				}
@@ -238,7 +240,7 @@ func (r *Receiver) dispositionBatcher() {
 		// maxBatchAge elapsed, send batch
 		case <-batchTimer.C:
 			lastCopy := last
-			err := r.sendDisposition(first, &lastCopy, &stateAccepted{})
+			err := r.sendDisposition(first, &lastCopy, &encoding.StateAccepted{})
 			if err != nil {
 				r.inFlight.remove(first, &lastCopy, err)
 			}

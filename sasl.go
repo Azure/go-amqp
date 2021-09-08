@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/Azure/go-amqp/internal/buffer"
+	"github.com/Azure/go-amqp/internal/encoding"
 )
 
 // SASL Codes
@@ -15,9 +16,9 @@ const (
 
 // SASL Mechanisms
 const (
-	saslMechanismPLAIN     symbol = "PLAIN"
-	saslMechanismANONYMOUS symbol = "ANONYMOUS"
-	saslMechanismXOAUTH2   symbol = "XOAUTH2"
+	saslMechanismPLAIN     encoding.Symbol = "PLAIN"
+	saslMechanismANONYMOUS encoding.Symbol = "ANONYMOUS"
+	saslMechanismXOAUTH2   encoding.Symbol = "XOAUTH2"
 )
 
 const (
@@ -27,12 +28,12 @@ const (
 
 type saslCode uint8
 
-func (s saslCode) marshal(wr *buffer.Buffer) error {
-	return marshal(wr, uint8(s))
+func (s saslCode) Marshal(wr *buffer.Buffer) error {
+	return encoding.Marshal(wr, uint8(s))
 }
 
-func (s *saslCode) unmarshal(r *buffer.Buffer) error {
-	n, err := readUbyte(r)
+func (s *saslCode) Unmarshal(r *buffer.Buffer) error {
+	n, err := encoding.ReadUbyte(r)
 	*s = saslCode(n)
 	return err
 }
@@ -46,7 +47,7 @@ func ConnSASLPlain(username, password string) ConnOption {
 	return func(c *conn) error {
 		// make handlers map if no other mechanism has
 		if c.saslHandlers == nil {
-			c.saslHandlers = make(map[symbol]stateFunc)
+			c.saslHandlers = make(map[encoding.Symbol]stateFunc)
 		}
 
 		// add the handler the the map
@@ -78,7 +79,7 @@ func ConnSASLAnonymous() ConnOption {
 	return func(c *conn) error {
 		// make handlers map if no other mechanism has
 		if c.saslHandlers == nil {
-			c.saslHandlers = make(map[symbol]stateFunc)
+			c.saslHandlers = make(map[encoding.Symbol]stateFunc)
 		}
 
 		// add the handler the the map
@@ -117,7 +118,7 @@ func ConnSASLXOAUTH2(username, bearer string, saslMaxFrameSizeOverride uint32) C
 	return func(c *conn) error {
 		// make handlers map if no other mechanism has
 		if c.saslHandlers == nil {
-			c.saslHandlers = make(map[symbol]stateFunc)
+			c.saslHandlers = make(map[encoding.Symbol]stateFunc)
 		}
 
 		response, err := saslXOAUTH2InitialResponse(username, bearer)

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Azure/go-amqp/internal/buffer"
+	"github.com/Azure/go-amqp/internal/encoding"
 )
 
 // Message is an AMQP message.
@@ -32,7 +33,7 @@ type Message struct {
 	// The delivery-annotations section is used for delivery-specific non-standard
 	// properties at the head of the message. Delivery annotations convey information
 	// from the sending peer to the receiving peer.
-	DeliveryAnnotations Annotations
+	DeliveryAnnotations encoding.Annotations
 	// If the recipient does not understand the annotation it cannot be acted upon
 	// and its effects (such as any implied propagation) cannot be acted upon.
 	// Annotations might be specific to one implementation, or common to multiple
@@ -48,7 +49,7 @@ type Message struct {
 
 	// The message-annotations section is used for properties of the message which
 	// are aimed at the infrastructure.
-	Annotations Annotations
+	Annotations encoding.Annotations
 	// The message-annotations section is used for properties of the message which
 	// are aimed at the infrastructure and SHOULD be propagated across every
 	// delivery step. Message annotations convey information about the message.
@@ -96,7 +97,7 @@ type Message struct {
 	// can only be calculated or evaluated once the whole bare message has been
 	// constructed or seen (for example message hashes, HMACs, signatures and
 	// encryption details).
-	Footer Annotations
+	Footer encoding.Annotations
 
 	// Mark the message as settled when LinkSenderSettle is ModeMixed.
 	//
@@ -155,7 +156,7 @@ func (m *Message) Accept(ctx context.Context) error {
 		return nil
 	}
 	defer m.done()
-	return m.receiver.messageDisposition(ctx, m.deliveryID, &stateAccepted{})
+	return m.receiver.messageDisposition(ctx, m.deliveryID, &encoding.StateAccepted{})
 }
 
 // Reject notifies the server that the message is invalid.
@@ -166,7 +167,7 @@ func (m *Message) Reject(ctx context.Context, e *Error) error {
 		return nil
 	}
 	defer m.done()
-	return m.receiver.messageDisposition(ctx, m.deliveryID, &stateRejected{Error: e})
+	return m.receiver.messageDisposition(ctx, m.deliveryID, &encoding.StateRejected{Error: e})
 }
 
 // Release releases the message back to the server. The message
@@ -176,7 +177,7 @@ func (m *Message) Release(ctx context.Context) error {
 		return nil
 	}
 	defer m.done()
-	return m.receiver.messageDisposition(ctx, m.deliveryID, &stateReleased{})
+	return m.receiver.messageDisposition(ctx, m.deliveryID, &encoding.StateReleased{})
 }
 
 // Modify notifies the server that the message was not acted upon
@@ -191,13 +192,13 @@ func (m *Message) Release(ctx context.Context) error {
 // messageAnnotations is an optional annotation map to be merged
 // with the existing message annotations, overwriting existing keys
 // if necessary.
-func (m *Message) Modify(ctx context.Context, deliveryFailed, undeliverableHere bool, messageAnnotations Annotations) error {
+func (m *Message) Modify(ctx context.Context, deliveryFailed, undeliverableHere bool, messageAnnotations encoding.Annotations) error {
 	if !m.shouldSendDisposition() {
 		return nil
 	}
 	defer m.done()
 	return m.receiver.messageDisposition(ctx,
-		m.deliveryID, &stateModified{
+		m.deliveryID, &encoding.StateModified{
 			DeliveryFailed:     deliveryFailed,
 			UndeliverableHere:  undeliverableHere,
 			MessageAnnotations: messageAnnotations,
@@ -216,7 +217,7 @@ func (m *Message) Ignore() {
 // MarshalBinary encodes the message into binary form.
 func (m *Message) MarshalBinary() ([]byte, error) {
 	buf := &buffer.Buffer{}
-	err := m.marshal(buf)
+	err := m.Marshal(buf)
 	return buf.Detach(), err
 }
 
@@ -224,64 +225,64 @@ func (m *Message) shouldSendDisposition() bool {
 	return !m.settled
 }
 
-func (m *Message) marshal(wr *buffer.Buffer) error {
+func (m *Message) Marshal(wr *buffer.Buffer) error {
 	if m.Header != nil {
-		err := m.Header.marshal(wr)
+		err := m.Header.Marshal(wr)
 		if err != nil {
 			return err
 		}
 	}
 
 	if m.DeliveryAnnotations != nil {
-		writeDescriptor(wr, typeCodeDeliveryAnnotations)
-		err := marshal(wr, m.DeliveryAnnotations)
+		encoding.WriteDescriptor(wr, encoding.TypeCodeDeliveryAnnotations)
+		err := encoding.Marshal(wr, m.DeliveryAnnotations)
 		if err != nil {
 			return err
 		}
 	}
 
 	if m.Annotations != nil {
-		writeDescriptor(wr, typeCodeMessageAnnotations)
-		err := marshal(wr, m.Annotations)
+		encoding.WriteDescriptor(wr, encoding.TypeCodeMessageAnnotations)
+		err := encoding.Marshal(wr, m.Annotations)
 		if err != nil {
 			return err
 		}
 	}
 
 	if m.Properties != nil {
-		err := marshal(wr, m.Properties)
+		err := encoding.Marshal(wr, m.Properties)
 		if err != nil {
 			return err
 		}
 	}
 
 	if m.ApplicationProperties != nil {
-		writeDescriptor(wr, typeCodeApplicationProperties)
-		err := marshal(wr, m.ApplicationProperties)
+		encoding.WriteDescriptor(wr, encoding.TypeCodeApplicationProperties)
+		err := encoding.Marshal(wr, m.ApplicationProperties)
 		if err != nil {
 			return err
 		}
 	}
 
 	for _, data := range m.Data {
-		writeDescriptor(wr, typeCodeApplicationData)
-		err := writeBinary(wr, data)
+		encoding.WriteDescriptor(wr, encoding.TypeCodeApplicationData)
+		err := encoding.WriteBinary(wr, data)
 		if err != nil {
 			return err
 		}
 	}
 
 	if m.Value != nil {
-		writeDescriptor(wr, typeCodeAMQPValue)
-		err := marshal(wr, m.Value)
+		encoding.WriteDescriptor(wr, encoding.TypeCodeAMQPValue)
+		err := encoding.Marshal(wr, m.Value)
 		if err != nil {
 			return err
 		}
 	}
 
 	if m.Footer != nil {
-		writeDescriptor(wr, typeCodeFooter)
-		err := marshal(wr, m.Footer)
+		encoding.WriteDescriptor(wr, encoding.TypeCodeFooter)
+		err := encoding.Marshal(wr, m.Footer)
 		if err != nil {
 			return err
 		}
@@ -293,14 +294,14 @@ func (m *Message) marshal(wr *buffer.Buffer) error {
 // UnmarshalBinary decodes the message from binary form.
 func (m *Message) UnmarshalBinary(data []byte) error {
 	buf := buffer.New(data)
-	return m.unmarshal(buf)
+	return m.Unmarshal(buf)
 }
 
-func (m *Message) unmarshal(r *buffer.Buffer) error {
+func (m *Message) Unmarshal(r *buffer.Buffer) error {
 	// loop, decoding sections until bytes have been consumed
 	for r.Len() > 0 {
 		// determine type
-		type_, err := peekMessageType(r.Bytes())
+		type_, err := encoding.PeekMessageType(r.Bytes())
 		if err != nil {
 			return err
 		}
@@ -311,30 +312,30 @@ func (m *Message) unmarshal(r *buffer.Buffer) error {
 			// unmarshaling section is set to true
 			discardHeader = true
 		)
-		switch amqpType(type_) {
+		switch encoding.AMQPType(type_) {
 
-		case typeCodeMessageHeader:
+		case encoding.TypeCodeMessageHeader:
 			discardHeader = false
 			section = &m.Header
 
-		case typeCodeDeliveryAnnotations:
+		case encoding.TypeCodeDeliveryAnnotations:
 			section = &m.DeliveryAnnotations
 
-		case typeCodeMessageAnnotations:
+		case encoding.TypeCodeMessageAnnotations:
 			section = &m.Annotations
 
-		case typeCodeMessageProperties:
+		case encoding.TypeCodeMessageProperties:
 			discardHeader = false
 			section = &m.Properties
 
-		case typeCodeApplicationProperties:
+		case encoding.TypeCodeApplicationProperties:
 			section = &m.ApplicationProperties
 
-		case typeCodeApplicationData:
+		case encoding.TypeCodeApplicationData:
 			r.Skip(3)
 
 			var data []byte
-			err = unmarshal(r, &data)
+			err = encoding.Unmarshal(r, &data)
 			if err != nil {
 				return err
 			}
@@ -342,10 +343,10 @@ func (m *Message) unmarshal(r *buffer.Buffer) error {
 			m.Data = append(m.Data, data)
 			continue
 
-		case typeCodeFooter:
+		case encoding.TypeCodeFooter:
 			section = &m.Footer
 
-		case typeCodeAMQPValue:
+		case encoding.TypeCodeAMQPValue:
 			section = &m.Value
 
 		default:
@@ -356,7 +357,7 @@ func (m *Message) unmarshal(r *buffer.Buffer) error {
 			r.Skip(3)
 		}
 
-		err = unmarshal(r, section)
+		err = encoding.Unmarshal(r, section)
 		if err != nil {
 			return err
 		}
@@ -385,23 +386,23 @@ type MessageHeader struct {
 	DeliveryCount uint32
 }
 
-func (h *MessageHeader) marshal(wr *buffer.Buffer) error {
-	return marshalComposite(wr, typeCodeMessageHeader, []marshalField{
-		{value: &h.Durable, omit: !h.Durable},
-		{value: &h.Priority, omit: h.Priority == 4},
-		{value: (*milliseconds)(&h.TTL), omit: h.TTL == 0},
-		{value: &h.FirstAcquirer, omit: !h.FirstAcquirer},
-		{value: &h.DeliveryCount, omit: h.DeliveryCount == 0},
+func (h *MessageHeader) Marshal(wr *buffer.Buffer) error {
+	return encoding.MarshalComposite(wr, encoding.TypeCodeMessageHeader, []encoding.MarshalField{
+		{Value: &h.Durable, Omit: !h.Durable},
+		{Value: &h.Priority, Omit: h.Priority == 4},
+		{Value: (*encoding.Milliseconds)(&h.TTL), Omit: h.TTL == 0},
+		{Value: &h.FirstAcquirer, Omit: !h.FirstAcquirer},
+		{Value: &h.DeliveryCount, Omit: h.DeliveryCount == 0},
 	})
 }
 
-func (h *MessageHeader) unmarshal(r *buffer.Buffer) error {
-	return unmarshalComposite(r, typeCodeMessageHeader, []unmarshalField{
-		{field: &h.Durable},
-		{field: &h.Priority, handleNull: func() error { h.Priority = 4; return nil }},
-		{field: (*milliseconds)(&h.TTL)},
-		{field: &h.FirstAcquirer},
-		{field: &h.DeliveryCount},
+func (h *MessageHeader) Unmarshal(r *buffer.Buffer) error {
+	return encoding.UnmarshalComposite(r, encoding.TypeCodeMessageHeader, []encoding.UnmarshalField{
+		{Field: &h.Durable},
+		{Field: &h.Priority, HandleNull: func() error { h.Priority = 4; return nil }},
+		{Field: (*encoding.Milliseconds)(&h.TTL)},
+		{Field: &h.FirstAcquirer},
+		{Field: &h.DeliveryCount},
 	}...)
 }
 
@@ -506,38 +507,42 @@ type MessageProperties struct {
 	ReplyToGroupID string
 }
 
-func (p *MessageProperties) marshal(wr *buffer.Buffer) error {
-	return marshalComposite(wr, typeCodeMessageProperties, []marshalField{
-		{value: p.MessageID, omit: p.MessageID == nil},
-		{value: &p.UserID, omit: len(p.UserID) == 0},
-		{value: &p.To, omit: p.To == ""},
-		{value: &p.Subject, omit: p.Subject == ""},
-		{value: &p.ReplyTo, omit: p.ReplyTo == ""},
-		{value: p.CorrelationID, omit: p.CorrelationID == nil},
-		{value: (*symbol)(&p.ContentType), omit: p.ContentType == ""},
-		{value: (*symbol)(&p.ContentEncoding), omit: p.ContentEncoding == ""},
-		{value: &p.AbsoluteExpiryTime, omit: p.AbsoluteExpiryTime.IsZero()},
-		{value: &p.CreationTime, omit: p.CreationTime.IsZero()},
-		{value: &p.GroupID, omit: p.GroupID == ""},
-		{value: &p.GroupSequence},
-		{value: &p.ReplyToGroupID, omit: p.ReplyToGroupID == ""},
+func (p *MessageProperties) Marshal(wr *buffer.Buffer) error {
+	return encoding.MarshalComposite(wr, encoding.TypeCodeMessageProperties, []encoding.MarshalField{
+		{Value: p.MessageID, Omit: p.MessageID == nil},
+		{Value: &p.UserID, Omit: len(p.UserID) == 0},
+		{Value: &p.To, Omit: p.To == ""},
+		{Value: &p.Subject, Omit: p.Subject == ""},
+		{Value: &p.ReplyTo, Omit: p.ReplyTo == ""},
+		{Value: p.CorrelationID, Omit: p.CorrelationID == nil},
+		{Value: (*encoding.Symbol)(&p.ContentType), Omit: p.ContentType == ""},
+		{Value: (*encoding.Symbol)(&p.ContentEncoding), Omit: p.ContentEncoding == ""},
+		{Value: &p.AbsoluteExpiryTime, Omit: p.AbsoluteExpiryTime.IsZero()},
+		{Value: &p.CreationTime, Omit: p.CreationTime.IsZero()},
+		{Value: &p.GroupID, Omit: p.GroupID == ""},
+		{Value: &p.GroupSequence},
+		{Value: &p.ReplyToGroupID, Omit: p.ReplyToGroupID == ""},
 	})
 }
 
-func (p *MessageProperties) unmarshal(r *buffer.Buffer) error {
-	return unmarshalComposite(r, typeCodeMessageProperties, []unmarshalField{
-		{field: &p.MessageID},
-		{field: &p.UserID},
-		{field: &p.To},
-		{field: &p.Subject},
-		{field: &p.ReplyTo},
-		{field: &p.CorrelationID},
-		{field: &p.ContentType},
-		{field: &p.ContentEncoding},
-		{field: &p.AbsoluteExpiryTime},
-		{field: &p.CreationTime},
-		{field: &p.GroupID},
-		{field: &p.GroupSequence},
-		{field: &p.ReplyToGroupID},
+func (p *MessageProperties) Unmarshal(r *buffer.Buffer) error {
+	return encoding.UnmarshalComposite(r, encoding.TypeCodeMessageProperties, []encoding.UnmarshalField{
+		{Field: &p.MessageID},
+		{Field: &p.UserID},
+		{Field: &p.To},
+		{Field: &p.Subject},
+		{Field: &p.ReplyTo},
+		{Field: &p.CorrelationID},
+		{Field: &p.ContentType},
+		{Field: &p.ContentEncoding},
+		{Field: &p.AbsoluteExpiryTime},
+		{Field: &p.CreationTime},
+		{Field: &p.GroupID},
+		{Field: &p.GroupSequence},
+		{Field: &p.ReplyToGroupID},
 	}...)
 }
+
+type Annotations = encoding.Annotations
+
+type UUID = encoding.UUID

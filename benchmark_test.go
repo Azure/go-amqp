@@ -26,7 +26,7 @@ func BenchmarkSimple(b *testing.B) {
 	}
 
 	// add a random suffix to the link name so the test broker always creates a new node
-	targetName := fmt.Sprintf("BencmarkSimple %d", rand.Uint64())
+	targetName := fmt.Sprintf("BenchmarkSimple %d", rand.Uint64())
 
 	sender, err := session.NewSender(
 		amqp.LinkTargetAddress(targetName),

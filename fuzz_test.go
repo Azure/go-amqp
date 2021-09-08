@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Azure/go-amqp/internal/buffer"
 	"github.com/Azure/go-amqp/internal/testconn"
 	"github.com/fortytw2/leaktest"
 )
@@ -194,8 +195,8 @@ func fuzzUnmarshal(data []byte) int {
 	}
 
 	for _, t := range types {
-		_ = unmarshal(&buffer{b: data}, t)
-		_, _ = readAny(&buffer{b: data})
+		_ = unmarshal(buffer.New(data), t)
+		_, _ = readAny(buffer.New(data))
 	}
 	return 0
 }

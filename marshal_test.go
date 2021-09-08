@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Azure/go-amqp/internal/buffer"
 )
 
 var exampleFrames = []struct {
@@ -43,7 +45,7 @@ var exampleFrames = []struct {
 func TestFrameMarshalUnmarshal(t *testing.T) {
 	for _, tt := range exampleFrames {
 		t.Run(tt.label, func(t *testing.T) {
-			var buf buffer
+			var buf buffer.Buffer
 
 			err := writeFrame(&buf, tt.frame)
 			if err != nil {
@@ -78,15 +80,15 @@ func BenchmarkFrameMarshal(b *testing.B) {
 	for _, tt := range exampleFrames {
 		b.Run(tt.label, func(b *testing.B) {
 			b.ReportAllocs()
-			var buf buffer
+			var buf buffer.Buffer
 
 			for i := 0; i < b.N; i++ {
 				err := writeFrame(&buf, tt.frame)
 				if err != nil {
 					b.Error(fmt.Sprintf("%+v", err))
 				}
-				bytesSink = buf.bytes()
-				buf.reset()
+				bytesSink = buf.Bytes()
+				buf.Reset()
 			}
 		})
 	}
@@ -95,19 +97,19 @@ func BenchmarkFrameUnmarshal(b *testing.B) {
 	for _, tt := range exampleFrames {
 		b.Run(tt.label, func(b *testing.B) {
 			b.ReportAllocs()
-			var buf buffer
+			var buf buffer.Buffer
 			err := writeFrame(&buf, tt.frame)
 			if err != nil {
 				b.Error(fmt.Sprintf("%+v", err))
 			}
-			data := buf.bytes()
-			buf.reset()
+			data := buf.Bytes()
+			buf.Reset()
 
 			b.ResetTimer()
 			b.ReportAllocs()
 
 			for i := 0; i < b.N; i++ {
-				buf := &buffer{b: data}
+				buf := buffer.New(data)
 				_, err := parseFrameHeader(buf)
 				if err != nil {
 					b.Errorf("%+v", err)
@@ -128,15 +130,15 @@ func BenchmarkMarshal(b *testing.B) {
 	for _, typ := range allTypes {
 		b.Run(fmt.Sprintf("%T", typ), func(b *testing.B) {
 			b.ReportAllocs()
-			var buf buffer
+			var buf buffer.Buffer
 
 			for i := 0; i < b.N; i++ {
 				err := marshal(&buf, typ)
 				if err != nil {
 					b.Error(fmt.Sprintf("%+v", err))
 				}
-				bytesSink = buf.bytes()
-				buf.reset()
+				bytesSink = buf.Bytes()
+				buf.Reset()
 			}
 		})
 	}
@@ -145,19 +147,19 @@ func BenchmarkMarshal(b *testing.B) {
 func BenchmarkUnmarshal(b *testing.B) {
 	for _, type_ := range allTypes {
 		b.Run(fmt.Sprintf("%T", type_), func(b *testing.B) {
-			var buf buffer
+			var buf buffer.Buffer
 			err := marshal(&buf, type_)
 			if err != nil {
 				b.Error(fmt.Sprintf("%+v", err))
 			}
-			data := buf.bytes()
+			data := buf.Bytes()
 			newType := reflect.New(reflect.TypeOf(type_)).Interface()
 
 			b.ResetTimer()
 			b.ReportAllocs()
 
 			for i := 0; i < b.N; i++ {
-				err = unmarshal(&buffer{b: data}, newType)
+				err = unmarshal(buffer.New(data), newType)
 				if err != nil {
 					b.Error(fmt.Sprintf("%v", err))
 				}
@@ -171,7 +173,7 @@ func TestMarshalUnmarshal(t *testing.T) {
 
 	for _, type_ := range allTypes {
 		t.Run(fmt.Sprintf("%T", type_), func(t *testing.T) {
-			var buf buffer
+			var buf buffer.Buffer
 			err := marshal(&buf, type_)
 			if err != nil {
 				t.Fatal(fmt.Sprintf("%+v", err))
@@ -182,7 +184,7 @@ func TestMarshalUnmarshal(t *testing.T) {
 				name = strings.TrimPrefix(name, "amqp.")
 				name = strings.TrimPrefix(name, "*amqp.")
 				path := filepath.Join("fuzz/marshal/corpus", name)
-				err = ioutil.WriteFile(path, buf.bytes(), 0644)
+				err = ioutil.WriteFile(path, buf.Bytes(), 0644)
 				if err != nil {
 					t.Error(err)
 				}
@@ -215,7 +217,7 @@ func TestMarshalUnmarshal(t *testing.T) {
 // Regression test for time calculation bug.
 // https://github.com/vcabbage/amqp/issues/173
 func TestIssue173(t *testing.T) {
-	var buf buffer
+	var buf buffer.Buffer
 	// NOTE: Dates after the Unix Epoch don't trigger the bug, only
 	// dates that negative Unix time show the problem.
 	want := time.Date(1969, 03, 21, 0, 0, 0, 0, time.UTC)
@@ -236,7 +238,7 @@ func TestIssue173(t *testing.T) {
 func TestReadAny(t *testing.T) {
 	for _, type_ := range generalTypes {
 		t.Run(fmt.Sprintf("%T", type_), func(t *testing.T) {
-			var buf buffer
+			var buf buffer.Buffer
 			err := marshal(&buf, type_)
 			if err != nil {
 				t.Errorf("%+v", err)

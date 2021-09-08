@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Azure/go-amqp/internal/buffer"
 	"github.com/Azure/go-amqp/internal/testconn"
 )
 
@@ -226,15 +227,12 @@ func peerResponse(items ...interface{}) ([]byte, error) {
 	for _, item := range items {
 		switch v := item.(type) {
 		case frame:
-			b := &buffer{
-				b: make([]byte, 0),
-				i: 0,
-			}
+			b := &buffer.Buffer{}
 			e := writeFrame(b, v)
 			if e != nil {
 				return buf, e
 			}
-			buf = append(buf, b.bytes()...)
+			buf = append(buf, b.Bytes()...)
 		case []byte:
 			buf = append(buf, v...)
 		default:

@@ -2,6 +2,8 @@ package amqp
 
 import (
 	"fmt"
+
+	"github.com/Azure/go-amqp/internal/buffer"
 )
 
 // SASL Codes
@@ -20,11 +22,11 @@ const (
 
 type saslCode uint8
 
-func (s saslCode) marshal(wr *buffer) error {
+func (s saslCode) marshal(wr *buffer.Buffer) error {
 	return marshal(wr, uint8(s))
 }
 
-func (s *saslCode) unmarshal(r *buffer) error {
+func (s *saslCode) unmarshal(r *buffer.Buffer) error {
 	n, err := readUbyte(r)
 	*s = saslCode(n)
 	return err

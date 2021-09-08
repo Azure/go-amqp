@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+
+	"github.com/Azure/go-amqp/internal/buffer"
 )
 
 // link is a unidirectional route.
@@ -63,7 +65,7 @@ type link struct {
 	messages              chan Message        // used to send completed messages to receiver
 	unsettledMessages     map[string]struct{} // used to keep track of messages being handled downstream
 	unsettledMessagesLock sync.RWMutex        // lock to protect concurrent access to unsettledMessages
-	buf                   buffer              // buffered bytes for current message
+	buf                   buffer.Buffer       // buffered bytes for current message
 	more                  bool                // if true, buf contains a partial message
 	msg                   Message             // current message being decoded
 }
@@ -487,7 +489,7 @@ func (l *link) muxReceive(fr performTransfer) error {
 
 	// discard message if it's been aborted
 	if fr.Aborted {
-		l.buf.reset()
+		l.buf.Reset()
 		l.msg = Message{
 			doneSignal: make(chan struct{}),
 		}
@@ -496,7 +498,7 @@ func (l *link) muxReceive(fr performTransfer) error {
 	}
 
 	// ensure maxMessageSize will not be exceeded
-	if l.maxMessageSize != 0 && uint64(l.buf.len())+uint64(len(fr.Payload)) > l.maxMessageSize {
+	if l.maxMessageSize != 0 && uint64(l.buf.Len())+uint64(len(fr.Payload)) > l.maxMessageSize {
 		msg := fmt.Sprintf("received message larger than max size of %d", l.maxMessageSize)
 		l.closeWithError(&Error{
 			Condition:   ErrorMessageSizeExceeded,
@@ -506,7 +508,7 @@ func (l *link) muxReceive(fr performTransfer) error {
 	}
 
 	// add the payload the the buffer
-	l.buf.write(fr.Payload)
+	l.buf.Write(fr.Payload)
 
 	// mark as settled if at least one frame is settled
 	l.msg.settled = l.msg.settled || fr.Settled
@@ -534,7 +536,7 @@ func (l *link) muxReceive(fr performTransfer) error {
 	debug(1, "deliveryID %d after push to receiver - deliveryCount : %d - linkCredit: %d, len(messages): %d, len(inflight): %d", l.msg.deliveryID, l.deliveryCount, l.linkCredit, len(l.messages), len(l.receiver.inFlight.m))
 
 	// reset progress
-	l.buf.reset()
+	l.buf.Reset()
 	l.msg = Message{}
 
 	// decrement link-credit after entire message received

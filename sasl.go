@@ -20,6 +20,11 @@ const (
 	saslMechanismXOAUTH2   symbol = "XOAUTH2"
 )
 
+const (
+	frameTypeAMQP = 0x0
+	frameTypeSASL = 0x1
+)
+
 type saslCode uint8
 
 func (s saslCode) marshal(wr *buffer.Buffer) error {

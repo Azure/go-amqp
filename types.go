@@ -114,46 +114,6 @@ const (
 	typeCodeDeleteOnNoLinksOrMessages amqpType = 0x2e
 )
 
-// Frame structure:
-//
-//     header (8 bytes)
-//       0-3: SIZE (total size, at least 8 bytes for header, uint32)
-//       4:   DOFF (data offset,at least 2, count of 4 bytes words, uint8)
-//       5:   TYPE (frame type)
-//                0x0: AMQP
-//                0x1: SASL
-//       6-7: type dependent (channel for AMQP)
-//     extended header (opt)
-//     body (opt)
-
-// frameHeader in a structure appropriate for use with binary.Read()
-type frameHeader struct {
-	// size: an unsigned 32-bit integer that MUST contain the total frame size of the frame header,
-	// extended header, and frame body. The frame is malformed if the size is less than the size of
-	// the frame header (8 bytes).
-	Size uint32
-	// doff: gives the position of the body within the frame. The value of the data offset is an
-	// unsigned, 8-bit integer specifying a count of 4-byte words. Due to the mandatory 8-byte
-	// frame header, the frame is malformed if the value is less than 2.
-	DataOffset uint8
-	FrameType  uint8
-	Channel    uint16
-}
-
-const (
-	frameTypeAMQP = 0x0
-	frameTypeSASL = 0x1
-
-	frameHeaderSize = 8
-)
-
-type protoHeader struct {
-	ProtoID  protoID
-	Major    uint8
-	Minor    uint8
-	Revision uint8
-}
-
 type role bool
 
 const (
@@ -555,8 +515,6 @@ func (t target) String() string {
 		t.Capabilities,
 	)
 }
-
-const maxDeliveryTagLength = 32
 
 // peekMessageType reads the message type without
 // modifying any data.

@@ -60,6 +60,7 @@ func (s *Sender) Send(ctx context.Context, msg *Message) error {
 // send is separated from Send so that the mutex unlock can be deferred without
 // locking the transfer confirmation that happens in Send.
 func (s *Sender) send(ctx context.Context, msg *Message) (chan deliveryState, error) {
+	const maxDeliveryTagLength = 32
 	if len(msg.DeliveryTag) > maxDeliveryTagLength {
 		return nil, fmt.Errorf("delivery tag is over the allowed %v bytes, len: %v", maxDeliveryTagLength, len(msg.DeliveryTag))
 	}

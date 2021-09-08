@@ -9,6 +9,324 @@ import (
 	"github.com/Azure/go-amqp/internal/buffer"
 )
 
+/*
+<type name="source" class="composite" source="list" provides="source">
+    <descriptor name="amqp:source:list" code="0x00000000:0x00000028"/>
+    <field name="address" type="*" requires="address"/>
+    <field name="durable" type="terminus-durability" default="none"/>
+    <field name="expiry-policy" type="terminus-expiry-policy" default="session-end"/>
+    <field name="timeout" type="seconds" default="0"/>
+    <field name="dynamic" type="boolean" default="false"/>
+    <field name="dynamic-node-properties" type="node-properties"/>
+    <field name="distribution-mode" type="symbol" requires="distribution-mode"/>
+    <field name="filter" type="filter-set"/>
+    <field name="default-outcome" type="*" requires="outcome"/>
+    <field name="outcomes" type="symbol" multiple="true"/>
+    <field name="capabilities" type="symbol" multiple="true"/>
+</type>
+*/
+type source struct {
+	// the address of the source
+	//
+	// The address of the source MUST NOT be set when sent on a attach frame sent by
+	// the receiving link endpoint where the dynamic flag is set to true (that is where
+	// the receiver is requesting the sender to create an addressable node).
+	//
+	// The address of the source MUST be set when sent on a attach frame sent by the
+	// sending link endpoint where the dynamic flag is set to true (that is where the
+	// sender has created an addressable node at the request of the receiver and is now
+	// communicating the address of that created node). The generated name of the address
+	// SHOULD include the link name and the container-id of the remote container to allow
+	// for ease of identification.
+	Address string
+
+	// indicates the durability of the terminus
+	//
+	// Indicates what state of the terminus will be retained durably: the state of durable
+	// messages, only existence and configuration of the terminus, or no state at all.
+	//
+	// 0: none
+	// 1: configuration
+	// 2: unsettled-state
+	Durable Durability
+
+	// the expiry policy of the source
+	//
+	// link-detach: The expiry timer starts when terminus is detached.
+	// session-end: The expiry timer starts when the most recently associated session is
+	//              ended.
+	// connection-close: The expiry timer starts when most recently associated connection
+	//                   is closed.
+	// never: The terminus never expires.
+	ExpiryPolicy ExpiryPolicy
+
+	// duration that an expiring source will be retained
+	//
+	// The source starts expiring as indicated by the expiry-policy.
+	Timeout uint32 // seconds
+
+	// request dynamic creation of a remote node
+	//
+	// When set to true by the receiving link endpoint, this field constitutes a request
+	// for the sending peer to dynamically create a node at the source. In this case the
+	// address field MUST NOT be set.
+	//
+	// When set to true by the sending link endpoint this field indicates creation of a
+	// dynamically created node. In this case the address field will contain the address
+	// of the created node. The generated address SHOULD include the link name and other
+	// available information on the initiator of the request (such as the remote
+	// container-id) in some recognizable form for ease of traceability.
+	Dynamic bool
+
+	// properties of the dynamically created node
+	//
+	// If the dynamic field is not set to true this field MUST be left unset.
+	//
+	// When set by the receiving link endpoint, this field contains the desired
+	// properties of the node the receiver wishes to be created. When set by the
+	// sending link endpoint this field contains the actual properties of the
+	// dynamically created node. See subsection 3.5.9 for standard node properties.
+	// http://www.amqp.org/specification/1.0/node-properties
+	//
+	// lifetime-policy: The lifetime of a dynamically generated node.
+	//					Definitionally, the lifetime will never be less than the lifetime
+	//					of the link which caused its creation, however it is possible to
+	//					extend the lifetime of dynamically created node using a lifetime
+	//					policy. The value of this entry MUST be of a type which provides
+	//					the lifetime-policy archetype. The following standard
+	//					lifetime-policies are defined below: delete-on-close,
+	//					delete-on-no-links, delete-on-no-messages or
+	//					delete-on-no-links-or-messages.
+	// supported-dist-modes: The distribution modes that the node supports.
+	//					The value of this entry MUST be one or more symbols which are valid
+	//					distribution-modes. That is, the value MUST be of the same type as
+	//					would be valid in a field defined with the following attributes:
+	//						type="symbol" multiple="true" requires="distribution-mode"
+	DynamicNodeProperties map[symbol]interface{} // TODO: implement custom type with validation
+
+	// the distribution mode of the link
+	//
+	// This field MUST be set by the sending end of the link if the endpoint supports more
+	// than one distribution-mode. This field MAY be set by the receiving end of the link
+	// to indicate a preference when a node supports multiple distribution modes.
+	DistributionMode symbol
+
+	// a set of predicates to filter the messages admitted onto the link
+	//
+	// The receiving endpoint sets its desired filter, the sending endpoint sets the filter
+	// actually in place (including any filters defaulted at the node). The receiving
+	// endpoint MUST check that the filter in place meets its needs and take responsibility
+	// for detaching if it does not.
+	Filter filter
+
+	// default outcome for unsettled transfers
+	//
+	// Indicates the outcome to be used for transfers that have not reached a terminal
+	// state at the receiver when the transfer is settled, including when the source
+	// is destroyed. The value MUST be a valid outcome (e.g., released or rejected).
+	DefaultOutcome interface{}
+
+	// descriptors for the outcomes that can be chosen on this link
+	//
+	// The values in this field are the symbolic descriptors of the outcomes that can
+	// be chosen on this link. This field MAY be empty, indicating that the default-outcome
+	// will be assumed for all message transfers (if the default-outcome is not set, and no
+	// outcomes are provided, then the accepted outcome MUST be supported by the source).
+	//
+	// When present, the values MUST be a symbolic descriptor of a valid outcome,
+	// e.g., "amqp:accepted:list".
+	Outcomes multiSymbol
+
+	// the extension capabilities the sender supports/desires
+	//
+	// http://www.amqp.org/specification/1.0/source-capabilities
+	Capabilities multiSymbol
+}
+
+func (s *source) marshal(wr *buffer.Buffer) error {
+	return marshalComposite(wr, typeCodeSource, []marshalField{
+		{value: &s.Address, omit: s.Address == ""},
+		{value: &s.Durable, omit: s.Durable == DurabilityNone},
+		{value: &s.ExpiryPolicy, omit: s.ExpiryPolicy == "" || s.ExpiryPolicy == ExpirySessionEnd},
+		{value: &s.Timeout, omit: s.Timeout == 0},
+		{value: &s.Dynamic, omit: !s.Dynamic},
+		{value: s.DynamicNodeProperties, omit: len(s.DynamicNodeProperties) == 0},
+		{value: &s.DistributionMode, omit: s.DistributionMode == ""},
+		{value: s.Filter, omit: len(s.Filter) == 0},
+		{value: &s.DefaultOutcome, omit: s.DefaultOutcome == nil},
+		{value: &s.Outcomes, omit: len(s.Outcomes) == 0},
+		{value: &s.Capabilities, omit: len(s.Capabilities) == 0},
+	})
+}
+
+func (s *source) unmarshal(r *buffer.Buffer) error {
+	return unmarshalComposite(r, typeCodeSource, []unmarshalField{
+		{field: &s.Address},
+		{field: &s.Durable},
+		{field: &s.ExpiryPolicy, handleNull: func() error { s.ExpiryPolicy = ExpirySessionEnd; return nil }},
+		{field: &s.Timeout},
+		{field: &s.Dynamic},
+		{field: &s.DynamicNodeProperties},
+		{field: &s.DistributionMode},
+		{field: &s.Filter},
+		{field: &s.DefaultOutcome},
+		{field: &s.Outcomes},
+		{field: &s.Capabilities},
+	}...)
+}
+
+func (s source) String() string {
+	return fmt.Sprintf("source{Address: %s, Durable: %d, ExpiryPolicy: %s, Timeout: %d, "+
+		"Dynamic: %t, DynamicNodeProperties: %v, DistributionMode: %s, Filter: %v, DefaultOutcome: %v"+
+		"Outcomes: %v, Capabilities: %v}",
+		s.Address,
+		s.Durable,
+		s.ExpiryPolicy,
+		s.Timeout,
+		s.Dynamic,
+		s.DynamicNodeProperties,
+		s.DistributionMode,
+		s.Filter,
+		s.DefaultOutcome,
+		s.Outcomes,
+		s.Capabilities,
+	)
+}
+
+/*
+<type name="target" class="composite" source="list" provides="target">
+    <descriptor name="amqp:target:list" code="0x00000000:0x00000029"/>
+    <field name="address" type="*" requires="address"/>
+    <field name="durable" type="terminus-durability" default="none"/>
+    <field name="expiry-policy" type="terminus-expiry-policy" default="session-end"/>
+    <field name="timeout" type="seconds" default="0"/>
+    <field name="dynamic" type="boolean" default="false"/>
+    <field name="dynamic-node-properties" type="node-properties"/>
+    <field name="capabilities" type="symbol" multiple="true"/>
+</type>
+*/
+type target struct {
+	// the address of the target
+	//
+	// The address of the target MUST NOT be set when sent on a attach frame sent by
+	// the sending link endpoint where the dynamic flag is set to true (that is where
+	// the sender is requesting the receiver to create an addressable node).
+	//
+	// The address of the source MUST be set when sent on a attach frame sent by the
+	// receiving link endpoint where the dynamic flag is set to true (that is where
+	// the receiver has created an addressable node at the request of the sender and
+	// is now communicating the address of that created node). The generated name of
+	// the address SHOULD include the link name and the container-id of the remote
+	// container to allow for ease of identification.
+	Address string
+
+	// indicates the durability of the terminus
+	//
+	// Indicates what state of the terminus will be retained durably: the state of durable
+	// messages, only existence and configuration of the terminus, or no state at all.
+	//
+	// 0: none
+	// 1: configuration
+	// 2: unsettled-state
+	Durable Durability
+
+	// the expiry policy of the target
+	//
+	// link-detach: The expiry timer starts when terminus is detached.
+	// session-end: The expiry timer starts when the most recently associated session is
+	//              ended.
+	// connection-close: The expiry timer starts when most recently associated connection
+	//                   is closed.
+	// never: The terminus never expires.
+	ExpiryPolicy ExpiryPolicy
+
+	// duration that an expiring target will be retained
+	//
+	// The target starts expiring as indicated by the expiry-policy.
+	Timeout uint32 // seconds
+
+	// request dynamic creation of a remote node
+	//
+	// When set to true by the sending link endpoint, this field constitutes a request
+	// for the receiving peer to dynamically create a node at the target. In this case
+	// the address field MUST NOT be set.
+	//
+	// When set to true by the receiving link endpoint this field indicates creation of
+	// a dynamically created node. In this case the address field will contain the
+	// address of the created node. The generated address SHOULD include the link name
+	// and other available information on the initiator of the request (such as the
+	// remote container-id) in some recognizable form for ease of traceability.
+	Dynamic bool
+
+	// properties of the dynamically created node
+	//
+	// If the dynamic field is not set to true this field MUST be left unset.
+	//
+	// When set by the sending link endpoint, this field contains the desired
+	// properties of the node the sender wishes to be created. When set by the
+	// receiving link endpoint this field contains the actual properties of the
+	// dynamically created node. See subsection 3.5.9 for standard node properties.
+	// http://www.amqp.org/specification/1.0/node-properties
+	//
+	// lifetime-policy: The lifetime of a dynamically generated node.
+	//					Definitionally, the lifetime will never be less than the lifetime
+	//					of the link which caused its creation, however it is possible to
+	//					extend the lifetime of dynamically created node using a lifetime
+	//					policy. The value of this entry MUST be of a type which provides
+	//					the lifetime-policy archetype. The following standard
+	//					lifetime-policies are defined below: delete-on-close,
+	//					delete-on-no-links, delete-on-no-messages or
+	//					delete-on-no-links-or-messages.
+	// supported-dist-modes: The distribution modes that the node supports.
+	//					The value of this entry MUST be one or more symbols which are valid
+	//					distribution-modes. That is, the value MUST be of the same type as
+	//					would be valid in a field defined with the following attributes:
+	//						type="symbol" multiple="true" requires="distribution-mode"
+	DynamicNodeProperties map[symbol]interface{} // TODO: implement custom type with validation
+
+	// the extension capabilities the sender supports/desires
+	//
+	// http://www.amqp.org/specification/1.0/target-capabilities
+	Capabilities multiSymbol
+}
+
+func (t *target) marshal(wr *buffer.Buffer) error {
+	return marshalComposite(wr, typeCodeTarget, []marshalField{
+		{value: &t.Address, omit: t.Address == ""},
+		{value: &t.Durable, omit: t.Durable == DurabilityNone},
+		{value: &t.ExpiryPolicy, omit: t.ExpiryPolicy == "" || t.ExpiryPolicy == ExpirySessionEnd},
+		{value: &t.Timeout, omit: t.Timeout == 0},
+		{value: &t.Dynamic, omit: !t.Dynamic},
+		{value: t.DynamicNodeProperties, omit: len(t.DynamicNodeProperties) == 0},
+		{value: &t.Capabilities, omit: len(t.Capabilities) == 0},
+	})
+}
+
+func (t *target) unmarshal(r *buffer.Buffer) error {
+	return unmarshalComposite(r, typeCodeTarget, []unmarshalField{
+		{field: &t.Address},
+		{field: &t.Durable},
+		{field: &t.ExpiryPolicy, handleNull: func() error { t.ExpiryPolicy = ExpirySessionEnd; return nil }},
+		{field: &t.Timeout},
+		{field: &t.Dynamic},
+		{field: &t.DynamicNodeProperties},
+		{field: &t.Capabilities},
+	}...)
+}
+
+func (t target) String() string {
+	return fmt.Sprintf("source{Address: %s, Durable: %d, ExpiryPolicy: %s, Timeout: %d, "+
+		"Dynamic: %t, DynamicNodeProperties: %v, Capabilities: %v}",
+		t.Address,
+		t.Durable,
+		t.ExpiryPolicy,
+		t.Timeout,
+		t.Dynamic,
+		t.DynamicNodeProperties,
+		t.Capabilities,
+	)
+}
+
 // frame is the decoded representation of a frame
 type frame struct {
 	type_   uint8     // AMQP/SASL

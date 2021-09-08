@@ -11,6 +11,30 @@ import (
 	"github.com/Azure/go-amqp/internal/buffer"
 )
 
+type role bool
+
+const (
+	roleSender   role = false
+	roleReceiver role = true
+)
+
+func (rl role) String() string {
+	if rl {
+		return "Receiver"
+	}
+	return "Sender"
+}
+
+func (rl *role) unmarshal(r *buffer.Buffer) error {
+	b, err := readBool(r)
+	*rl = role(b)
+	return err
+}
+
+func (rl role) marshal(wr *buffer.Buffer) error {
+	return marshal(wr, (bool)(rl))
+}
+
 // link is a unidirectional route.
 //
 // May be used for sending or receiving.

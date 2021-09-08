@@ -114,30 +114,6 @@ const (
 	typeCodeDeleteOnNoLinksOrMessages amqpType = 0x2e
 )
 
-type role bool
-
-const (
-	roleSender   role = false
-	roleReceiver role = true
-)
-
-func (rl role) String() string {
-	if rl {
-		return "Receiver"
-	}
-	return "Sender"
-}
-
-func (rl *role) unmarshal(r *buffer.Buffer) error {
-	b, err := readBool(r)
-	*rl = role(b)
-	return err
-}
-
-func (rl role) marshal(wr *buffer.Buffer) error {
-	return marshal(wr, (bool)(rl))
-}
-
 type deliveryState interface{} // TODO: http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transactions-v1.0-os.html#type-declared
 
 type unsettled map[string]deliveryState

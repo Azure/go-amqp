@@ -116,15 +116,15 @@ func (b *Buffer) ReadFromOnce(r io.Reader) error {
 	return err
 }
 
-func (b *Buffer) Write(p []byte) {
+func (b *Buffer) Append(p []byte) {
 	b.b = append(b.b, p...)
 }
 
-func (b *Buffer) WriteByte(byte_ byte) {
-	b.b = append(b.b, byte_)
+func (b *Buffer) AppendByte(bb byte) {
+	b.b = append(b.b, bb)
 }
 
-func (b *Buffer) WriteString(s string) {
+func (b *Buffer) AppendString(s string) {
 	b.b = append(b.b, s...)
 }
 
@@ -147,14 +147,14 @@ func (b *Buffer) Detach() []byte {
 	return temp
 }
 
-func (b *Buffer) WriteUint16(n uint16) {
+func (b *Buffer) AppendUint16(n uint16) {
 	b.b = append(b.b,
 		byte(n>>8),
 		byte(n),
 	)
 }
 
-func (b *Buffer) WriteUint32(n uint32) {
+func (b *Buffer) AppendUint32(n uint32) {
 	b.b = append(b.b,
 		byte(n>>24),
 		byte(n>>16),
@@ -163,7 +163,7 @@ func (b *Buffer) WriteUint32(n uint32) {
 	)
 }
 
-func (b *Buffer) WriteUint64(n uint64) {
+func (b *Buffer) AppendUint64(n uint64) {
 	b.b = append(b.b,
 		byte(n>>56),
 		byte(n>>48),

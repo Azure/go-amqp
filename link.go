@@ -508,7 +508,7 @@ func (l *link) muxReceive(fr performTransfer) error {
 	}
 
 	// add the payload the the buffer
-	l.buf.Write(fr.Payload)
+	l.buf.Append(fr.Payload)
 
 	// mark as settled if at least one frame is settled
 	l.msg.settled = l.msg.settled || fr.Settled

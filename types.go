@@ -1342,7 +1342,7 @@ func (t *performTransfer) marshal(wr *buffer.Buffer) error {
 		return err
 	}
 
-	wr.Write(t.Payload)
+	wr.Append(t.Payload)
 	return nil
 }
 
@@ -2616,17 +2616,17 @@ func (s symbol) marshal(wr *buffer.Buffer) error {
 	switch {
 	// Sym8
 	case l < 256:
-		wr.Write([]byte{
+		wr.Append([]byte{
 			byte(typeCodeSym8),
 			byte(l),
 		})
-		wr.WriteString(string(s))
+		wr.AppendString(string(s))
 
 	// Sym32
 	case uint(l) < math.MaxUint32:
-		wr.WriteByte(uint8(typeCodeSym32))
-		wr.WriteUint32(uint32(l))
-		wr.WriteString(string(s))
+		wr.AppendByte(uint8(typeCodeSym32))
+		wr.AppendUint32(uint32(l))
+		wr.AppendString(string(s))
 	default:
 		return errors.New("too long")
 	}
@@ -2764,8 +2764,8 @@ func (u UUID) String() string {
 }
 
 func (u UUID) marshal(wr *buffer.Buffer) error {
-	wr.WriteByte(byte(typeCodeUUID))
-	wr.Write(u[:])
+	wr.AppendByte(byte(typeCodeUUID))
+	wr.Append(u[:])
 	return nil
 }
 
@@ -2785,7 +2785,7 @@ const (
 )
 
 func (p lifetimePolicy) marshal(wr *buffer.Buffer) error {
-	wr.Write([]byte{
+	wr.Append([]byte{
 		0x0,
 		byte(typeCodeSmallUlong),
 		byte(p),
@@ -3012,7 +3012,7 @@ type describedType struct {
 }
 
 func (t describedType) marshal(wr *buffer.Buffer) error {
-	wr.WriteByte(0x0) // descriptor constructor
+	wr.AppendByte(0x0) // descriptor constructor
 	err := marshal(wr, t.descriptor)
 	if err != nil {
 		return err
@@ -3054,7 +3054,7 @@ func (a ArrayUByte) marshal(wr *buffer.Buffer) error {
 	const typeSize = 1
 
 	writeArrayHeader(wr, len(a), typeSize, typeCodeUbyte)
-	wr.Write(a)
+	wr.Append(a)
 
 	return nil
 }
@@ -3090,7 +3090,7 @@ func (a arrayInt8) marshal(wr *buffer.Buffer) error {
 	writeArrayHeader(wr, len(a), typeSize, typeCodeByte)
 
 	for _, value := range a {
-		wr.WriteByte(uint8(value))
+		wr.AppendByte(uint8(value))
 	}
 
 	return nil
@@ -3138,7 +3138,7 @@ func (a arrayUint16) marshal(wr *buffer.Buffer) error {
 	writeArrayHeader(wr, len(a), typeSize, typeCodeUshort)
 
 	for _, element := range a {
-		wr.WriteUint16(element)
+		wr.AppendUint16(element)
 	}
 
 	return nil
@@ -3189,7 +3189,7 @@ func (a arrayInt16) marshal(wr *buffer.Buffer) error {
 	writeArrayHeader(wr, len(a), typeSize, typeCodeShort)
 
 	for _, element := range a {
-		wr.WriteUint16(uint16(element))
+		wr.AppendUint16(uint16(element))
 	}
 
 	return nil
@@ -3251,11 +3251,11 @@ func (a arrayUint32) marshal(wr *buffer.Buffer) error {
 
 	if typeCode == typeCodeUint {
 		for _, element := range a {
-			wr.WriteUint32(element)
+			wr.AppendUint32(element)
 		}
 	} else {
 		for _, element := range a {
-			wr.WriteByte(byte(element))
+			wr.AppendByte(byte(element))
 		}
 	}
 
@@ -3344,11 +3344,11 @@ func (a arrayInt32) marshal(wr *buffer.Buffer) error {
 
 	if typeCode == typeCodeInt {
 		for _, element := range a {
-			wr.WriteUint32(uint32(element))
+			wr.AppendUint32(uint32(element))
 		}
 	} else {
 		for _, element := range a {
-			wr.WriteByte(byte(element))
+			wr.AppendByte(byte(element))
 		}
 	}
 
@@ -3428,11 +3428,11 @@ func (a arrayUint64) marshal(wr *buffer.Buffer) error {
 
 	if typeCode == typeCodeUlong {
 		for _, element := range a {
-			wr.WriteUint64(element)
+			wr.AppendUint64(element)
 		}
 	} else {
 		for _, element := range a {
-			wr.WriteByte(byte(element))
+			wr.AppendByte(byte(element))
 		}
 	}
 
@@ -3521,11 +3521,11 @@ func (a arrayInt64) marshal(wr *buffer.Buffer) error {
 
 	if typeCode == typeCodeLong {
 		for _, element := range a {
-			wr.WriteUint64(uint64(element))
+			wr.AppendUint64(uint64(element))
 		}
 	} else {
 		for _, element := range a {
-			wr.WriteByte(byte(element))
+			wr.AppendByte(byte(element))
 		}
 	}
 
@@ -3594,7 +3594,7 @@ func (a arrayFloat) marshal(wr *buffer.Buffer) error {
 	writeArrayHeader(wr, len(a), typeSize, typeCodeFloat)
 
 	for _, element := range a {
-		wr.WriteUint32(math.Float32bits(element))
+		wr.AppendUint32(math.Float32bits(element))
 	}
 
 	return nil
@@ -3646,7 +3646,7 @@ func (a arrayDouble) marshal(wr *buffer.Buffer) error {
 	writeArrayHeader(wr, len(a), typeSize, typeCodeDouble)
 
 	for _, element := range a {
-		wr.WriteUint64(math.Float64bits(element))
+		wr.AppendUint64(math.Float64bits(element))
 	}
 
 	return nil
@@ -3702,7 +3702,7 @@ func (a arrayBool) marshal(wr *buffer.Buffer) error {
 		if element {
 			value = 1
 		}
-		wr.WriteByte(value)
+		wr.AppendByte(value)
 	}
 
 	return nil
@@ -3779,13 +3779,13 @@ func (a arrayString) marshal(wr *buffer.Buffer) error {
 
 	if elementType == typeCodeStr32 {
 		for _, element := range a {
-			wr.WriteUint32(uint32(len(element)))
-			wr.WriteString(element)
+			wr.AppendUint32(uint32(len(element)))
+			wr.AppendString(element)
 		}
 	} else {
 		for _, element := range a {
-			wr.WriteByte(byte(len(element)))
-			wr.WriteString(element)
+			wr.AppendByte(byte(len(element)))
+			wr.AppendString(element)
 		}
 	}
 
@@ -3870,13 +3870,13 @@ func (a arraySymbol) marshal(wr *buffer.Buffer) error {
 
 	if elementType == typeCodeSym32 {
 		for _, element := range a {
-			wr.WriteUint32(uint32(len(element)))
-			wr.WriteString(string(element))
+			wr.AppendUint32(uint32(len(element)))
+			wr.AppendString(string(element))
 		}
 	} else {
 		for _, element := range a {
-			wr.WriteByte(byte(len(element)))
-			wr.WriteString(string(element))
+			wr.AppendByte(byte(len(element)))
+			wr.AppendString(string(element))
 		}
 	}
 
@@ -3960,13 +3960,13 @@ func (a arrayBinary) marshal(wr *buffer.Buffer) error {
 
 	if elementType == typeCodeVbin32 {
 		for _, element := range a {
-			wr.WriteUint32(uint32(len(element)))
-			wr.Write(element)
+			wr.AppendUint32(uint32(len(element)))
+			wr.Append(element)
 		}
 	} else {
 		for _, element := range a {
-			wr.WriteByte(byte(len(element)))
-			wr.Write(element)
+			wr.AppendByte(byte(len(element)))
+			wr.Append(element)
 		}
 	}
 
@@ -4040,7 +4040,7 @@ func (a arrayTimestamp) marshal(wr *buffer.Buffer) error {
 
 	for _, element := range a {
 		ms := element.UnixNano() / int64(time.Millisecond)
-		wr.WriteUint64(uint64(ms))
+		wr.AppendUint64(uint64(ms))
 	}
 
 	return nil
@@ -4092,7 +4092,7 @@ func (a arrayUUID) marshal(wr *buffer.Buffer) error {
 	writeArrayHeader(wr, len(a), typeSize, typeCodeUUID)
 
 	for _, element := range a {
-		wr.Write(element[:])
+		wr.Append(element[:])
 	}
 
 	return nil
@@ -4144,17 +4144,17 @@ func (l list) marshal(wr *buffer.Buffer) error {
 
 	// type
 	if length == 0 {
-		wr.WriteByte(byte(typeCodeList0))
+		wr.AppendByte(byte(typeCodeList0))
 		return nil
 	}
-	wr.WriteByte(byte(typeCodeList32))
+	wr.AppendByte(byte(typeCodeList32))
 
 	// size
 	sizeIdx := wr.Len()
-	wr.Write([]byte{0, 0, 0, 0})
+	wr.Append([]byte{0, 0, 0, 0})
 
 	// length
-	wr.WriteUint32(uint32(length))
+	wr.AppendUint32(uint32(length))
 
 	for _, element := range l {
 		err := marshal(wr, element)

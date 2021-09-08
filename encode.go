@@ -14,12 +14,12 @@ import (
 // writesFrame encodes fr into buf.
 func writeFrame(buf *buffer.Buffer, fr frame) error {
 	// write header
-	buf.Write([]byte{
+	buf.Append([]byte{
 		0, 0, 0, 0, // size, overwrite later
 		2,        // doff, see frameHeader.DataOffset comment
 		fr.type_, // frame type
 	})
-	buf.WriteUint16(fr.channel) // channel
+	buf.AppendUint16(fr.channel) // channel
 
 	// write AMQP frame body
 	err := marshal(buf, fr.body)
@@ -47,18 +47,18 @@ type marshaler interface {
 func marshal(wr *buffer.Buffer, i interface{}) error {
 	switch t := i.(type) {
 	case nil:
-		wr.WriteByte(byte(typeCodeNull))
+		wr.AppendByte(byte(typeCodeNull))
 	case bool:
 		if t {
-			wr.WriteByte(byte(typeCodeBoolTrue))
+			wr.AppendByte(byte(typeCodeBoolTrue))
 		} else {
-			wr.WriteByte(byte(typeCodeBoolFalse))
+			wr.AppendByte(byte(typeCodeBoolFalse))
 		}
 	case *bool:
 		if *t {
-			wr.WriteByte(byte(typeCodeBoolTrue))
+			wr.AppendByte(byte(typeCodeBoolTrue))
 		} else {
-			wr.WriteByte(byte(typeCodeBoolFalse))
+			wr.AppendByte(byte(typeCodeBoolFalse))
 		}
 	case uint:
 		writeUint64(wr, uint64(t))
@@ -73,18 +73,18 @@ func marshal(wr *buffer.Buffer, i interface{}) error {
 	case *uint32:
 		writeUint32(wr, *t)
 	case uint16:
-		wr.WriteByte(byte(typeCodeUshort))
-		wr.WriteUint16(t)
+		wr.AppendByte(byte(typeCodeUshort))
+		wr.AppendUint16(t)
 	case *uint16:
-		wr.WriteByte(byte(typeCodeUshort))
-		wr.WriteUint16(*t)
+		wr.AppendByte(byte(typeCodeUshort))
+		wr.AppendUint16(*t)
 	case uint8:
-		wr.Write([]byte{
+		wr.Append([]byte{
 			byte(typeCodeUbyte),
 			t,
 		})
 	case *uint8:
-		wr.Write([]byte{
+		wr.Append([]byte{
 			byte(typeCodeUbyte),
 			*t,
 		})
@@ -93,21 +93,21 @@ func marshal(wr *buffer.Buffer, i interface{}) error {
 	case *int:
 		writeInt64(wr, int64(*t))
 	case int8:
-		wr.Write([]byte{
+		wr.Append([]byte{
 			byte(typeCodeByte),
 			uint8(t),
 		})
 	case *int8:
-		wr.Write([]byte{
+		wr.Append([]byte{
 			byte(typeCodeByte),
 			uint8(*t),
 		})
 	case int16:
-		wr.WriteByte(byte(typeCodeShort))
-		wr.WriteUint16(uint16(t))
+		wr.AppendByte(byte(typeCodeShort))
+		wr.AppendUint16(uint16(t))
 	case *int16:
-		wr.WriteByte(byte(typeCodeShort))
-		wr.WriteUint16(uint16(*t))
+		wr.AppendByte(byte(typeCodeShort))
+		wr.AppendUint16(uint16(*t))
 	case int32:
 		writeInt32(wr, t)
 	case *int32:
@@ -226,80 +226,80 @@ func marshal(wr *buffer.Buffer, i interface{}) error {
 
 func writeInt32(wr *buffer.Buffer, n int32) {
 	if n < 128 && n >= -128 {
-		wr.Write([]byte{
+		wr.Append([]byte{
 			byte(typeCodeSmallint),
 			byte(n),
 		})
 		return
 	}
 
-	wr.WriteByte(byte(typeCodeInt))
-	wr.WriteUint32(uint32(n))
+	wr.AppendByte(byte(typeCodeInt))
+	wr.AppendUint32(uint32(n))
 }
 
 func writeInt64(wr *buffer.Buffer, n int64) {
 	if n < 128 && n >= -128 {
-		wr.Write([]byte{
+		wr.Append([]byte{
 			byte(typeCodeSmalllong),
 			byte(n),
 		})
 		return
 	}
 
-	wr.WriteByte(byte(typeCodeLong))
-	wr.WriteUint64(uint64(n))
+	wr.AppendByte(byte(typeCodeLong))
+	wr.AppendUint64(uint64(n))
 }
 
 func writeUint32(wr *buffer.Buffer, n uint32) {
 	if n == 0 {
-		wr.WriteByte(byte(typeCodeUint0))
+		wr.AppendByte(byte(typeCodeUint0))
 		return
 	}
 
 	if n < 256 {
-		wr.Write([]byte{
+		wr.Append([]byte{
 			byte(typeCodeSmallUint),
 			byte(n),
 		})
 		return
 	}
 
-	wr.WriteByte(byte(typeCodeUint))
-	wr.WriteUint32(n)
+	wr.AppendByte(byte(typeCodeUint))
+	wr.AppendUint32(n)
 }
 
 func writeUint64(wr *buffer.Buffer, n uint64) {
 	if n == 0 {
-		wr.WriteByte(byte(typeCodeUlong0))
+		wr.AppendByte(byte(typeCodeUlong0))
 		return
 	}
 
 	if n < 256 {
-		wr.Write([]byte{
+		wr.Append([]byte{
 			byte(typeCodeSmallUlong),
 			byte(n),
 		})
 		return
 	}
 
-	wr.WriteByte(byte(typeCodeUlong))
-	wr.WriteUint64(n)
+	wr.AppendByte(byte(typeCodeUlong))
+	wr.AppendUint64(n)
 }
 
 func writeFloat(wr *buffer.Buffer, f float32) {
-	wr.WriteByte(byte(typeCodeFloat))
-	wr.WriteUint32(math.Float32bits(f))
+	wr.AppendByte(byte(typeCodeFloat))
+	wr.AppendUint32(math.Float32bits(f))
 }
 
 func writeDouble(wr *buffer.Buffer, f float64) {
-	wr.WriteByte(byte(typeCodeDouble))
-	wr.WriteUint64(math.Float64bits(f))
+	wr.AppendByte(byte(typeCodeDouble))
+	wr.AppendUint64(math.Float64bits(f))
 }
 
 func writeTimestamp(wr *buffer.Buffer, t time.Time) {
-	wr.WriteByte(byte(typeCodeTimestamp))
+	wr.AppendByte(byte(typeCodeTimestamp))
 	ms := t.UnixNano() / int64(time.Millisecond)
-	wr.WriteUint64(uint64(ms))
+	wr.AppendUint64(uint64(ms))
 }
 
 // marshalField is a field to be marshaled
@@ -329,7 +329,7 @@ func marshalComposite(wr *buffer.Buffer, code amqpType, fields []marshalField) e
 
 	// write header only
 	if lastSetIdx == -1 {
-		wr.Write([]byte{
+		wr.Append([]byte{
 			0x0,
 			byte(typeCodeSmallUlong),
 			byte(code),
@@ -342,20 +342,20 @@ func marshalComposite(wr *buffer.Buffer, code amqpType, fields []marshalField) e
 	writeDescriptor(wr, code)
 
 	// write fields
-	wr.WriteByte(byte(typeCodeList32))
+	wr.AppendByte(byte(typeCodeList32))
 
 	// write temp size, replace later
 	sizeIdx := wr.Len()
-	wr.Write([]byte{0, 0, 0, 0})
+	wr.Append([]byte{0, 0, 0, 0})
 	preFieldLen := wr.Len()
 
 	// field count
-	wr.WriteUint32(uint32(lastSetIdx + 1))
+	wr.AppendUint32(uint32(lastSetIdx + 1))
 
 	// write null to each index up to lastSetIdx
 	for _, f := range fields[:lastSetIdx+1] {
 		if f.omit {
-			wr.WriteByte(byte(typeCodeNull))
+			wr.AppendByte(byte(typeCodeNull))
 			continue
 		}
 		err := marshal(wr, f.value)
@@ -373,7 +373,7 @@ func marshalComposite(wr *buffer.Buffer, code amqpType, fields []marshalField) e
 }
 
 func writeDescriptor(wr *buffer.Buffer, code amqpType) {
-	wr.Write([]byte{
+	wr.Append([]byte{
 		0x0,
 		byte(typeCodeSmallUlong),
 		byte(code),
@@ -389,18 +389,18 @@ func writeString(wr *buffer.Buffer, str string) error {
 	switch {
 	// Str8
 	case l < 256:
-		wr.Write([]byte{
+		wr.Append([]byte{
 			byte(typeCodeStr8),
 			byte(l),
 		})
-		wr.WriteString(str)
+		wr.AppendString(str)
 		return nil
 
 	// Str32
 	case uint(l) < math.MaxUint32:
-		wr.WriteByte(byte(typeCodeStr32))
-		wr.WriteUint32(uint32(l))
-		wr.WriteString(str)
+		wr.AppendByte(byte(typeCodeStr32))
+		wr.AppendUint32(uint32(l))
+		wr.AppendString(str)
 		return nil
 
 	default:
@@ -414,18 +414,18 @@ func writeBinary(wr *buffer.Buffer, bin []byte) error {
 	switch {
 	// List8
 	case l < 256:
-		wr.Write([]byte{
+		wr.Append([]byte{
 			byte(typeCodeVbin8),
 			byte(l),
 		})
-		wr.Write(bin)
+		wr.Append(bin)
 		return nil
 
 	// List32
 	case uint(l) < math.MaxUint32:
-		wr.WriteByte(byte(typeCodeVbin32))
-		wr.WriteUint32(uint32(l))
-		wr.Write(bin)
+		wr.AppendByte(byte(typeCodeVbin32))
+		wr.AppendUint32(uint32(l))
+		wr.Append(bin)
 		return nil
 
 	default:
@@ -435,7 +435,7 @@ func writeBinary(wr *buffer.Buffer, bin []byte) error {
 
 func writeMap(wr *buffer.Buffer, m interface{}) error {
 	startIdx := wr.Len()
-	wr.Write([]byte{
+	wr.Append([]byte{
 		byte(typeCodeMap32), // type
 		0, 0, 0, 0,          // size placeholder
 		0, 0, 0, 0, // length placeholder
@@ -560,17 +560,17 @@ func writeArrayHeader(wr *buffer.Buffer, length, typeSize int, type_ amqpType) {
 
 	// array type
 	if size+array8TLSize <= math.MaxUint8 {
-		wr.Write([]byte{
+		wr.Append([]byte{
 			byte(typeCodeArray8),      // type
 			byte(size + array8TLSize), // size
 			byte(length),              // length
 			byte(type_),               // element type
 		})
 	} else {
-		wr.WriteByte(byte(typeCodeArray32))          //type
-		wr.WriteUint32(uint32(size + array32TLSize)) // size
-		wr.WriteUint32(uint32(length))               // length
-		wr.WriteByte(byte(type_))                    // element type
+		wr.AppendByte(byte(typeCodeArray32))          //type
+		wr.AppendUint32(uint32(size + array32TLSize)) // size
+		wr.AppendUint32(uint32(length))               // length
+		wr.AppendByte(byte(type_))                    // element type
 	}
 }
 
@@ -584,16 +584,16 @@ func writeVariableArrayHeader(wr *buffer.Buffer, length, elementsSizeTotal int, 
 
 	size := elementsSizeTotal + (length * elementTypeSize) // size excluding array length
 	if size+array8TLSize <= math.MaxUint8 {
-		wr.Write([]byte{
+		wr.Append([]byte{
 			byte(typeCodeArray8),      // type
 			byte(size + array8TLSize), // size
 			byte(length),              // length
 			byte(type_),               // element type
 		})
 	} else {
-		wr.WriteByte(byte(typeCodeArray32))          // type
-		wr.WriteUint32(uint32(size + array32TLSize)) // size
-		wr.WriteUint32(uint32(length))               // length
-		wr.WriteByte(byte(type_))                    // element type
+		wr.AppendByte(byte(typeCodeArray32))          // type
+		wr.AppendUint32(uint32(size + array32TLSize)) // size
+		wr.AppendUint32(uint32(length))               // length
+		wr.AppendByte(byte(type_))                    // element type
 	}
 }

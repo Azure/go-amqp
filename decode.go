@@ -1,7 +1,6 @@
 package amqp
 
 import (
-	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -11,130 +10,6 @@ import (
 
 	"github.com/Azure/go-amqp/internal/buffer"
 )
-
-// parseFrameHeader reads the header from r and returns the result.
-//
-// No validation is done.
-func parseFrameHeader(r *buffer.Buffer) (frameHeader, error) {
-	buf, ok := r.Next(8)
-	if !ok {
-		return frameHeader{}, errors.New("invalid frameHeader")
-	}
-	_ = buf[7]
-
-	fh := frameHeader{
-		Size:       binary.BigEndian.Uint32(buf[0:4]),
-		DataOffset: buf[4],
-		FrameType:  buf[5],
-		Channel:    binary.BigEndian.Uint16(buf[6:8]),
-	}
-
-	if fh.Size < frameHeaderSize {
-		return fh, fmt.Errorf("received frame header with invalid size %d", fh.Size)
-	}
-
-	return fh, nil
-}
-
-// parseProtoHeader reads the proto header from r and returns the results
-//
-// An error is returned if the protocol is not "AMQP" or if the version is not 1.0.0.
-func parseProtoHeader(r *buffer.Buffer) (protoHeader, error) {
-	const protoHeaderSize = 8
-	buf, ok := r.Next(protoHeaderSize)
-	if !ok {
-		return protoHeader{}, errors.New("invalid protoHeader")
-	}
-	_ = buf[7]
-
-	if !bytes.Equal(buf[:4], []byte{'A', 'M', 'Q', 'P'}) {
-		return protoHeader{}, fmt.Errorf("unexpected protocol %q", buf[:4])
-	}
-
-	p := protoHeader{
-		ProtoID:  protoID(buf[4]),
-		Major:    buf[5],
-		Minor:    buf[6],
-		Revision: buf[7],
-	}
-
-	if p.Major != 1 || p.Minor != 0 || p.Revision != 0 {
-		return p, fmt.Errorf("unexpected protocol version %d.%d.%d", p.Major, p.Minor, p.Revision)
-	}
-	return p, nil
-}
-
-// peekFrameBodyType peeks at the frame body's type code without advancing r.
-func peekFrameBodyType(r *buffer.Buffer) (amqpType, error) {
-	payload := r.Bytes()
-
-	if r.Len() < 3 || payload[0] != 0 || amqpType(payload[1]) != typeCodeSmallUlong {
-		return 0, errors.New("invalid frame body header")
-	}
-
-	return amqpType(payload[2]), nil
-}
-
-// parseFrameBody reads and unmarshals an AMQP frame.
-func parseFrameBody(r *buffer.Buffer) (frameBody, error) {
-	pType, err := peekFrameBodyType(r)
-	if err != nil {
-		return nil, err
-	}
-
-	switch pType {
-	case typeCodeOpen:
-		t := new(performOpen)
-		err := t.unmarshal(r)
-		return t, err
-	case typeCodeBegin:
-		t := new(performBegin)
-		err := t.unmarshal(r)
-		return t, err
-	case typeCodeAttach:
-		t := new(performAttach)
-		err := t.unmarshal(r)
-		return t, err
-	case typeCodeFlow:
-		t := new(performFlow)
-		err := t.unmarshal(r)
-		return t, err
-	case typeCodeTransfer:
-		t := new(performTransfer)
-		err := t.unmarshal(r)
-		return t, err
-	case typeCodeDisposition:
-		t := new(performDisposition)
-		err := t.unmarshal(r)
-		return t, err
-	case typeCodeDetach:
-		t := new(performDetach)
-		err := t.unmarshal(r)
-		return t, err
-	case typeCodeEnd:
-		t := new(performEnd)
-		err := t.unmarshal(r)
-		return t, err
-	case typeCodeClose:
-		t := new(performClose)
-		err := t.unmarshal(r)
-		return t, err
-	case typeCodeSASLMechanism:
-		t := new(saslMechanisms)
-		err := t.unmarshal(r)
-		return t, err
-	case typeCodeSASLChallenge:
-		t := new(saslChallenge)
-		err := t.unmarshal(r)
-		return t, err
-	case typeCodeSASLOutcome:
-		t := new(saslOutcome)
-		err := t.unmarshal(r)
-		return t, err
-	default:
-		return nil, fmt.Errorf("unknown preformative type %02x", pType)
-	}
-}
 
 // unmarshaler is fulfilled by types that can unmarshal
 // themselves from AMQP data.

@@ -3,6 +3,7 @@ package amqp
 import (
 	"bytes"
 	"crypto/tls"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -928,4 +929,147 @@ func (c *conn) readFrame() (frame, error) {
 	case <-deadline:
 		return fr, ErrTimeout
 	}
+}
+
+// parseFrameHeader reads the header from r and returns the result.
+//
+// No validation is done.
+func parseFrameHeader(r *buffer.Buffer) (frameHeader, error) {
+	buf, ok := r.Next(8)
+	if !ok {
+		return frameHeader{}, errors.New("invalid frameHeader")
+	}
+	_ = buf[7]
+
+	fh := frameHeader{
+		Size:       binary.BigEndian.Uint32(buf[0:4]),
+		DataOffset: buf[4],
+		FrameType:  buf[5],
+		Channel:    binary.BigEndian.Uint16(buf[6:8]),
+	}
+
+	if fh.Size < frameHeaderSize {
+		return fh, fmt.Errorf("received frame header with invalid size %d", fh.Size)
+	}
+
+	return fh, nil
+}
+
+// parseProtoHeader reads the proto header from r and returns the results
+//
+// An error is returned if the protocol is not "AMQP" or if the version is not 1.0.0.
+func parseProtoHeader(r *buffer.Buffer) (protoHeader, error) {
+	const protoHeaderSize = 8
+	buf, ok := r.Next(protoHeaderSize)
+	if !ok {
+		return protoHeader{}, errors.New("invalid protoHeader")
+	}
+	_ = buf[7]
+
+	if !bytes.Equal(buf[:4], []byte{'A', 'M', 'Q', 'P'}) {
+		return protoHeader{}, fmt.Errorf("unexpected protocol %q", buf[:4])
+	}
+
+	p := protoHeader{
+		ProtoID:  protoID(buf[4]),
+		Major:    buf[5],
+		Minor:    buf[6],
+		Revision: buf[7],
+	}
+
+	if p.Major != 1 || p.Minor != 0 || p.Revision != 0 {
+		return p, fmt.Errorf("unexpected protocol version %d.%d.%d", p.Major, p.Minor, p.Revision)
+	}
+	return p, nil
+}
+
+// parseFrameBody reads and unmarshals an AMQP frame.
+func parseFrameBody(r *buffer.Buffer) (frameBody, error) {
+	payload := r.Bytes()
+
+	if r.Len() < 3 || payload[0] != 0 || amqpType(payload[1]) != typeCodeSmallUlong {
+		return nil, errors.New("invalid frame body header")
+	}
+
+	switch pType := amqpType(payload[2]); pType {
+	case typeCodeOpen:
+		t := new(performOpen)
+		err := t.unmarshal(r)
+		return t, err
+	case typeCodeBegin:
+		t := new(performBegin)
+		err := t.unmarshal(r)
+		return t, err
+	case typeCodeAttach:
+		t := new(performAttach)
+		err := t.unmarshal(r)
+		return t, err
+	case typeCodeFlow:
+		t := new(performFlow)
+		err := t.unmarshal(r)
+		return t, err
+	case typeCodeTransfer:
+		t := new(performTransfer)
+		err := t.unmarshal(r)
+		return t, err
+	case typeCodeDisposition:
+		t := new(performDisposition)
+		err := t.unmarshal(r)
+		return t, err
+	case typeCodeDetach:
+		t := new(performDetach)
+		err := t.unmarshal(r)
+		return t, err
+	case typeCodeEnd:
+		t := new(performEnd)
+		err := t.unmarshal(r)
+		return t, err
+	case typeCodeClose:
+		t := new(performClose)
+		err := t.unmarshal(r)
+		return t, err
+	case typeCodeSASLMechanism:
+		t := new(saslMechanisms)
+		err := t.unmarshal(r)
+		return t, err
+	case typeCodeSASLChallenge:
+		t := new(saslChallenge)
+		err := t.unmarshal(r)
+		return t, err
+	case typeCodeSASLOutcome:
+		t := new(saslOutcome)
+		err := t.unmarshal(r)
+		return t, err
+	default:
+		return nil, fmt.Errorf("unknown preformative type %02x", pType)
+	}
+}
+
+// writesFrame encodes fr into buf.
+func writeFrame(buf *buffer.Buffer, fr frame) error {
+	// write header
+	buf.Append([]byte{
+		0, 0, 0, 0, // size, overwrite later
+		2,        // doff, see frameHeader.DataOffset comment
+		fr.type_, // frame type
+	})
+	buf.AppendUint16(fr.channel) // channel
+
+	// write AMQP frame body
+	err := marshal(buf, fr.body)
+	if err != nil {
+		return err
+	}
+
+	// validate size
+	if uint(buf.Len()) > math.MaxUint32 {
+		return errors.New("frame too large")
+	}
+
+	// retrieve raw bytes
+	bufBytes := buf.Bytes()
+
+	// write correct size
+	binary.BigEndian.PutUint32(bufBytes, uint32(len(bufBytes)))
+	return nil
 }

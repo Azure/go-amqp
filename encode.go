@@ -11,35 +11,6 @@ import (
 	"github.com/Azure/go-amqp/internal/buffer"
 )
 
-// writesFrame encodes fr into buf.
-func writeFrame(buf *buffer.Buffer, fr frame) error {
-	// write header
-	buf.Append([]byte{
-		0, 0, 0, 0, // size, overwrite later
-		2,        // doff, see frameHeader.DataOffset comment
-		fr.type_, // frame type
-	})
-	buf.AppendUint16(fr.channel) // channel
-
-	// write AMQP frame body
-	err := marshal(buf, fr.body)
-	if err != nil {
-		return err
-	}
-
-	// validate size
-	if uint(buf.Len()) > math.MaxUint32 {
-		return errors.New("frame too large")
-	}
-
-	// retrieve raw bytes
-	bufBytes := buf.Bytes()
-
-	// write correct size
-	binary.BigEndian.PutUint32(bufBytes, uint32(len(bufBytes)))
-	return nil
-}
-
 type marshaler interface {
 	marshal(*buffer.Buffer) error
 }

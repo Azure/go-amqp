@@ -1,4 +1,4 @@
-package amqp
+package buffer
 
 import (
 	"encoding/binary"
@@ -6,12 +6,16 @@ import (
 )
 
 // buffer is similar to bytes.Buffer but specialized for this package
-type buffer struct {
+type Buffer struct {
 	b []byte
 	i int
 }
 
-func (b *buffer) next(n int64) ([]byte, bool) {
+func New(b []byte) *Buffer {
+	return &Buffer{b: b}
+}
+
+func (b *Buffer) Next(n int64) ([]byte, bool) {
 	if b.readCheck(n) {
 		buf := b.b[b.i:len(b.b)]
 		b.i = len(b.b)
@@ -23,29 +27,29 @@ func (b *buffer) next(n int64) ([]byte, bool) {
 	return buf, true
 }
 
-func (b *buffer) skip(n int) {
+func (b *Buffer) Skip(n int) {
 	b.i += n
 }
 
-func (b *buffer) reset() {
+func (b *Buffer) Reset() {
 	b.b = b.b[:0]
 	b.i = 0
 }
 
 // reclaim shifts used buffer space to the beginning of the
 // underlying slice.
-func (b *buffer) reclaim() {
-	l := b.len()
+func (b *Buffer) Reclaim() {
+	l := b.Len()
 	copy(b.b[:l], b.b[b.i:])
 	b.b = b.b[:l]
 	b.i = 0
 }
 
-func (b *buffer) readCheck(n int64) bool {
+func (b *Buffer) readCheck(n int64) bool {
 	return int64(b.i)+n > int64(len(b.b))
 }
 
-func (b *buffer) readByte() (byte, error) {
+func (b *Buffer) ReadByte() (byte, error) {
 	if b.readCheck(1) {
 		return 0, io.EOF
 	}
@@ -55,20 +59,15 @@ func (b *buffer) readByte() (byte, error) {
 	return byte_, nil
 }
 
-func (b *buffer) readType() (amqpType, error) {
-	n, err := b.readByte()
-	return amqpType(n), err
-}
-
-func (b *buffer) peekType() (amqpType, error) {
+func (b *Buffer) PeekByte() (byte, error) {
 	if b.readCheck(1) {
 		return 0, io.EOF
 	}
 
-	return amqpType(b.b[b.i]), nil
+	return b.b[b.i], nil
 }
 
-func (b *buffer) readUint16() (uint16, error) {
+func (b *Buffer) ReadUint16() (uint16, error) {
 	if b.readCheck(2) {
 		return 0, io.EOF
 	}
@@ -78,7 +77,7 @@ func (b *buffer) readUint16() (uint16, error) {
 	return n, nil
 }
 
-func (b *buffer) readUint32() (uint32, error) {
+func (b *Buffer) ReadUint32() (uint32, error) {
 	if b.readCheck(4) {
 		return 0, io.EOF
 	}
@@ -88,7 +87,7 @@ func (b *buffer) readUint32() (uint32, error) {
 	return n, nil
 }
 
-func (b *buffer) readUint64() (uint64, error) {
+func (b *Buffer) ReadUint64() (uint64, error) {
 	if b.readCheck(8) {
 		return 0, io.EOF
 	}
@@ -98,7 +97,7 @@ func (b *buffer) readUint64() (uint64, error) {
 	return n, nil
 }
 
-func (b *buffer) readFromOnce(r io.Reader) error {
+func (b *Buffer) ReadFromOnce(r io.Reader) error {
 	const minRead = 512
 
 	l := len(b.b)
@@ -117,34 +116,45 @@ func (b *buffer) readFromOnce(r io.Reader) error {
 	return err
 }
 
-func (b *buffer) write(p []byte) {
+func (b *Buffer) Append(p []byte) {
 	b.b = append(b.b, p...)
 }
 
-func (b *buffer) writeByte(byte_ byte) {
-	b.b = append(b.b, byte_)
+func (b *Buffer) AppendByte(bb byte) {
+	b.b = append(b.b, bb)
 }
 
-func (b *buffer) writeString(s string) {
+func (b *Buffer) AppendString(s string) {
 	b.b = append(b.b, s...)
 }
 
-func (b *buffer) len() int {
+func (b *Buffer) Len() int {
 	return len(b.b) - b.i
 }
 
-func (b *buffer) bytes() []byte {
+func (b *Buffer) Size() int {
+	return b.i
+}
+
+func (b *Buffer) Bytes() []byte {
 	return b.b[b.i:]
 }
 
-func (b *buffer) writeUint16(n uint16) {
+func (b *Buffer) Detach() []byte {
+	temp := b.b
+	b.b = nil
+	b.i = 0
+	return temp
+}
+
+func (b *Buffer) AppendUint16(n uint16) {
 	b.b = append(b.b,
 		byte(n>>8),
 		byte(n),
 	)
 }
 
-func (b *buffer) writeUint32(n uint32) {
+func (b *Buffer) AppendUint32(n uint32) {
 	b.b = append(b.b,
 		byte(n>>24),
 		byte(n>>16),
@@ -153,7 +163,7 @@ func (b *buffer) writeUint32(n uint32) {
 	)
 }
 
-func (b *buffer) writeUint64(n uint64) {
+func (b *Buffer) AppendUint64(n uint64) {
 	b.b = append(b.b,
 		byte(n>>56),
 		byte(n>>48),

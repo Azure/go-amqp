@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+
+	"github.com/Azure/go-amqp/internal/buffer"
 )
 
 // Sender sends messages on a single AMQP link.
@@ -13,7 +15,7 @@ type Sender struct {
 	link *link
 
 	mu              sync.Mutex // protects buf and nextDeliveryTag
-	buf             buffer
+	buf             buffer.Buffer
 	nextDeliveryTag uint64
 }
 
@@ -65,13 +67,13 @@ func (s *Sender) send(ctx context.Context, msg *Message) (chan deliveryState, er
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.buf.reset()
+	s.buf.Reset()
 	err := msg.marshal(&s.buf)
 	if err != nil {
 		return nil, err
 	}
 
-	if s.link.maxMessageSize != 0 && uint64(s.buf.len()) > s.link.maxMessageSize {
+	if s.link.maxMessageSize != 0 && uint64(s.buf.Len()) > s.link.maxMessageSize {
 		return nil, fmt.Errorf("encoded message size exceeds max of %d", s.link.maxMessageSize)
 	}
 
@@ -95,13 +97,13 @@ func (s *Sender) send(ctx context.Context, msg *Message) (chan deliveryState, er
 		DeliveryID:    &deliveryID,
 		DeliveryTag:   deliveryTag,
 		MessageFormat: &msg.Format,
-		More:          s.buf.len() > 0,
+		More:          s.buf.Len() > 0,
 	}
 
 	for fr.More {
-		buf, _ := s.buf.next(maxPayloadSize)
+		buf, _ := s.buf.Next(maxPayloadSize)
 		fr.Payload = append([]byte(nil), buf...)
-		fr.More = s.buf.len() > 0
+		fr.More = s.buf.Len() > 0
 		if !fr.More {
 			// SSM=settled: overrides RSM; no acks.
 			// SSM=unsettled: sender should wait for receiver to ack

@@ -4,6 +4,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/Azure/go-amqp/internal/buffer"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,9 +16,9 @@ func TestMarshalArrayInt64AsLongArray(t *testing.T) {
 	// typeCodeSmalllong (1 byte, signed).
 	ai := arrayInt64([]int64{math.MaxInt8 + 1})
 
-	buff := &buffer{}
+	buff := &buffer.Buffer{}
 	require.NoError(t, ai.marshal(buff))
-	require.EqualValues(t, amqpArrayHeaderLength+8, buff.len(), "Expected an AMQP header (4 bytes) + 8 bytes for a long")
+	require.EqualValues(t, amqpArrayHeaderLength+8, buff.Len(), "Expected an AMQP header (4 bytes) + 8 bytes for a long")
 
 	unmarshalled := arrayInt64{}
 	require.NoError(t, unmarshalled.unmarshal(buff))
@@ -30,9 +31,9 @@ func TestMarshalArrayInt64AsSmallLongArray(t *testing.T) {
 	// we can save some space.
 	ai := arrayInt64([]int64{math.MaxInt8, math.MinInt8})
 
-	buff := &buffer{}
+	buff := &buffer.Buffer{}
 	require.NoError(t, ai.marshal(buff))
-	require.EqualValues(t, amqpArrayHeaderLength+1+1, buff.len(), "Expected an AMQP header (4 bytes) + 1 byte apiece for the two values")
+	require.EqualValues(t, amqpArrayHeaderLength+1+1, buff.Len(), "Expected an AMQP header (4 bytes) + 1 byte apiece for the two values")
 
 	unmarshalled := arrayInt64{}
 	require.NoError(t, unmarshalled.unmarshal(buff))

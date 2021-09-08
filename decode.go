@@ -8,13 +8,15 @@ import (
 	"math"
 	"reflect"
 	"time"
+
+	"github.com/Azure/go-amqp/internal/buffer"
 )
 
 // parseFrameHeader reads the header from r and returns the result.
 //
 // No validation is done.
-func parseFrameHeader(r *buffer) (frameHeader, error) {
-	buf, ok := r.next(8)
+func parseFrameHeader(r *buffer.Buffer) (frameHeader, error) {
+	buf, ok := r.Next(8)
 	if !ok {
 		return frameHeader{}, errors.New("invalid frameHeader")
 	}
@@ -37,9 +39,9 @@ func parseFrameHeader(r *buffer) (frameHeader, error) {
 // parseProtoHeader reads the proto header from r and returns the results
 //
 // An error is returned if the protocol is not "AMQP" or if the version is not 1.0.0.
-func parseProtoHeader(r *buffer) (protoHeader, error) {
+func parseProtoHeader(r *buffer.Buffer) (protoHeader, error) {
 	const protoHeaderSize = 8
-	buf, ok := r.next(protoHeaderSize)
+	buf, ok := r.Next(protoHeaderSize)
 	if !ok {
 		return protoHeader{}, errors.New("invalid protoHeader")
 	}
@@ -63,10 +65,10 @@ func parseProtoHeader(r *buffer) (protoHeader, error) {
 }
 
 // peekFrameBodyType peeks at the frame body's type code without advancing r.
-func peekFrameBodyType(r *buffer) (amqpType, error) {
-	payload := r.bytes()
+func peekFrameBodyType(r *buffer.Buffer) (amqpType, error) {
+	payload := r.Bytes()
 
-	if r.len() < 3 || payload[0] != 0 || amqpType(payload[1]) != typeCodeSmallUlong {
+	if r.Len() < 3 || payload[0] != 0 || amqpType(payload[1]) != typeCodeSmallUlong {
 		return 0, errors.New("invalid frame body header")
 	}
 
@@ -74,7 +76,7 @@ func peekFrameBodyType(r *buffer) (amqpType, error) {
 }
 
 // parseFrameBody reads and unmarshals an AMQP frame.
-func parseFrameBody(r *buffer) (frameBody, error) {
+func parseFrameBody(r *buffer.Buffer) (frameBody, error) {
 	pType, err := peekFrameBodyType(r)
 	if err != nil {
 		return nil, err
@@ -137,7 +139,7 @@ func parseFrameBody(r *buffer) (frameBody, error) {
 // unmarshaler is fulfilled by types that can unmarshal
 // themselves from AMQP data.
 type unmarshaler interface {
-	unmarshal(r *buffer) error
+	unmarshal(r *buffer.Buffer) error
 }
 
 // unmarshal decodes AMQP encoded data into i.
@@ -154,7 +156,7 @@ type unmarshaler interface {
 // Common map types (map[string]string, map[Symbol]interface{}, and
 // map[interface{}]interface{}), will be decoded via conversion to the mapStringAny,
 // mapSymbolAny, and mapAnyAny types.
-func unmarshal(r *buffer, i interface{}) error {
+func unmarshal(r *buffer.Buffer, i interface{}) error {
 	if tryReadNull(r) {
 		return nil
 	}
@@ -301,7 +303,7 @@ func unmarshal(r *buffer, i interface{}) error {
 	case *map[symbol]interface{}:
 		return (*mapSymbolAny)(t).unmarshal(r)
 	case *deliveryState:
-		type_, err := peekMessageType(r.bytes())
+		type_, err := peekMessageType(r.Bytes())
 		if err != nil {
 			return err
 		}
@@ -355,7 +357,7 @@ func unmarshal(r *buffer, i interface{}) error {
 //
 // The composite from r will be unmarshaled into zero or more fields. An error
 // will be returned if typ does not match the decoded type.
-func unmarshalComposite(r *buffer, type_ amqpType, fields ...unmarshalField) error {
+func unmarshalComposite(r *buffer.Buffer, type_ amqpType, fields ...unmarshalField) error {
 	cType, numFields, err := readCompositeHeader(r)
 	if err != nil {
 		return err
@@ -417,9 +419,19 @@ type unmarshalField struct {
 // is null.
 type nullHandler func() error
 
+func readType(r *buffer.Buffer) (amqpType, error) {
+	n, err := r.ReadByte()
+	return amqpType(n), err
+}
+
+func peekType(r *buffer.Buffer) (amqpType, error) {
+	n, err := r.PeekByte()
+	return amqpType(n), err
+}
+
 // readCompositeHeader reads and consumes the composite header from r.
-func readCompositeHeader(r *buffer) (_ amqpType, fields int64, _ error) {
-	type_, err := r.readType()
+func readCompositeHeader(r *buffer.Buffer) (_ amqpType, fields int64, _ error) {
+	type_, err := readType(r)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -441,19 +453,19 @@ func readCompositeHeader(r *buffer) (_ amqpType, fields int64, _ error) {
 	return amqpType(v), fields, err
 }
 
-func readListHeader(r *buffer) (length int64, _ error) {
-	type_, err := r.readType()
+func readListHeader(r *buffer.Buffer) (length int64, _ error) {
+	type_, err := readType(r)
 	if err != nil {
 		return 0, err
 	}
 
-	listLength := r.len()
+	listLength := r.Len()
 
 	switch type_ {
 	case typeCodeList0:
 		return 0, nil
 	case typeCodeList8:
-		buf, ok := r.next(2)
+		buf, ok := r.Next(2)
 		if !ok {
 			return 0, errors.New("invalid length")
 		}
@@ -465,7 +477,7 @@ func readListHeader(r *buffer) (length int64, _ error) {
 		}
 		length = int64(buf[1])
 	case typeCodeList32:
-		buf, ok := r.next(8)
+		buf, ok := r.Next(8)
 		if !ok {
 			return 0, errors.New("invalid length")
 		}
@@ -483,17 +495,17 @@ func readListHeader(r *buffer) (length int64, _ error) {
 	return length, nil
 }
 
-func readArrayHeader(r *buffer) (length int64, _ error) {
-	type_, err := r.readType()
+func readArrayHeader(r *buffer.Buffer) (length int64, _ error) {
+	type_, err := readType(r)
 	if err != nil {
 		return 0, err
 	}
 
-	arrayLength := r.len()
+	arrayLength := r.Len()
 
 	switch type_ {
 	case typeCodeArray8:
-		buf, ok := r.next(2)
+		buf, ok := r.Next(2)
 		if !ok {
 			return 0, errors.New("invalid length")
 		}
@@ -505,7 +517,7 @@ func readArrayHeader(r *buffer) (length int64, _ error) {
 		}
 		length = int64(buf[1])
 	case typeCodeArray32:
-		buf, ok := r.next(8)
+		buf, ok := r.Next(8)
 		if !ok {
 			return 0, errors.New("invalid length")
 		}
@@ -522,8 +534,8 @@ func readArrayHeader(r *buffer) (length int64, _ error) {
 	return length, nil
 }
 
-func readString(r *buffer) (string, error) {
-	type_, err := r.readType()
+func readString(r *buffer.Buffer) (string, error) {
+	type_, err := readType(r)
 	if err != nil {
 		return "", err
 	}
@@ -531,13 +543,13 @@ func readString(r *buffer) (string, error) {
 	var length int64
 	switch type_ {
 	case typeCodeStr8, typeCodeSym8:
-		n, err := r.readByte()
+		n, err := r.ReadByte()
 		if err != nil {
 			return "", err
 		}
 		length = int64(n)
 	case typeCodeStr32, typeCodeSym32:
-		buf, ok := r.next(4)
+		buf, ok := r.Next(4)
 		if !ok {
 			return "", fmt.Errorf("invalid length for type %#02x", type_)
 		}
@@ -546,15 +558,15 @@ func readString(r *buffer) (string, error) {
 		return "", fmt.Errorf("type code %#02x is not a recognized string type", type_)
 	}
 
-	buf, ok := r.next(length)
+	buf, ok := r.Next(length)
 	if !ok {
 		return "", errors.New("invalid length")
 	}
 	return string(buf), nil
 }
 
-func readBinary(r *buffer) ([]byte, error) {
-	type_, err := r.readType()
+func readBinary(r *buffer.Buffer) ([]byte, error) {
+	type_, err := readType(r)
 	if err != nil {
 		return nil, err
 	}
@@ -562,13 +574,13 @@ func readBinary(r *buffer) ([]byte, error) {
 	var length int64
 	switch type_ {
 	case typeCodeVbin8:
-		n, err := r.readByte()
+		n, err := r.ReadByte()
 		if err != nil {
 			return nil, err
 		}
 		length = int64(n)
 	case typeCodeVbin32:
-		buf, ok := r.next(4)
+		buf, ok := r.Next(4)
 		if !ok {
 			return nil, fmt.Errorf("invalid length for type %#02x", type_)
 		}
@@ -583,19 +595,19 @@ func readBinary(r *buffer) ([]byte, error) {
 		return make([]byte, 0), nil
 	}
 
-	buf, ok := r.next(length)
+	buf, ok := r.Next(length)
 	if !ok {
 		return nil, errors.New("invalid length")
 	}
 	return append([]byte(nil), buf...), nil
 }
 
-func readAny(r *buffer) (interface{}, error) {
+func readAny(r *buffer.Buffer) (interface{}, error) {
 	if tryReadNull(r) {
 		return nil, nil
 	}
 
-	type_, err := r.peekType()
+	type_, err := peekType(r)
 	if err != nil {
 		return nil, errors.New("invalid length")
 	}
@@ -691,7 +703,7 @@ func readAny(r *buffer) (interface{}, error) {
 	}
 }
 
-func readAnyMap(r *buffer) (interface{}, error) {
+func readAnyMap(r *buffer.Buffer) (interface{}, error) {
 	var m map[interface{}]interface{}
 	err := (*mapAnyAny)(&m).unmarshal(r)
 	if err != nil {
@@ -730,15 +742,15 @@ Loop:
 	return m, nil
 }
 
-func readAnyList(r *buffer) (interface{}, error) {
+func readAnyList(r *buffer.Buffer) (interface{}, error) {
 	var a []interface{}
 	err := (*list)(&a).unmarshal(r)
 	return a, err
 }
 
-func readAnyArray(r *buffer) (interface{}, error) {
+func readAnyArray(r *buffer.Buffer) (interface{}, error) {
 	// get the array type
-	buf := r.bytes()
+	buf := r.Bytes()
 	if len(buf) < 1 {
 		return nil, errors.New("invalid length")
 	}
@@ -826,8 +838,8 @@ func readAnyArray(r *buffer) (interface{}, error) {
 	}
 }
 
-func readComposite(r *buffer) (interface{}, error) {
-	buf := r.bytes()
+func readComposite(r *buffer.Buffer) (interface{}, error) {
+	buf := r.Bytes()
 
 	if len(buf) < 2 {
 		return nil, errors.New("invalid length for composite")
@@ -941,8 +953,8 @@ func readComposite(r *buffer) (interface{}, error) {
 	}
 }
 
-func readTimestamp(r *buffer) (time.Time, error) {
-	type_, err := r.readType()
+func readTimestamp(r *buffer.Buffer) (time.Time, error) {
+	type_, err := readType(r)
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -951,13 +963,13 @@ func readTimestamp(r *buffer) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("invalid type for timestamp %02x", type_)
 	}
 
-	n, err := r.readUint64()
+	n, err := r.ReadUint64()
 	ms := int64(n)
 	return time.Unix(ms/1000, (ms%1000)*1000000).UTC(), err
 }
 
-func readInt(r *buffer) (int, error) {
-	type_, err := r.peekType()
+func readInt(r *buffer.Buffer) (int, error) {
+	type_, err := peekType(r)
 	if err != nil {
 		return 0, err
 	}
@@ -995,44 +1007,44 @@ func readInt(r *buffer) (int, error) {
 	}
 }
 
-func readLong(r *buffer) (int64, error) {
-	type_, err := r.readType()
+func readLong(r *buffer.Buffer) (int64, error) {
+	type_, err := readType(r)
 	if err != nil {
 		return 0, err
 	}
 
 	switch type_ {
 	case typeCodeSmalllong:
-		n, err := r.readByte()
+		n, err := r.ReadByte()
 		return int64(n), err
 	case typeCodeLong:
-		n, err := r.readUint64()
+		n, err := r.ReadUint64()
 		return int64(n), err
 	default:
 		return 0, fmt.Errorf("invalid type for uint32 %02x", type_)
 	}
 }
 
-func readInt32(r *buffer) (int32, error) {
-	type_, err := r.readType()
+func readInt32(r *buffer.Buffer) (int32, error) {
+	type_, err := readType(r)
 	if err != nil {
 		return 0, err
 	}
 
 	switch type_ {
 	case typeCodeSmallint:
-		n, err := r.readByte()
+		n, err := r.ReadByte()
 		return int32(n), err
 	case typeCodeInt:
-		n, err := r.readUint32()
+		n, err := r.ReadUint32()
 		return int32(n), err
 	default:
 		return 0, fmt.Errorf("invalid type for int32 %02x", type_)
 	}
 }
 
-func readShort(r *buffer) (int16, error) {
-	type_, err := r.readType()
+func readShort(r *buffer.Buffer) (int16, error) {
+	type_, err := readType(r)
 	if err != nil {
 		return 0, err
 	}
@@ -1041,12 +1053,12 @@ func readShort(r *buffer) (int16, error) {
 		return 0, fmt.Errorf("invalid type for short %02x", type_)
 	}
 
-	n, err := r.readUint16()
+	n, err := r.ReadUint16()
 	return int16(n), err
 }
 
-func readSbyte(r *buffer) (int8, error) {
-	type_, err := r.readType()
+func readSbyte(r *buffer.Buffer) (int8, error) {
+	type_, err := readType(r)
 	if err != nil {
 		return 0, err
 	}
@@ -1055,12 +1067,12 @@ func readSbyte(r *buffer) (int8, error) {
 		return 0, fmt.Errorf("invalid type for int8 %02x", type_)
 	}
 
-	n, err := r.readByte()
+	n, err := r.ReadByte()
 	return int8(n), err
 }
 
-func readUbyte(r *buffer) (uint8, error) {
-	type_, err := r.readType()
+func readUbyte(r *buffer.Buffer) (uint8, error) {
+	type_, err := readType(r)
 	if err != nil {
 		return 0, err
 	}
@@ -1069,11 +1081,11 @@ func readUbyte(r *buffer) (uint8, error) {
 		return 0, fmt.Errorf("invalid type for ubyte %02x", type_)
 	}
 
-	return r.readByte()
+	return r.ReadByte()
 }
 
-func readUshort(r *buffer) (uint16, error) {
-	type_, err := r.readType()
+func readUshort(r *buffer.Buffer) (uint16, error) {
+	type_, err := readType(r)
 	if err != nil {
 		return 0, err
 	}
@@ -1082,11 +1094,11 @@ func readUshort(r *buffer) (uint16, error) {
 		return 0, fmt.Errorf("invalid type for ushort %02x", type_)
 	}
 
-	return r.readUint16()
+	return r.ReadUint16()
 }
 
-func readUint32(r *buffer) (uint32, error) {
-	type_, err := r.readType()
+func readUint32(r *buffer.Buffer) (uint32, error) {
+	type_, err := readType(r)
 	if err != nil {
 		return 0, err
 	}
@@ -1095,17 +1107,17 @@ func readUint32(r *buffer) (uint32, error) {
 	case typeCodeUint0:
 		return 0, nil
 	case typeCodeSmallUint:
-		n, err := r.readByte()
+		n, err := r.ReadByte()
 		return uint32(n), err
 	case typeCodeUint:
-		return r.readUint32()
+		return r.ReadUint32()
 	default:
 		return 0, fmt.Errorf("invalid type for uint32 %02x", type_)
 	}
 }
 
-func readUlong(r *buffer) (uint64, error) {
-	type_, err := r.readType()
+func readUlong(r *buffer.Buffer) (uint64, error) {
+	type_, err := readType(r)
 	if err != nil {
 		return 0, err
 	}
@@ -1114,17 +1126,17 @@ func readUlong(r *buffer) (uint64, error) {
 	case typeCodeUlong0:
 		return 0, nil
 	case typeCodeSmallUlong:
-		n, err := r.readByte()
+		n, err := r.ReadByte()
 		return uint64(n), err
 	case typeCodeUlong:
-		return r.readUint64()
+		return r.ReadUint64()
 	default:
 		return 0, fmt.Errorf("invalid type for uint32 %02x", type_)
 	}
 }
 
-func readFloat(r *buffer) (float32, error) {
-	type_, err := r.readType()
+func readFloat(r *buffer.Buffer) (float32, error) {
+	type_, err := readType(r)
 	if err != nil {
 		return 0, err
 	}
@@ -1133,12 +1145,12 @@ func readFloat(r *buffer) (float32, error) {
 		return 0, fmt.Errorf("invalid type for float32 %02x", type_)
 	}
 
-	bits, err := r.readUint32()
+	bits, err := r.ReadUint32()
 	return math.Float32frombits(bits), err
 }
 
-func readDouble(r *buffer) (float64, error) {
-	type_, err := r.readType()
+func readDouble(r *buffer.Buffer) (float64, error) {
+	type_, err := readType(r)
 	if err != nil {
 		return 0, err
 	}
@@ -1147,19 +1159,19 @@ func readDouble(r *buffer) (float64, error) {
 		return 0, fmt.Errorf("invalid type for float64 %02x", type_)
 	}
 
-	bits, err := r.readUint64()
+	bits, err := r.ReadUint64()
 	return math.Float64frombits(bits), err
 }
 
-func readBool(r *buffer) (bool, error) {
-	type_, err := r.readType()
+func readBool(r *buffer.Buffer) (bool, error) {
+	type_, err := readType(r)
 	if err != nil {
 		return false, err
 	}
 
 	switch type_ {
 	case typeCodeBool:
-		b, err := r.readByte()
+		b, err := r.ReadByte()
 		return b != 0, err
 	case typeCodeBoolTrue:
 		return true, nil
@@ -1170,8 +1182,8 @@ func readBool(r *buffer) (bool, error) {
 	}
 }
 
-func readUint(r *buffer) (value uint64, _ error) {
-	type_, err := r.readType()
+func readUint(r *buffer.Buffer) (value uint64, _ error) {
+	type_, err := readType(r)
 	if err != nil {
 		return 0, err
 	}
@@ -1180,25 +1192,25 @@ func readUint(r *buffer) (value uint64, _ error) {
 	case typeCodeUint0, typeCodeUlong0:
 		return 0, nil
 	case typeCodeUbyte, typeCodeSmallUint, typeCodeSmallUlong:
-		n, err := r.readByte()
+		n, err := r.ReadByte()
 		return uint64(n), err
 	case typeCodeUshort:
-		n, err := r.readUint16()
+		n, err := r.ReadUint16()
 		return uint64(n), err
 	case typeCodeUint:
-		n, err := r.readUint32()
+		n, err := r.ReadUint32()
 		return uint64(n), err
 	case typeCodeUlong:
-		return r.readUint64()
+		return r.ReadUint64()
 	default:
 		return 0, fmt.Errorf("type code %#02x is not a recognized number type", type_)
 	}
 }
 
-func readUUID(r *buffer) (UUID, error) {
+func readUUID(r *buffer.Buffer) (UUID, error) {
 	var uuid UUID
 
-	type_, err := r.readType()
+	type_, err := readType(r)
 	if err != nil {
 		return uuid, err
 	}
@@ -1207,7 +1219,7 @@ func readUUID(r *buffer) (UUID, error) {
 		return uuid, fmt.Errorf("type code %#00x is not a UUID", type_)
 	}
 
-	buf, ok := r.next(16)
+	buf, ok := r.Next(16)
 	if !ok {
 		return uuid, errors.New("invalid length")
 	}
@@ -1216,17 +1228,17 @@ func readUUID(r *buffer) (UUID, error) {
 	return uuid, nil
 }
 
-func readMapHeader(r *buffer) (count uint32, _ error) {
-	type_, err := r.readType()
+func readMapHeader(r *buffer.Buffer) (count uint32, _ error) {
+	type_, err := readType(r)
 	if err != nil {
 		return 0, err
 	}
 
-	length := r.len()
+	length := r.Len()
 
 	switch type_ {
 	case typeCodeMap8:
-		buf, ok := r.next(2)
+		buf, ok := r.Next(2)
 		if !ok {
 			return 0, errors.New("invalid length")
 		}
@@ -1238,7 +1250,7 @@ func readMapHeader(r *buffer) (count uint32, _ error) {
 		}
 		count = uint32(buf[1])
 	case typeCodeMap32:
-		buf, ok := r.next(8)
+		buf, ok := r.Next(8)
 		if !ok {
 			return 0, errors.New("invalid length")
 		}
@@ -1253,7 +1265,7 @@ func readMapHeader(r *buffer) (count uint32, _ error) {
 		return 0, fmt.Errorf("invalid map type %#02x", type_)
 	}
 
-	if int(count) > r.len() {
+	if int(count) > r.Len() {
 		return 0, errors.New("invalid length")
 	}
 	return count, nil

@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"time"
 	"unicode/utf8"
+
+	"github.com/Azure/go-amqp/internal/buffer"
 )
 
 type amqpType uint8
@@ -200,7 +202,7 @@ type performOpen struct {
 
 func (o *performOpen) frameBody() {}
 
-func (o *performOpen) marshal(wr *buffer) error {
+func (o *performOpen) marshal(wr *buffer.Buffer) error {
 	return marshalComposite(wr, typeCodeOpen, []marshalField{
 		{value: &o.ContainerID, omit: false},
 		{value: &o.Hostname, omit: o.Hostname == ""},
@@ -215,7 +217,7 @@ func (o *performOpen) marshal(wr *buffer) error {
 	})
 }
 
-func (o *performOpen) unmarshal(r *buffer) error {
+func (o *performOpen) unmarshal(r *buffer.Buffer) error {
 	return unmarshalComposite(r, typeCodeOpen, []unmarshalField{
 		{field: &o.ContainerID, handleNull: func() error { return errors.New("Open.ContainerID is required") }},
 		{field: &o.Hostname},
@@ -324,7 +326,7 @@ func formatUint16Ptr(p *uint16) string {
 	return strconv.FormatUint(uint64(*p), 10)
 }
 
-func (b *performBegin) marshal(wr *buffer) error {
+func (b *performBegin) marshal(wr *buffer.Buffer) error {
 	return marshalComposite(wr, typeCodeBegin, []marshalField{
 		{value: b.RemoteChannel, omit: b.RemoteChannel == nil},
 		{value: &b.NextOutgoingID, omit: false},
@@ -337,7 +339,7 @@ func (b *performBegin) marshal(wr *buffer) error {
 	})
 }
 
-func (b *performBegin) unmarshal(r *buffer) error {
+func (b *performBegin) unmarshal(r *buffer.Buffer) error {
 	return unmarshalComposite(r, typeCodeBegin, []unmarshalField{
 		{field: &b.RemoteChannel},
 		{field: &b.NextOutgoingID, handleNull: func() error { return errors.New("Begin.NextOutgoingID is required") }},
@@ -523,7 +525,7 @@ func (a performAttach) String() string {
 	)
 }
 
-func (a *performAttach) marshal(wr *buffer) error {
+func (a *performAttach) marshal(wr *buffer.Buffer) error {
 	return marshalComposite(wr, typeCodeAttach, []marshalField{
 		{value: &a.Name, omit: false},
 		{value: &a.Handle, omit: false},
@@ -542,7 +544,7 @@ func (a *performAttach) marshal(wr *buffer) error {
 	})
 }
 
-func (a *performAttach) unmarshal(r *buffer) error {
+func (a *performAttach) unmarshal(r *buffer.Buffer) error {
 	return unmarshalComposite(r, typeCodeAttach, []unmarshalField{
 		{field: &a.Name, handleNull: func() error { return errors.New("Attach.Name is required") }},
 		{field: &a.Handle, handleNull: func() error { return errors.New("Attach.Handle is required") }},
@@ -575,13 +577,13 @@ func (rl role) String() string {
 	return "Sender"
 }
 
-func (rl *role) unmarshal(r *buffer) error {
+func (rl *role) unmarshal(r *buffer.Buffer) error {
 	b, err := readBool(r)
 	*rl = role(b)
 	return err
 }
 
-func (rl role) marshal(wr *buffer) error {
+func (rl role) marshal(wr *buffer.Buffer) error {
 	return marshal(wr, (bool)(rl))
 }
 
@@ -589,11 +591,11 @@ type deliveryState interface{} // TODO: http://docs.oasis-open.org/amqp/core/v1.
 
 type unsettled map[string]deliveryState
 
-func (u unsettled) marshal(wr *buffer) error {
+func (u unsettled) marshal(wr *buffer.Buffer) error {
 	return writeMap(wr, u)
 }
 
-func (u *unsettled) unmarshal(r *buffer) error {
+func (u *unsettled) unmarshal(r *buffer.Buffer) error {
 	count, err := readMapHeader(r)
 	if err != nil {
 		return err
@@ -618,11 +620,11 @@ func (u *unsettled) unmarshal(r *buffer) error {
 
 type filter map[symbol]*describedType
 
-func (f filter) marshal(wr *buffer) error {
+func (f filter) marshal(wr *buffer.Buffer) error {
 	return writeMap(wr, f)
 }
 
-func (f *filter) unmarshal(r *buffer) error {
+func (f *filter) unmarshal(r *buffer.Buffer) error {
 	count, err := readMapHeader(r)
 	if err != nil {
 		return err
@@ -779,7 +781,7 @@ type source struct {
 	Capabilities multiSymbol
 }
 
-func (s *source) marshal(wr *buffer) error {
+func (s *source) marshal(wr *buffer.Buffer) error {
 	return marshalComposite(wr, typeCodeSource, []marshalField{
 		{value: &s.Address, omit: s.Address == ""},
 		{value: &s.Durable, omit: s.Durable == DurabilityNone},
@@ -795,7 +797,7 @@ func (s *source) marshal(wr *buffer) error {
 	})
 }
 
-func (s *source) unmarshal(r *buffer) error {
+func (s *source) unmarshal(r *buffer.Buffer) error {
 	return unmarshalComposite(r, typeCodeSource, []unmarshalField{
 		{field: &s.Address},
 		{field: &s.Durable},
@@ -926,7 +928,7 @@ type target struct {
 	Capabilities multiSymbol
 }
 
-func (t *target) marshal(wr *buffer) error {
+func (t *target) marshal(wr *buffer.Buffer) error {
 	return marshalComposite(wr, typeCodeTarget, []marshalField{
 		{value: &t.Address, omit: t.Address == ""},
 		{value: &t.Durable, omit: t.Durable == DurabilityNone},
@@ -938,7 +940,7 @@ func (t *target) marshal(wr *buffer) error {
 	})
 }
 
-func (t *target) unmarshal(r *buffer) error {
+func (t *target) unmarshal(r *buffer.Buffer) error {
 	return unmarshalComposite(r, typeCodeTarget, []unmarshalField{
 		{field: &t.Address},
 		{field: &t.Durable},
@@ -1104,7 +1106,7 @@ func formatUint32Ptr(p *uint32) string {
 	return strconv.FormatUint(uint64(*p), 10)
 }
 
-func (f *performFlow) marshal(wr *buffer) error {
+func (f *performFlow) marshal(wr *buffer.Buffer) error {
 	return marshalComposite(wr, typeCodeFlow, []marshalField{
 		{value: f.NextIncomingID, omit: f.NextIncomingID == nil},
 		{value: &f.IncomingWindow, omit: false},
@@ -1120,7 +1122,7 @@ func (f *performFlow) marshal(wr *buffer) error {
 	})
 }
 
-func (f *performFlow) unmarshal(r *buffer) error {
+func (f *performFlow) unmarshal(r *buffer.Buffer) error {
 	return unmarshalComposite(r, typeCodeFlow, []unmarshalField{
 		{field: &f.NextIncomingID},
 		{field: &f.IncomingWindow, handleNull: func() error { return errors.New("Flow.IncomingWindow is required") }},
@@ -1322,7 +1324,7 @@ func (t performTransfer) String() string {
 	)
 }
 
-func (t *performTransfer) marshal(wr *buffer) error {
+func (t *performTransfer) marshal(wr *buffer.Buffer) error {
 	err := marshalComposite(wr, typeCodeTransfer, []marshalField{
 		{value: &t.Handle},
 		{value: t.DeliveryID, omit: t.DeliveryID == nil},
@@ -1340,11 +1342,11 @@ func (t *performTransfer) marshal(wr *buffer) error {
 		return err
 	}
 
-	wr.write(t.Payload)
+	wr.Append(t.Payload)
 	return nil
 }
 
-func (t *performTransfer) unmarshal(r *buffer) error {
+func (t *performTransfer) unmarshal(r *buffer.Buffer) error {
 	err := unmarshalComposite(r, typeCodeTransfer, []unmarshalField{
 		{field: &t.Handle, handleNull: func() error { return errors.New("Transfer.Handle is required") }},
 		{field: &t.DeliveryID},
@@ -1362,7 +1364,7 @@ func (t *performTransfer) unmarshal(r *buffer) error {
 		return err
 	}
 
-	t.Payload = append([]byte(nil), r.bytes()...)
+	t.Payload = append([]byte(nil), r.Bytes()...)
 
 	return err
 }
@@ -1429,7 +1431,7 @@ func (d performDisposition) String() string {
 	)
 }
 
-func (d *performDisposition) marshal(wr *buffer) error {
+func (d *performDisposition) marshal(wr *buffer.Buffer) error {
 	return marshalComposite(wr, typeCodeDisposition, []marshalField{
 		{value: &d.Role, omit: false},
 		{value: &d.First, omit: false},
@@ -1440,7 +1442,7 @@ func (d *performDisposition) marshal(wr *buffer) error {
 	})
 }
 
-func (d *performDisposition) unmarshal(r *buffer) error {
+func (d *performDisposition) unmarshal(r *buffer.Buffer) error {
 	return unmarshalComposite(r, typeCodeDisposition, []unmarshalField{
 		{field: &d.Role, handleNull: func() error { return errors.New("Disposition.Role is required") }},
 		{field: &d.First, handleNull: func() error { return errors.New("Disposition.Handle is required") }},
@@ -1483,7 +1485,7 @@ func (d performDetach) String() string {
 	)
 }
 
-func (d *performDetach) marshal(wr *buffer) error {
+func (d *performDetach) marshal(wr *buffer.Buffer) error {
 	return marshalComposite(wr, typeCodeDetach, []marshalField{
 		{value: &d.Handle, omit: false},
 		{value: &d.Closed, omit: !d.Closed},
@@ -1491,7 +1493,7 @@ func (d *performDetach) marshal(wr *buffer) error {
 	})
 }
 
-func (d *performDetach) unmarshal(r *buffer) error {
+func (d *performDetach) unmarshal(r *buffer.Buffer) error {
 	return unmarshalComposite(r, typeCodeDetach, []unmarshalField{
 		{field: &d.Handle, handleNull: func() error { return errors.New("Detach.Handle is required") }},
 		{field: &d.Closed},
@@ -1502,11 +1504,11 @@ func (d *performDetach) unmarshal(r *buffer) error {
 // ErrorCondition is one of the error conditions defined in the AMQP spec.
 type ErrorCondition string
 
-func (ec ErrorCondition) marshal(wr *buffer) error {
+func (ec ErrorCondition) marshal(wr *buffer.Buffer) error {
 	return (symbol)(ec).marshal(wr)
 }
 
-func (ec *ErrorCondition) unmarshal(r *buffer) error {
+func (ec *ErrorCondition) unmarshal(r *buffer.Buffer) error {
 	s, err := readString(r)
 	*ec = ErrorCondition(s)
 	return err
@@ -1572,7 +1574,7 @@ type Error struct {
 	Info map[string]interface{}
 }
 
-func (e *Error) marshal(wr *buffer) error {
+func (e *Error) marshal(wr *buffer.Buffer) error {
 	return marshalComposite(wr, typeCodeError, []marshalField{
 		{value: &e.Condition, omit: false},
 		{value: &e.Description, omit: e.Description == ""},
@@ -1580,7 +1582,7 @@ func (e *Error) marshal(wr *buffer) error {
 	})
 }
 
-func (e *Error) unmarshal(r *buffer) error {
+func (e *Error) unmarshal(r *buffer.Buffer) error {
 	return unmarshalComposite(r, typeCodeError, []unmarshalField{
 		{field: &e.Condition, handleNull: func() error { return errors.New("Error.Condition is required") }},
 		{field: &e.Description},
@@ -1619,13 +1621,13 @@ type performEnd struct {
 
 func (e *performEnd) frameBody() {}
 
-func (e *performEnd) marshal(wr *buffer) error {
+func (e *performEnd) marshal(wr *buffer.Buffer) error {
 	return marshalComposite(wr, typeCodeEnd, []marshalField{
 		{value: e.Error, omit: e.Error == nil},
 	})
 }
 
-func (e *performEnd) unmarshal(r *buffer) error {
+func (e *performEnd) unmarshal(r *buffer.Buffer) error {
 	return unmarshalComposite(r, typeCodeEnd,
 		unmarshalField{field: &e.Error},
 	)
@@ -1647,13 +1649,13 @@ type performClose struct {
 
 func (c *performClose) frameBody() {}
 
-func (c *performClose) marshal(wr *buffer) error {
+func (c *performClose) marshal(wr *buffer.Buffer) error {
 	return marshalComposite(wr, typeCodeClose, []marshalField{
 		{value: c.Error, omit: c.Error == nil},
 	})
 }
 
-func (c *performClose) unmarshal(r *buffer) error {
+func (c *performClose) unmarshal(r *buffer.Buffer) error {
 	return unmarshalComposite(r, typeCodeClose,
 		unmarshalField{field: &c.Error},
 	)
@@ -1872,16 +1874,16 @@ func (m *Message) Ignore() {
 
 // MarshalBinary encodes the message into binary form.
 func (m *Message) MarshalBinary() ([]byte, error) {
-	buf := new(buffer)
+	buf := &buffer.Buffer{}
 	err := m.marshal(buf)
-	return buf.b, err
+	return buf.Detach(), err
 }
 
 func (m *Message) shouldSendDisposition() bool {
 	return !m.settled
 }
 
-func (m *Message) marshal(wr *buffer) error {
+func (m *Message) marshal(wr *buffer.Buffer) error {
 	if m.Header != nil {
 		err := m.Header.marshal(wr)
 		if err != nil {
@@ -1949,17 +1951,15 @@ func (m *Message) marshal(wr *buffer) error {
 
 // UnmarshalBinary decodes the message from binary form.
 func (m *Message) UnmarshalBinary(data []byte) error {
-	buf := &buffer{
-		b: data,
-	}
+	buf := buffer.New(data)
 	return m.unmarshal(buf)
 }
 
-func (m *Message) unmarshal(r *buffer) error {
+func (m *Message) unmarshal(r *buffer.Buffer) error {
 	// loop, decoding sections until bytes have been consumed
-	for r.len() > 0 {
+	for r.Len() > 0 {
 		// determine type
-		type_, err := peekMessageType(r.bytes())
+		type_, err := peekMessageType(r.Bytes())
 		if err != nil {
 			return err
 		}
@@ -1990,7 +1990,7 @@ func (m *Message) unmarshal(r *buffer) error {
 			section = &m.ApplicationProperties
 
 		case typeCodeApplicationData:
-			r.skip(3)
+			r.Skip(3)
 
 			var data []byte
 			err = unmarshal(r, &data)
@@ -2012,7 +2012,7 @@ func (m *Message) unmarshal(r *buffer) error {
 		}
 
 		if discardHeader {
-			r.skip(3)
+			r.Skip(3)
 		}
 
 		err = unmarshal(r, section)
@@ -2059,9 +2059,9 @@ func peekMessageType(buf []byte) (uint8, error) {
 	return uint8(v), nil
 }
 
-func tryReadNull(r *buffer) bool {
-	if r.len() > 0 && amqpType(r.bytes()[0]) == typeCodeNull {
-		r.skip(1)
+func tryReadNull(r *buffer.Buffer) bool {
+	if r.Len() > 0 && amqpType(r.Bytes()[0]) == typeCodeNull {
+		r.Skip(1)
 		return true
 	}
 	return false
@@ -2072,11 +2072,11 @@ func tryReadNull(r *buffer) bool {
 // String keys are encoded as AMQP Symbols.
 type Annotations map[interface{}]interface{}
 
-func (a Annotations) marshal(wr *buffer) error {
+func (a Annotations) marshal(wr *buffer.Buffer) error {
 	return writeMap(wr, a)
 }
 
-func (a *Annotations) unmarshal(r *buffer) error {
+func (a *Annotations) unmarshal(r *buffer.Buffer) error {
 	count, err := readMapHeader(r)
 	if err != nil {
 		return err
@@ -2119,7 +2119,7 @@ type MessageHeader struct {
 	DeliveryCount uint32
 }
 
-func (h *MessageHeader) marshal(wr *buffer) error {
+func (h *MessageHeader) marshal(wr *buffer.Buffer) error {
 	return marshalComposite(wr, typeCodeMessageHeader, []marshalField{
 		{value: &h.Durable, omit: !h.Durable},
 		{value: &h.Priority, omit: h.Priority == 4},
@@ -2129,7 +2129,7 @@ func (h *MessageHeader) marshal(wr *buffer) error {
 	})
 }
 
-func (h *MessageHeader) unmarshal(r *buffer) error {
+func (h *MessageHeader) unmarshal(r *buffer.Buffer) error {
 	return unmarshalComposite(r, typeCodeMessageHeader, []unmarshalField{
 		{field: &h.Durable},
 		{field: &h.Priority, handleNull: func() error { h.Priority = 4; return nil }},
@@ -2240,7 +2240,7 @@ type MessageProperties struct {
 	ReplyToGroupID string
 }
 
-func (p *MessageProperties) marshal(wr *buffer) error {
+func (p *MessageProperties) marshal(wr *buffer.Buffer) error {
 	return marshalComposite(wr, typeCodeMessageProperties, []marshalField{
 		{value: p.MessageID, omit: p.MessageID == nil},
 		{value: &p.UserID, omit: len(p.UserID) == 0},
@@ -2258,7 +2258,7 @@ func (p *MessageProperties) marshal(wr *buffer) error {
 	})
 }
 
-func (p *MessageProperties) unmarshal(r *buffer) error {
+func (p *MessageProperties) unmarshal(r *buffer.Buffer) error {
 	return unmarshalComposite(r, typeCodeMessageProperties, []unmarshalField{
 		{field: &p.MessageID},
 		{field: &p.UserID},
@@ -2309,14 +2309,14 @@ type stateReceived struct {
 	SectionOffset uint64
 }
 
-func (sr *stateReceived) marshal(wr *buffer) error {
+func (sr *stateReceived) marshal(wr *buffer.Buffer) error {
 	return marshalComposite(wr, typeCodeStateReceived, []marshalField{
 		{value: &sr.SectionNumber, omit: false},
 		{value: &sr.SectionOffset, omit: false},
 	})
 }
 
-func (sr *stateReceived) unmarshal(r *buffer) error {
+func (sr *stateReceived) unmarshal(r *buffer.Buffer) error {
 	return unmarshalComposite(r, typeCodeStateReceived, []unmarshalField{
 		{field: &sr.SectionNumber, handleNull: func() error { return errors.New("StateReceiver.SectionNumber is required") }},
 		{field: &sr.SectionOffset, handleNull: func() error { return errors.New("StateReceiver.SectionOffset is required") }},
@@ -2331,11 +2331,11 @@ func (sr *stateReceived) unmarshal(r *buffer) error {
 
 type stateAccepted struct{}
 
-func (sa *stateAccepted) marshal(wr *buffer) error {
+func (sa *stateAccepted) marshal(wr *buffer.Buffer) error {
 	return marshalComposite(wr, typeCodeStateAccepted, nil)
 }
 
-func (sa *stateAccepted) unmarshal(r *buffer) error {
+func (sa *stateAccepted) unmarshal(r *buffer.Buffer) error {
 	return unmarshalComposite(r, typeCodeStateAccepted)
 }
 
@@ -2354,13 +2354,13 @@ type stateRejected struct {
 	Error *Error
 }
 
-func (sr *stateRejected) marshal(wr *buffer) error {
+func (sr *stateRejected) marshal(wr *buffer.Buffer) error {
 	return marshalComposite(wr, typeCodeStateRejected, []marshalField{
 		{value: sr.Error, omit: sr.Error == nil},
 	})
 }
 
-func (sr *stateRejected) unmarshal(r *buffer) error {
+func (sr *stateRejected) unmarshal(r *buffer.Buffer) error {
 	return unmarshalComposite(r, typeCodeStateRejected,
 		unmarshalField{field: &sr.Error},
 	)
@@ -2378,11 +2378,11 @@ func (sr *stateRejected) String() string {
 
 type stateReleased struct{}
 
-func (sr *stateReleased) marshal(wr *buffer) error {
+func (sr *stateReleased) marshal(wr *buffer.Buffer) error {
 	return marshalComposite(wr, typeCodeStateReleased, nil)
 }
 
-func (sr *stateReleased) unmarshal(r *buffer) error {
+func (sr *stateReleased) unmarshal(r *buffer.Buffer) error {
 	return unmarshalComposite(r, typeCodeStateReleased)
 }
 
@@ -2422,7 +2422,7 @@ type stateModified struct {
 	MessageAnnotations Annotations
 }
 
-func (sm *stateModified) marshal(wr *buffer) error {
+func (sm *stateModified) marshal(wr *buffer.Buffer) error {
 	return marshalComposite(wr, typeCodeStateModified, []marshalField{
 		{value: &sm.DeliveryFailed, omit: !sm.DeliveryFailed},
 		{value: &sm.UndeliverableHere, omit: !sm.UndeliverableHere},
@@ -2430,7 +2430,7 @@ func (sm *stateModified) marshal(wr *buffer) error {
 	})
 }
 
-func (sm *stateModified) unmarshal(r *buffer) error {
+func (sm *stateModified) unmarshal(r *buffer.Buffer) error {
 	return unmarshalComposite(r, typeCodeStateModified, []unmarshalField{
 		{field: &sm.DeliveryFailed},
 		{field: &sm.UndeliverableHere},
@@ -2459,7 +2459,7 @@ type saslInit struct {
 
 func (si *saslInit) frameBody() {}
 
-func (si *saslInit) marshal(wr *buffer) error {
+func (si *saslInit) marshal(wr *buffer.Buffer) error {
 	return marshalComposite(wr, typeCodeSASLInit, []marshalField{
 		{value: &si.Mechanism, omit: false},
 		{value: &si.InitialResponse, omit: len(si.InitialResponse) == 0},
@@ -2467,7 +2467,7 @@ func (si *saslInit) marshal(wr *buffer) error {
 	})
 }
 
-func (si *saslInit) unmarshal(r *buffer) error {
+func (si *saslInit) unmarshal(r *buffer.Buffer) error {
 	return unmarshalComposite(r, typeCodeSASLInit, []unmarshalField{
 		{field: &si.Mechanism, handleNull: func() error { return errors.New("saslInit.Mechanism is required") }},
 		{field: &si.InitialResponse},
@@ -2496,13 +2496,13 @@ type saslMechanisms struct {
 
 func (sm *saslMechanisms) frameBody() {}
 
-func (sm *saslMechanisms) marshal(wr *buffer) error {
+func (sm *saslMechanisms) marshal(wr *buffer.Buffer) error {
 	return marshalComposite(wr, typeCodeSASLMechanism, []marshalField{
 		{value: &sm.Mechanisms, omit: false},
 	})
 }
 
-func (sm *saslMechanisms) unmarshal(r *buffer) error {
+func (sm *saslMechanisms) unmarshal(r *buffer.Buffer) error {
 	return unmarshalComposite(r, typeCodeSASLMechanism,
 		unmarshalField{field: &sm.Mechanisms, handleNull: func() error { return errors.New("saslMechanisms.Mechanisms is required") }},
 	)
@@ -2531,13 +2531,13 @@ func (sc *saslChallenge) String() string {
 
 func (sc *saslChallenge) frameBody() {}
 
-func (sc *saslChallenge) marshal(wr *buffer) error {
+func (sc *saslChallenge) marshal(wr *buffer.Buffer) error {
 	return marshalComposite(wr, typeCodeSASLChallenge, []marshalField{
 		{value: &sc.Challenge, omit: false},
 	})
 }
 
-func (sc *saslChallenge) unmarshal(r *buffer) error {
+func (sc *saslChallenge) unmarshal(r *buffer.Buffer) error {
 	return unmarshalComposite(r, typeCodeSASLChallenge, []unmarshalField{
 		{field: &sc.Challenge, handleNull: func() error { return errors.New("saslChallenge.Challenge is required") }},
 	}...)
@@ -2560,13 +2560,13 @@ func (sr *saslResponse) String() string {
 
 func (sr *saslResponse) frameBody() {}
 
-func (sr *saslResponse) marshal(wr *buffer) error {
+func (sr *saslResponse) marshal(wr *buffer.Buffer) error {
 	return marshalComposite(wr, typeCodeSASLResponse, []marshalField{
 		{value: &sr.Response, omit: false},
 	})
 }
 
-func (sr *saslResponse) unmarshal(r *buffer) error {
+func (sr *saslResponse) unmarshal(r *buffer.Buffer) error {
 	return unmarshalComposite(r, typeCodeSASLResponse, []unmarshalField{
 		{field: &sr.Response, handleNull: func() error { return errors.New("saslResponse.Response is required") }},
 	}...)
@@ -2587,14 +2587,14 @@ type saslOutcome struct {
 
 func (so *saslOutcome) frameBody() {}
 
-func (so *saslOutcome) marshal(wr *buffer) error {
+func (so *saslOutcome) marshal(wr *buffer.Buffer) error {
 	return marshalComposite(wr, typeCodeSASLOutcome, []marshalField{
 		{value: &so.Code, omit: false},
 		{value: &so.AdditionalData, omit: len(so.AdditionalData) == 0},
 	})
 }
 
-func (so *saslOutcome) unmarshal(r *buffer) error {
+func (so *saslOutcome) unmarshal(r *buffer.Buffer) error {
 	return unmarshalComposite(r, typeCodeSASLOutcome, []unmarshalField{
 		{field: &so.Code, handleNull: func() error { return errors.New("saslOutcome.AdditionalData is required") }},
 		{field: &so.AdditionalData},
@@ -2611,22 +2611,22 @@ func (so *saslOutcome) String() string {
 // symbol is an AMQP symbolic string.
 type symbol string
 
-func (s symbol) marshal(wr *buffer) error {
+func (s symbol) marshal(wr *buffer.Buffer) error {
 	l := len(s)
 	switch {
 	// Sym8
 	case l < 256:
-		wr.write([]byte{
+		wr.Append([]byte{
 			byte(typeCodeSym8),
 			byte(l),
 		})
-		wr.writeString(string(s))
+		wr.AppendString(string(s))
 
 	// Sym32
 	case uint(l) < math.MaxUint32:
-		wr.writeByte(uint8(typeCodeSym32))
-		wr.writeUint32(uint32(l))
-		wr.writeString(string(s))
+		wr.AppendByte(uint8(typeCodeSym32))
+		wr.AppendUint32(uint32(l))
+		wr.AppendString(string(s))
 	default:
 		return errors.New("too long")
 	}
@@ -2635,12 +2635,12 @@ func (s symbol) marshal(wr *buffer) error {
 
 type milliseconds time.Duration
 
-func (m milliseconds) marshal(wr *buffer) error {
+func (m milliseconds) marshal(wr *buffer.Buffer) error {
 	writeUint32(wr, uint32(m/milliseconds(time.Millisecond)))
 	return nil
 }
 
-func (m *milliseconds) unmarshal(r *buffer) error {
+func (m *milliseconds) unmarshal(r *buffer.Buffer) error {
 	n, err := readUint(r)
 	*m = milliseconds(time.Duration(n) * time.Millisecond)
 	return err
@@ -2650,11 +2650,11 @@ func (m *milliseconds) unmarshal(r *buffer) error {
 // inconsistently typed.
 type mapAnyAny map[interface{}]interface{}
 
-func (m mapAnyAny) marshal(wr *buffer) error {
+func (m mapAnyAny) marshal(wr *buffer.Buffer) error {
 	return writeMap(wr, map[interface{}]interface{}(m))
 }
 
-func (m *mapAnyAny) unmarshal(r *buffer) error {
+func (m *mapAnyAny) unmarshal(r *buffer.Buffer) error {
 	count, err := readMapHeader(r)
 	if err != nil {
 		return err
@@ -2689,11 +2689,11 @@ func (m *mapAnyAny) unmarshal(r *buffer) error {
 // mapStringAny is used to decode AMQP maps that have string keys
 type mapStringAny map[string]interface{}
 
-func (m mapStringAny) marshal(wr *buffer) error {
+func (m mapStringAny) marshal(wr *buffer.Buffer) error {
 	return writeMap(wr, map[string]interface{}(m))
 }
 
-func (m *mapStringAny) unmarshal(r *buffer) error {
+func (m *mapStringAny) unmarshal(r *buffer.Buffer) error {
 	count, err := readMapHeader(r)
 	if err != nil {
 		return err
@@ -2719,11 +2719,11 @@ func (m *mapStringAny) unmarshal(r *buffer) error {
 // mapStringAny is used to decode AMQP maps that have Symbol keys
 type mapSymbolAny map[symbol]interface{}
 
-func (m mapSymbolAny) marshal(wr *buffer) error {
+func (m mapSymbolAny) marshal(wr *buffer.Buffer) error {
 	return writeMap(wr, map[symbol]interface{}(m))
 }
 
-func (m *mapSymbolAny) unmarshal(r *buffer) error {
+func (m *mapSymbolAny) unmarshal(r *buffer.Buffer) error {
 	count, err := readMapHeader(r)
 	if err != nil {
 		return err
@@ -2763,13 +2763,13 @@ func (u UUID) String() string {
 	return string(buf[:])
 }
 
-func (u UUID) marshal(wr *buffer) error {
-	wr.writeByte(byte(typeCodeUUID))
-	wr.write(u[:])
+func (u UUID) marshal(wr *buffer.Buffer) error {
+	wr.AppendByte(byte(typeCodeUUID))
+	wr.Append(u[:])
 	return nil
 }
 
-func (u *UUID) unmarshal(r *buffer) error {
+func (u *UUID) unmarshal(r *buffer.Buffer) error {
 	un, err := readUUID(r)
 	*u = un
 	return err
@@ -2784,8 +2784,8 @@ const (
 	deleteOnNoLinksOrMessages = lifetimePolicy(typeCodeDeleteOnNoLinksOrMessages)
 )
 
-func (p lifetimePolicy) marshal(wr *buffer) error {
-	wr.write([]byte{
+func (p lifetimePolicy) marshal(wr *buffer.Buffer) error {
+	wr.Append([]byte{
 		0x0,
 		byte(typeCodeSmallUlong),
 		byte(p),
@@ -2794,7 +2794,7 @@ func (p lifetimePolicy) marshal(wr *buffer) error {
 	return nil
 }
 
-func (p *lifetimePolicy) unmarshal(r *buffer) error {
+func (p *lifetimePolicy) unmarshal(r *buffer.Buffer) error {
 	typ, fields, err := readCompositeHeader(r)
 	if err != nil {
 		return err
@@ -2841,11 +2841,11 @@ func (m *SenderSettleMode) String() string {
 	}
 }
 
-func (m SenderSettleMode) marshal(wr *buffer) error {
+func (m SenderSettleMode) marshal(wr *buffer.Buffer) error {
 	return marshal(wr, uint8(m))
 }
 
-func (m *SenderSettleMode) unmarshal(r *buffer) error {
+func (m *SenderSettleMode) unmarshal(r *buffer.Buffer) error {
 	n, err := readUbyte(r)
 	*m = SenderSettleMode(n)
 	return err
@@ -2889,11 +2889,11 @@ func (m *ReceiverSettleMode) String() string {
 	}
 }
 
-func (m ReceiverSettleMode) marshal(wr *buffer) error {
+func (m ReceiverSettleMode) marshal(wr *buffer.Buffer) error {
 	return marshal(wr, uint8(m))
 }
 
-func (m *ReceiverSettleMode) unmarshal(r *buffer) error {
+func (m *ReceiverSettleMode) unmarshal(r *buffer.Buffer) error {
 	n, err := readUbyte(r)
 	*m = ReceiverSettleMode(n)
 	return err
@@ -2941,11 +2941,11 @@ func (d *Durability) String() string {
 	}
 }
 
-func (d Durability) marshal(wr *buffer) error {
+func (d Durability) marshal(wr *buffer.Buffer) error {
 	return marshal(wr, uint32(d))
 }
 
-func (d *Durability) unmarshal(r *buffer) error {
+func (d *Durability) unmarshal(r *buffer.Buffer) error {
 	return unmarshal(r, (*uint32)(d))
 }
 
@@ -2987,11 +2987,11 @@ func (e ExpiryPolicy) validate() error {
 	}
 }
 
-func (e ExpiryPolicy) marshal(wr *buffer) error {
+func (e ExpiryPolicy) marshal(wr *buffer.Buffer) error {
 	return symbol(e).marshal(wr)
 }
 
-func (e *ExpiryPolicy) unmarshal(r *buffer) error {
+func (e *ExpiryPolicy) unmarshal(r *buffer.Buffer) error {
 	err := unmarshal(r, (*symbol)(e))
 	if err != nil {
 		return err
@@ -3011,8 +3011,8 @@ type describedType struct {
 	value      interface{}
 }
 
-func (t describedType) marshal(wr *buffer) error {
-	wr.writeByte(0x0) // descriptor constructor
+func (t describedType) marshal(wr *buffer.Buffer) error {
+	wr.AppendByte(0x0) // descriptor constructor
 	err := marshal(wr, t.descriptor)
 	if err != nil {
 		return err
@@ -3020,8 +3020,8 @@ func (t describedType) marshal(wr *buffer) error {
 	return marshal(wr, t.value)
 }
 
-func (t *describedType) unmarshal(r *buffer) error {
-	b, err := r.readByte()
+func (t *describedType) unmarshal(r *buffer.Buffer) error {
+	b, err := r.ReadByte()
 	if err != nil {
 		return err
 	}
@@ -3050,22 +3050,22 @@ func (t describedType) String() string {
 // rather than binary data.
 type ArrayUByte []uint8
 
-func (a ArrayUByte) marshal(wr *buffer) error {
+func (a ArrayUByte) marshal(wr *buffer.Buffer) error {
 	const typeSize = 1
 
 	writeArrayHeader(wr, len(a), typeSize, typeCodeUbyte)
-	wr.write(a)
+	wr.Append(a)
 
 	return nil
 }
 
-func (a *ArrayUByte) unmarshal(r *buffer) error {
+func (a *ArrayUByte) unmarshal(r *buffer.Buffer) error {
 	length, err := readArrayHeader(r)
 	if err != nil {
 		return err
 	}
 
-	type_, err := r.readType()
+	type_, err := readType(r)
 	if err != nil {
 		return err
 	}
@@ -3073,7 +3073,7 @@ func (a *ArrayUByte) unmarshal(r *buffer) error {
 		return fmt.Errorf("invalid type for []uint16 %02x", type_)
 	}
 
-	buf, ok := r.next(length)
+	buf, ok := r.Next(length)
 	if !ok {
 		return fmt.Errorf("invalid length %d", length)
 	}
@@ -3084,25 +3084,25 @@ func (a *ArrayUByte) unmarshal(r *buffer) error {
 
 type arrayInt8 []int8
 
-func (a arrayInt8) marshal(wr *buffer) error {
+func (a arrayInt8) marshal(wr *buffer.Buffer) error {
 	const typeSize = 1
 
 	writeArrayHeader(wr, len(a), typeSize, typeCodeByte)
 
 	for _, value := range a {
-		wr.writeByte(uint8(value))
+		wr.AppendByte(uint8(value))
 	}
 
 	return nil
 }
 
-func (a *arrayInt8) unmarshal(r *buffer) error {
+func (a *arrayInt8) unmarshal(r *buffer.Buffer) error {
 	length, err := readArrayHeader(r)
 	if err != nil {
 		return err
 	}
 
-	type_, err := r.readType()
+	type_, err := readType(r)
 	if err != nil {
 		return err
 	}
@@ -3110,7 +3110,7 @@ func (a *arrayInt8) unmarshal(r *buffer) error {
 		return fmt.Errorf("invalid type for []uint16 %02x", type_)
 	}
 
-	buf, ok := r.next(length)
+	buf, ok := r.Next(length)
 	if !ok {
 		return fmt.Errorf("invalid length %d", length)
 	}
@@ -3132,25 +3132,25 @@ func (a *arrayInt8) unmarshal(r *buffer) error {
 
 type arrayUint16 []uint16
 
-func (a arrayUint16) marshal(wr *buffer) error {
+func (a arrayUint16) marshal(wr *buffer.Buffer) error {
 	const typeSize = 2
 
 	writeArrayHeader(wr, len(a), typeSize, typeCodeUshort)
 
 	for _, element := range a {
-		wr.writeUint16(element)
+		wr.AppendUint16(element)
 	}
 
 	return nil
 }
 
-func (a *arrayUint16) unmarshal(r *buffer) error {
+func (a *arrayUint16) unmarshal(r *buffer.Buffer) error {
 	length, err := readArrayHeader(r)
 	if err != nil {
 		return err
 	}
 
-	type_, err := r.readType()
+	type_, err := readType(r)
 	if err != nil {
 		return err
 	}
@@ -3159,7 +3159,7 @@ func (a *arrayUint16) unmarshal(r *buffer) error {
 	}
 
 	const typeSize = 2
-	buf, ok := r.next(length * typeSize)
+	buf, ok := r.Next(length * typeSize)
 	if !ok {
 		return fmt.Errorf("invalid length %d", length)
 	}
@@ -3183,25 +3183,25 @@ func (a *arrayUint16) unmarshal(r *buffer) error {
 
 type arrayInt16 []int16
 
-func (a arrayInt16) marshal(wr *buffer) error {
+func (a arrayInt16) marshal(wr *buffer.Buffer) error {
 	const typeSize = 2
 
 	writeArrayHeader(wr, len(a), typeSize, typeCodeShort)
 
 	for _, element := range a {
-		wr.writeUint16(uint16(element))
+		wr.AppendUint16(uint16(element))
 	}
 
 	return nil
 }
 
-func (a *arrayInt16) unmarshal(r *buffer) error {
+func (a *arrayInt16) unmarshal(r *buffer.Buffer) error {
 	length, err := readArrayHeader(r)
 	if err != nil {
 		return err
 	}
 
-	type_, err := r.readType()
+	type_, err := readType(r)
 	if err != nil {
 		return err
 	}
@@ -3210,7 +3210,7 @@ func (a *arrayInt16) unmarshal(r *buffer) error {
 	}
 
 	const typeSize = 2
-	buf, ok := r.next(length * typeSize)
+	buf, ok := r.Next(length * typeSize)
 	if !ok {
 		return fmt.Errorf("invalid length %d", length)
 	}
@@ -3234,7 +3234,7 @@ func (a *arrayInt16) unmarshal(r *buffer) error {
 
 type arrayUint32 []uint32
 
-func (a arrayUint32) marshal(wr *buffer) error {
+func (a arrayUint32) marshal(wr *buffer.Buffer) error {
 	var (
 		typeSize = 1
 		typeCode = typeCodeSmallUint
@@ -3251,18 +3251,18 @@ func (a arrayUint32) marshal(wr *buffer) error {
 
 	if typeCode == typeCodeUint {
 		for _, element := range a {
-			wr.writeUint32(element)
+			wr.AppendUint32(element)
 		}
 	} else {
 		for _, element := range a {
-			wr.writeByte(byte(element))
+			wr.AppendByte(byte(element))
 		}
 	}
 
 	return nil
 }
 
-func (a *arrayUint32) unmarshal(r *buffer) error {
+func (a *arrayUint32) unmarshal(r *buffer.Buffer) error {
 	length, err := readArrayHeader(r)
 	if err != nil {
 		return err
@@ -3270,7 +3270,7 @@ func (a *arrayUint32) unmarshal(r *buffer) error {
 
 	aa := (*a)[:0]
 
-	type_, err := r.readType()
+	type_, err := readType(r)
 	if err != nil {
 		return err
 	}
@@ -3285,7 +3285,7 @@ func (a *arrayUint32) unmarshal(r *buffer) error {
 			}
 		}
 	case typeCodeSmallUint:
-		buf, ok := r.next(length)
+		buf, ok := r.Next(length)
 		if !ok {
 			return errors.New("invalid length")
 		}
@@ -3301,7 +3301,7 @@ func (a *arrayUint32) unmarshal(r *buffer) error {
 		}
 	case typeCodeUint:
 		const typeSize = 4
-		buf, ok := r.next(length * typeSize)
+		buf, ok := r.Next(length * typeSize)
 		if !ok {
 			return fmt.Errorf("invalid length %d", length)
 		}
@@ -3327,7 +3327,7 @@ func (a *arrayUint32) unmarshal(r *buffer) error {
 
 type arrayInt32 []int32
 
-func (a arrayInt32) marshal(wr *buffer) error {
+func (a arrayInt32) marshal(wr *buffer.Buffer) error {
 	var (
 		typeSize = 1
 		typeCode = typeCodeSmallint
@@ -3344,18 +3344,18 @@ func (a arrayInt32) marshal(wr *buffer) error {
 
 	if typeCode == typeCodeInt {
 		for _, element := range a {
-			wr.writeUint32(uint32(element))
+			wr.AppendUint32(uint32(element))
 		}
 	} else {
 		for _, element := range a {
-			wr.writeByte(byte(element))
+			wr.AppendByte(byte(element))
 		}
 	}
 
 	return nil
 }
 
-func (a *arrayInt32) unmarshal(r *buffer) error {
+func (a *arrayInt32) unmarshal(r *buffer.Buffer) error {
 	length, err := readArrayHeader(r)
 	if err != nil {
 		return err
@@ -3363,13 +3363,13 @@ func (a *arrayInt32) unmarshal(r *buffer) error {
 
 	aa := (*a)[:0]
 
-	type_, err := r.readType()
+	type_, err := readType(r)
 	if err != nil {
 		return err
 	}
 	switch type_ {
 	case typeCodeSmallint:
-		buf, ok := r.next(length)
+		buf, ok := r.Next(length)
 		if !ok {
 			return errors.New("invalid length")
 		}
@@ -3385,7 +3385,7 @@ func (a *arrayInt32) unmarshal(r *buffer) error {
 		}
 	case typeCodeInt:
 		const typeSize = 4
-		buf, ok := r.next(length * typeSize)
+		buf, ok := r.Next(length * typeSize)
 		if !ok {
 			return fmt.Errorf("invalid length %d", length)
 		}
@@ -3411,7 +3411,7 @@ func (a *arrayInt32) unmarshal(r *buffer) error {
 
 type arrayUint64 []uint64
 
-func (a arrayUint64) marshal(wr *buffer) error {
+func (a arrayUint64) marshal(wr *buffer.Buffer) error {
 	var (
 		typeSize = 1
 		typeCode = typeCodeSmallUlong
@@ -3428,18 +3428,18 @@ func (a arrayUint64) marshal(wr *buffer) error {
 
 	if typeCode == typeCodeUlong {
 		for _, element := range a {
-			wr.writeUint64(element)
+			wr.AppendUint64(element)
 		}
 	} else {
 		for _, element := range a {
-			wr.writeByte(byte(element))
+			wr.AppendByte(byte(element))
 		}
 	}
 
 	return nil
 }
 
-func (a *arrayUint64) unmarshal(r *buffer) error {
+func (a *arrayUint64) unmarshal(r *buffer.Buffer) error {
 	length, err := readArrayHeader(r)
 	if err != nil {
 		return err
@@ -3447,7 +3447,7 @@ func (a *arrayUint64) unmarshal(r *buffer) error {
 
 	aa := (*a)[:0]
 
-	type_, err := r.readType()
+	type_, err := readType(r)
 	if err != nil {
 		return err
 	}
@@ -3462,7 +3462,7 @@ func (a *arrayUint64) unmarshal(r *buffer) error {
 			}
 		}
 	case typeCodeSmallUlong:
-		buf, ok := r.next(length)
+		buf, ok := r.Next(length)
 		if !ok {
 			return errors.New("invalid length")
 		}
@@ -3478,7 +3478,7 @@ func (a *arrayUint64) unmarshal(r *buffer) error {
 		}
 	case typeCodeUlong:
 		const typeSize = 8
-		buf, ok := r.next(length * typeSize)
+		buf, ok := r.Next(length * typeSize)
 		if !ok {
 			return errors.New("invalid length")
 		}
@@ -3504,7 +3504,7 @@ func (a *arrayUint64) unmarshal(r *buffer) error {
 
 type arrayInt64 []int64
 
-func (a arrayInt64) marshal(wr *buffer) error {
+func (a arrayInt64) marshal(wr *buffer.Buffer) error {
 	var (
 		typeSize = 1
 		typeCode = typeCodeSmalllong
@@ -3521,18 +3521,18 @@ func (a arrayInt64) marshal(wr *buffer) error {
 
 	if typeCode == typeCodeLong {
 		for _, element := range a {
-			wr.writeUint64(uint64(element))
+			wr.AppendUint64(uint64(element))
 		}
 	} else {
 		for _, element := range a {
-			wr.writeByte(byte(element))
+			wr.AppendByte(byte(element))
 		}
 	}
 
 	return nil
 }
 
-func (a *arrayInt64) unmarshal(r *buffer) error {
+func (a *arrayInt64) unmarshal(r *buffer.Buffer) error {
 	length, err := readArrayHeader(r)
 	if err != nil {
 		return err
@@ -3540,13 +3540,13 @@ func (a *arrayInt64) unmarshal(r *buffer) error {
 
 	aa := (*a)[:0]
 
-	type_, err := r.readType()
+	type_, err := readType(r)
 	if err != nil {
 		return err
 	}
 	switch type_ {
 	case typeCodeSmalllong:
-		buf, ok := r.next(length)
+		buf, ok := r.Next(length)
 		if !ok {
 			return errors.New("invalid length")
 		}
@@ -3562,7 +3562,7 @@ func (a *arrayInt64) unmarshal(r *buffer) error {
 		}
 	case typeCodeLong:
 		const typeSize = 8
-		buf, ok := r.next(length * typeSize)
+		buf, ok := r.Next(length * typeSize)
 		if !ok {
 			return errors.New("invalid length")
 		}
@@ -3588,25 +3588,25 @@ func (a *arrayInt64) unmarshal(r *buffer) error {
 
 type arrayFloat []float32
 
-func (a arrayFloat) marshal(wr *buffer) error {
+func (a arrayFloat) marshal(wr *buffer.Buffer) error {
 	const typeSize = 4
 
 	writeArrayHeader(wr, len(a), typeSize, typeCodeFloat)
 
 	for _, element := range a {
-		wr.writeUint32(math.Float32bits(element))
+		wr.AppendUint32(math.Float32bits(element))
 	}
 
 	return nil
 }
 
-func (a *arrayFloat) unmarshal(r *buffer) error {
+func (a *arrayFloat) unmarshal(r *buffer.Buffer) error {
 	length, err := readArrayHeader(r)
 	if err != nil {
 		return err
 	}
 
-	type_, err := r.readType()
+	type_, err := readType(r)
 	if err != nil {
 		return err
 	}
@@ -3615,7 +3615,7 @@ func (a *arrayFloat) unmarshal(r *buffer) error {
 	}
 
 	const typeSize = 4
-	buf, ok := r.next(length * typeSize)
+	buf, ok := r.Next(length * typeSize)
 	if !ok {
 		return fmt.Errorf("invalid length %d", length)
 	}
@@ -3640,25 +3640,25 @@ func (a *arrayFloat) unmarshal(r *buffer) error {
 
 type arrayDouble []float64
 
-func (a arrayDouble) marshal(wr *buffer) error {
+func (a arrayDouble) marshal(wr *buffer.Buffer) error {
 	const typeSize = 8
 
 	writeArrayHeader(wr, len(a), typeSize, typeCodeDouble)
 
 	for _, element := range a {
-		wr.writeUint64(math.Float64bits(element))
+		wr.AppendUint64(math.Float64bits(element))
 	}
 
 	return nil
 }
 
-func (a *arrayDouble) unmarshal(r *buffer) error {
+func (a *arrayDouble) unmarshal(r *buffer.Buffer) error {
 	length, err := readArrayHeader(r)
 	if err != nil {
 		return err
 	}
 
-	type_, err := r.readType()
+	type_, err := readType(r)
 	if err != nil {
 		return err
 	}
@@ -3667,7 +3667,7 @@ func (a *arrayDouble) unmarshal(r *buffer) error {
 	}
 
 	const typeSize = 8
-	buf, ok := r.next(length * typeSize)
+	buf, ok := r.Next(length * typeSize)
 	if !ok {
 		return fmt.Errorf("invalid length %d", length)
 	}
@@ -3692,7 +3692,7 @@ func (a *arrayDouble) unmarshal(r *buffer) error {
 
 type arrayBool []bool
 
-func (a arrayBool) marshal(wr *buffer) error {
+func (a arrayBool) marshal(wr *buffer.Buffer) error {
 	const typeSize = 1
 
 	writeArrayHeader(wr, len(a), typeSize, typeCodeBool)
@@ -3702,13 +3702,13 @@ func (a arrayBool) marshal(wr *buffer) error {
 		if element {
 			value = 1
 		}
-		wr.writeByte(value)
+		wr.AppendByte(value)
 	}
 
 	return nil
 }
 
-func (a *arrayBool) unmarshal(r *buffer) error {
+func (a *arrayBool) unmarshal(r *buffer.Buffer) error {
 	length, err := readArrayHeader(r)
 	if err != nil {
 		return err
@@ -3721,13 +3721,13 @@ func (a *arrayBool) unmarshal(r *buffer) error {
 		aa = aa[:length]
 	}
 
-	type_, err := r.readType()
+	type_, err := readType(r)
 	if err != nil {
 		return err
 	}
 	switch type_ {
 	case typeCodeBool:
-		buf, ok := r.next(length)
+		buf, ok := r.Next(length)
 		if !ok {
 			return errors.New("invalid length")
 		}
@@ -3758,7 +3758,7 @@ func (a *arrayBool) unmarshal(r *buffer) error {
 
 type arrayString []string
 
-func (a arrayString) marshal(wr *buffer) error {
+func (a arrayString) marshal(wr *buffer.Buffer) error {
 	var (
 		elementType       = typeCodeStr8
 		elementsSizeTotal int
@@ -3779,27 +3779,27 @@ func (a arrayString) marshal(wr *buffer) error {
 
 	if elementType == typeCodeStr32 {
 		for _, element := range a {
-			wr.writeUint32(uint32(len(element)))
-			wr.writeString(element)
+			wr.AppendUint32(uint32(len(element)))
+			wr.AppendString(element)
 		}
 	} else {
 		for _, element := range a {
-			wr.writeByte(byte(len(element)))
-			wr.writeString(element)
+			wr.AppendByte(byte(len(element)))
+			wr.AppendString(element)
 		}
 	}
 
 	return nil
 }
 
-func (a *arrayString) unmarshal(r *buffer) error {
+func (a *arrayString) unmarshal(r *buffer.Buffer) error {
 	length, err := readArrayHeader(r)
 	if err != nil {
 		return err
 	}
 
 	const typeSize = 2 // assume all strings are at least 2 bytes
-	if length*typeSize > int64(r.len()) {
+	if length*typeSize > int64(r.Len()) {
 		return fmt.Errorf("invalid length %d", length)
 	}
 
@@ -3810,19 +3810,19 @@ func (a *arrayString) unmarshal(r *buffer) error {
 		aa = aa[:length]
 	}
 
-	type_, err := r.readType()
+	type_, err := readType(r)
 	if err != nil {
 		return err
 	}
 	switch type_ {
 	case typeCodeStr8:
 		for i := range aa {
-			size, err := r.readByte()
+			size, err := r.ReadByte()
 			if err != nil {
 				return err
 			}
 
-			buf, ok := r.next(int64(size))
+			buf, ok := r.Next(int64(size))
 			if !ok {
 				return errors.New("invalid length")
 			}
@@ -3831,13 +3831,13 @@ func (a *arrayString) unmarshal(r *buffer) error {
 		}
 	case typeCodeStr32:
 		for i := range aa {
-			buf, ok := r.next(4)
+			buf, ok := r.Next(4)
 			if !ok {
 				return errors.New("invalid length")
 			}
 			size := int64(binary.BigEndian.Uint32(buf))
 
-			buf, ok = r.next(size)
+			buf, ok = r.Next(size)
 			if !ok {
 				return errors.New("invalid length")
 			}
@@ -3853,7 +3853,7 @@ func (a *arrayString) unmarshal(r *buffer) error {
 
 type arraySymbol []symbol
 
-func (a arraySymbol) marshal(wr *buffer) error {
+func (a arraySymbol) marshal(wr *buffer.Buffer) error {
 	var (
 		elementType       = typeCodeSym8
 		elementsSizeTotal int
@@ -3870,27 +3870,27 @@ func (a arraySymbol) marshal(wr *buffer) error {
 
 	if elementType == typeCodeSym32 {
 		for _, element := range a {
-			wr.writeUint32(uint32(len(element)))
-			wr.writeString(string(element))
+			wr.AppendUint32(uint32(len(element)))
+			wr.AppendString(string(element))
 		}
 	} else {
 		for _, element := range a {
-			wr.writeByte(byte(len(element)))
-			wr.writeString(string(element))
+			wr.AppendByte(byte(len(element)))
+			wr.AppendString(string(element))
 		}
 	}
 
 	return nil
 }
 
-func (a *arraySymbol) unmarshal(r *buffer) error {
+func (a *arraySymbol) unmarshal(r *buffer.Buffer) error {
 	length, err := readArrayHeader(r)
 	if err != nil {
 		return err
 	}
 
 	const typeSize = 2 // assume all symbols are at least 2 bytes
-	if length*typeSize > int64(r.len()) {
+	if length*typeSize > int64(r.Len()) {
 		return fmt.Errorf("invalid length %d", length)
 	}
 
@@ -3901,19 +3901,19 @@ func (a *arraySymbol) unmarshal(r *buffer) error {
 		aa = aa[:length]
 	}
 
-	type_, err := r.readType()
+	type_, err := readType(r)
 	if err != nil {
 		return err
 	}
 	switch type_ {
 	case typeCodeSym8:
 		for i := range aa {
-			size, err := r.readByte()
+			size, err := r.ReadByte()
 			if err != nil {
 				return err
 			}
 
-			buf, ok := r.next(int64(size))
+			buf, ok := r.Next(int64(size))
 			if !ok {
 				return errors.New("invalid length")
 			}
@@ -3921,13 +3921,13 @@ func (a *arraySymbol) unmarshal(r *buffer) error {
 		}
 	case typeCodeSym32:
 		for i := range aa {
-			buf, ok := r.next(4)
+			buf, ok := r.Next(4)
 			if !ok {
 				return errors.New("invalid length")
 			}
 			size := int64(binary.BigEndian.Uint32(buf))
 
-			buf, ok = r.next(size)
+			buf, ok = r.Next(size)
 			if !ok {
 				return errors.New("invalid length")
 			}
@@ -3943,7 +3943,7 @@ func (a *arraySymbol) unmarshal(r *buffer) error {
 
 type arrayBinary [][]byte
 
-func (a arrayBinary) marshal(wr *buffer) error {
+func (a arrayBinary) marshal(wr *buffer.Buffer) error {
 	var (
 		elementType       = typeCodeVbin8
 		elementsSizeTotal int
@@ -3960,27 +3960,27 @@ func (a arrayBinary) marshal(wr *buffer) error {
 
 	if elementType == typeCodeVbin32 {
 		for _, element := range a {
-			wr.writeUint32(uint32(len(element)))
-			wr.write(element)
+			wr.AppendUint32(uint32(len(element)))
+			wr.Append(element)
 		}
 	} else {
 		for _, element := range a {
-			wr.writeByte(byte(len(element)))
-			wr.write(element)
+			wr.AppendByte(byte(len(element)))
+			wr.Append(element)
 		}
 	}
 
 	return nil
 }
 
-func (a *arrayBinary) unmarshal(r *buffer) error {
+func (a *arrayBinary) unmarshal(r *buffer.Buffer) error {
 	length, err := readArrayHeader(r)
 	if err != nil {
 		return err
 	}
 
 	const typeSize = 2 // assume all binary is at least 2 bytes
-	if length*typeSize > int64(r.len()) {
+	if length*typeSize > int64(r.Len()) {
 		return fmt.Errorf("invalid length %d", length)
 	}
 
@@ -3991,19 +3991,19 @@ func (a *arrayBinary) unmarshal(r *buffer) error {
 		aa = aa[:length]
 	}
 
-	type_, err := r.readType()
+	type_, err := readType(r)
 	if err != nil {
 		return err
 	}
 	switch type_ {
 	case typeCodeVbin8:
 		for i := range aa {
-			size, err := r.readByte()
+			size, err := r.ReadByte()
 			if err != nil {
 				return err
 			}
 
-			buf, ok := r.next(int64(size))
+			buf, ok := r.Next(int64(size))
 			if !ok {
 				return fmt.Errorf("invalid length %d", length)
 			}
@@ -4011,13 +4011,13 @@ func (a *arrayBinary) unmarshal(r *buffer) error {
 		}
 	case typeCodeVbin32:
 		for i := range aa {
-			buf, ok := r.next(4)
+			buf, ok := r.Next(4)
 			if !ok {
 				return errors.New("invalid length")
 			}
 			size := binary.BigEndian.Uint32(buf)
 
-			buf, ok = r.next(int64(size))
+			buf, ok = r.Next(int64(size))
 			if !ok {
 				return errors.New("invalid length")
 			}
@@ -4033,26 +4033,26 @@ func (a *arrayBinary) unmarshal(r *buffer) error {
 
 type arrayTimestamp []time.Time
 
-func (a arrayTimestamp) marshal(wr *buffer) error {
+func (a arrayTimestamp) marshal(wr *buffer.Buffer) error {
 	const typeSize = 8
 
 	writeArrayHeader(wr, len(a), typeSize, typeCodeTimestamp)
 
 	for _, element := range a {
 		ms := element.UnixNano() / int64(time.Millisecond)
-		wr.writeUint64(uint64(ms))
+		wr.AppendUint64(uint64(ms))
 	}
 
 	return nil
 }
 
-func (a *arrayTimestamp) unmarshal(r *buffer) error {
+func (a *arrayTimestamp) unmarshal(r *buffer.Buffer) error {
 	length, err := readArrayHeader(r)
 	if err != nil {
 		return err
 	}
 
-	type_, err := r.readType()
+	type_, err := readType(r)
 	if err != nil {
 		return err
 	}
@@ -4061,7 +4061,7 @@ func (a *arrayTimestamp) unmarshal(r *buffer) error {
 	}
 
 	const typeSize = 8
-	buf, ok := r.next(length * typeSize)
+	buf, ok := r.Next(length * typeSize)
 	if !ok {
 		return fmt.Errorf("invalid length %d", length)
 	}
@@ -4086,25 +4086,25 @@ func (a *arrayTimestamp) unmarshal(r *buffer) error {
 
 type arrayUUID []UUID
 
-func (a arrayUUID) marshal(wr *buffer) error {
+func (a arrayUUID) marshal(wr *buffer.Buffer) error {
 	const typeSize = 16
 
 	writeArrayHeader(wr, len(a), typeSize, typeCodeUUID)
 
 	for _, element := range a {
-		wr.write(element[:])
+		wr.Append(element[:])
 	}
 
 	return nil
 }
 
-func (a *arrayUUID) unmarshal(r *buffer) error {
+func (a *arrayUUID) unmarshal(r *buffer.Buffer) error {
 	length, err := readArrayHeader(r)
 	if err != nil {
 		return err
 	}
 
-	type_, err := r.readType()
+	type_, err := readType(r)
 	if err != nil {
 		return err
 	}
@@ -4113,7 +4113,7 @@ func (a *arrayUUID) unmarshal(r *buffer) error {
 	}
 
 	const typeSize = 16
-	buf, ok := r.next(length * typeSize)
+	buf, ok := r.Next(length * typeSize)
 	if !ok {
 		return fmt.Errorf("invalid length %d", length)
 	}
@@ -4139,22 +4139,22 @@ func (a *arrayUUID) unmarshal(r *buffer) error {
 
 type list []interface{}
 
-func (l list) marshal(wr *buffer) error {
+func (l list) marshal(wr *buffer.Buffer) error {
 	length := len(l)
 
 	// type
 	if length == 0 {
-		wr.writeByte(byte(typeCodeList0))
+		wr.AppendByte(byte(typeCodeList0))
 		return nil
 	}
-	wr.writeByte(byte(typeCodeList32))
+	wr.AppendByte(byte(typeCodeList32))
 
 	// size
-	sizeIdx := wr.len()
-	wr.write([]byte{0, 0, 0, 0})
+	sizeIdx := wr.Len()
+	wr.Append([]byte{0, 0, 0, 0})
 
 	// length
-	wr.writeUint32(uint32(length))
+	wr.AppendUint32(uint32(length))
 
 	for _, element := range l {
 		err := marshal(wr, element)
@@ -4164,19 +4164,19 @@ func (l list) marshal(wr *buffer) error {
 	}
 
 	// overwrite size
-	binary.BigEndian.PutUint32(wr.bytes()[sizeIdx:], uint32(wr.len()-(sizeIdx+4)))
+	binary.BigEndian.PutUint32(wr.Bytes()[sizeIdx:], uint32(wr.Len()-(sizeIdx+4)))
 
 	return nil
 }
 
-func (l *list) unmarshal(r *buffer) error {
+func (l *list) unmarshal(r *buffer.Buffer) error {
 	length, err := readListHeader(r)
 	if err != nil {
 		return err
 	}
 
 	// assume that all types are at least 1 byte
-	if length > int64(r.len()) {
+	if length > int64(r.Len()) {
 		return fmt.Errorf("invalid length %d", length)
 	}
 
@@ -4201,12 +4201,12 @@ func (l *list) unmarshal(r *buffer) error {
 // multiSymbol can decode a single symbol or an array.
 type multiSymbol []symbol
 
-func (ms multiSymbol) marshal(wr *buffer) error {
+func (ms multiSymbol) marshal(wr *buffer.Buffer) error {
 	return marshal(wr, []symbol(ms))
 }
 
-func (ms *multiSymbol) unmarshal(r *buffer) error {
-	type_, err := r.peekType()
+func (ms *multiSymbol) unmarshal(r *buffer.Buffer) error {
+	type_, err := peekType(r)
 	if err != nil {
 		return err
 	}

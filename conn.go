@@ -10,6 +10,8 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"github.com/Azure/go-amqp/internal/buffer"
 )
 
 // Default connection options
@@ -202,8 +204,8 @@ type conn struct {
 	connReaderRun chan func() // functions to be run by conn reader (set deadline on conn to run)
 
 	// connWriter
-	txFrame chan frame // AMQP frames to be sent by connWriter
-	txBuf   buffer     // buffer for marshaling frames before transmitting
+	txFrame chan frame    // AMQP frames to be sent by connWriter
+	txBuf   buffer.Buffer // buffer for marshaling frames before transmitting
 	txDone  chan struct{}
 }
 
@@ -441,7 +443,7 @@ func (c *conn) mux() {
 func (c *conn) connReader() {
 	defer close(c.rxDone)
 
-	buf := new(buffer)
+	buf := &buffer.Buffer{}
 
 	var (
 		negotiating     = true      // true during conn establishment, check for protoHeaders
@@ -452,21 +454,21 @@ func (c *conn) connReader() {
 	for {
 		switch {
 		// Cheaply reuse free buffer space when fully read.
-		case buf.len() == 0:
-			buf.reset()
+		case buf.Len() == 0:
+			buf.Reset()
 
 		// Prevent excessive/unbounded growth by shifting data to beginning of buffer.
-		case int64(buf.i) > int64(c.maxFrameSize):
-			buf.reclaim()
+		case int64(buf.Size()) > int64(c.maxFrameSize):
+			buf.Reclaim()
 		}
 
 		// need to read more if buf doesn't contain the complete frame
 		// or there's not enough in buf to parse the header
-		if frameInProgress || buf.len() < frameHeaderSize {
+		if frameInProgress || buf.Len() < frameHeaderSize {
 			if c.idleTimeout > 0 {
 				_ = c.net.SetReadDeadline(time.Now().Add(c.idleTimeout))
 			}
-			err := buf.readFromOnce(c.net)
+			err := buf.ReadFromOnce(c.net)
 			if err != nil {
 				select {
 				// check if error was due to close in progress
@@ -487,12 +489,12 @@ func (c *conn) connReader() {
 		}
 
 		// read more if buf doesn't contain enough to parse the header
-		if buf.len() < frameHeaderSize {
+		if buf.Len() < frameHeaderSize {
 			continue
 		}
 
 		// during negotiation, check for proto frames
-		if negotiating && bytes.Equal(buf.bytes()[:4], []byte{'A', 'M', 'Q', 'P'}) {
+		if negotiating && bytes.Equal(buf.Bytes()[:4], []byte{'A', 'M', 'Q', 'P'}) {
 			p, err := parseProtoHeader(buf)
 			if err != nil {
 				c.connErr <- err
@@ -534,7 +536,7 @@ func (c *conn) connReader() {
 		bodySize := int64(currentHeader.Size - frameHeaderSize)
 
 		// the full frame has been received
-		if int64(buf.len()) < bodySize {
+		if int64(buf.Len()) < bodySize {
 			continue
 		}
 		frameInProgress = false
@@ -545,13 +547,13 @@ func (c *conn) connReader() {
 		}
 
 		// parse the frame
-		b, ok := buf.next(bodySize)
+		b, ok := buf.Next(bodySize)
 		if !ok {
 			c.connErr <- io.EOF
 			return
 		}
 
-		parsedBody, err := parseFrameBody(&buffer{b: b})
+		parsedBody, err := parseFrameBody(buffer.New(b))
 		if err != nil {
 			c.connErr <- err
 			return
@@ -638,20 +640,20 @@ func (c *conn) writeFrame(fr frame) error {
 	}
 
 	// writeFrame into txBuf
-	c.txBuf.reset()
+	c.txBuf.Reset()
 	err := writeFrame(&c.txBuf, fr)
 	if err != nil {
 		return err
 	}
 
 	// validate the frame isn't exceeding peer's max frame size
-	requiredFrameSize := c.txBuf.len()
+	requiredFrameSize := c.txBuf.Len()
 	if uint64(requiredFrameSize) > uint64(c.peerMaxFrameSize) {
 		return fmt.Errorf("%T frame size %d larger than peer's max frame size %d", fr, requiredFrameSize, c.peerMaxFrameSize)
 	}
 
 	// write to network
-	_, err = c.net.Write(c.txBuf.bytes())
+	_, err = c.net.Write(c.txBuf.Bytes())
 	return err
 }
 

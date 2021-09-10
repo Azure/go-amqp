@@ -14,6 +14,7 @@ import (
 
 	"github.com/Azure/go-amqp/internal/buffer"
 	"github.com/Azure/go-amqp/internal/encoding"
+	"github.com/Azure/go-amqp/internal/frames"
 )
 
 // Default connection options
@@ -202,14 +203,14 @@ type conn struct {
 	closeMuxOnce sync.Once
 
 	// connReader
-	rxProto       chan protoHeader // protoHeaders received by connReader
-	rxFrame       chan frame       // AMQP frames received by connReader
+	rxProto       chan protoHeader  // protoHeaders received by connReader
+	rxFrame       chan frames.Frame // AMQP frames received by connReader
 	rxDone        chan struct{}
 	connReaderRun chan func() // functions to be run by conn reader (set deadline on conn to run)
 
 	// connWriter
-	txFrame chan frame    // AMQP frames to be sent by connWriter
-	txBuf   buffer.Buffer // buffer for marshaling frames before transmitting
+	txFrame chan frames.Frame // AMQP frames to be sent by connWriter
+	txBuf   buffer.Buffer     // buffer for marshaling frames before transmitting
 	txDone  chan struct{}
 }
 
@@ -230,12 +231,12 @@ func newConn(netConn net.Conn, opts ...ConnOption) (*conn, error) {
 		connErr:          make(chan error, 2), // buffered to ensure connReader/Writer won't leak
 		closeMux:         make(chan struct{}),
 		rxProto:          make(chan protoHeader),
-		rxFrame:          make(chan frame),
+		rxFrame:          make(chan frames.Frame),
 		rxDone:           make(chan struct{}),
 		connReaderRun:    make(chan func(), 1), // buffered to allow queueing function before interrupt
 		newSession:       make(chan newSessionResp),
 		delSession:       make(chan *Session),
-		txFrame:          make(chan frame),
+		txFrame:          make(chan frames.Frame),
 		txDone:           make(chan struct{}),
 	}
 
@@ -365,9 +366,9 @@ func (c *conn) mux() {
 				ok      bool
 			)
 
-			switch body := fr.body.(type) {
+			switch body := fr.Body.(type) {
 			// Server initiated close.
-			case *performClose:
+			case *frames.PerformClose:
 				if body.Error != nil {
 					c.err = body.Error
 				} else {
@@ -376,7 +377,7 @@ func (c *conn) mux() {
 				return
 
 			// RemoteChannel should be used when frame is Begin
-			case *performBegin:
+			case *frames.PerformBegin:
 				if body.RemoteChannel == nil {
 					break
 				}
@@ -385,15 +386,15 @@ func (c *conn) mux() {
 					break
 				}
 
-				session.remoteChannel = fr.channel
-				sessionsByRemoteChannel[fr.channel] = session
+				session.remoteChannel = fr.Channel
+				sessionsByRemoteChannel[fr.Channel] = session
 
 			default:
-				session, ok = sessionsByRemoteChannel[fr.channel]
+				session, ok = sessionsByRemoteChannel[fr.Channel]
 			}
 
 			if !ok {
-				c.err = fmt.Errorf("unexpected frame: %#v", fr.body)
+				c.err = fmt.Errorf("unexpected frame: %#v", fr.Body)
 				continue
 			}
 
@@ -567,7 +568,7 @@ func (c *conn) connReader() {
 		select {
 		case <-c.done:
 			return
-		case c.rxFrame <- frame{channel: currentHeader.Channel, body: parsedBody}:
+		case c.rxFrame <- frames.Frame{Channel: currentHeader.Channel, Body: parsedBody}:
 		}
 	}
 }
@@ -607,8 +608,8 @@ func (c *conn) connWriter() {
 		// frame write request
 		case fr := <-c.txFrame:
 			err = c.writeFrame(fr)
-			if err == nil && fr.done != nil {
-				close(fr.done)
+			if err == nil && fr.Done != nil {
+				close(fr.Done)
 			}
 
 		// keepalive timer
@@ -625,11 +626,11 @@ func (c *conn) connWriter() {
 		// connection complete
 		case <-c.done:
 			// send close
-			cls := &performClose{}
+			cls := &frames.PerformClose{}
 			debug(1, "TX: %s", cls)
-			_ = c.writeFrame(frame{
-				type_: frameTypeAMQP,
-				body:  cls,
+			_ = c.writeFrame(frames.Frame{
+				Type: frameTypeAMQP,
+				Body: cls,
 			})
 			return
 		}
@@ -638,7 +639,7 @@ func (c *conn) connWriter() {
 
 // writeFrame writes a frame to the network, may only be used
 // by connWriter after initial negotiation.
-func (c *conn) writeFrame(fr frame) error {
+func (c *conn) writeFrame(fr frames.Frame) error {
 	if c.connectTimeout != 0 {
 		_ = c.net.SetWriteDeadline(time.Now().Add(c.connectTimeout))
 	}
@@ -676,7 +677,7 @@ var keepaliveFrame = []byte{0x00, 0x00, 0x00, 0x08, 0x02, 0x00, 0x00, 0x00}
 
 // wantWriteFrame is used by sessions and links to send frame to
 // connWriter.
-func (c *conn) wantWriteFrame(fr frame) error {
+func (c *conn) wantWriteFrame(fr frames.Frame) error {
 	select {
 	case c.txFrame <- fr:
 		return nil
@@ -807,7 +808,7 @@ func (c *conn) startTLS() stateFunc {
 // openAMQP round trips the AMQP open performative
 func (c *conn) openAMQP() stateFunc {
 	// send open frame
-	open := &performOpen{
+	open := &frames.PerformOpen{
 		ContainerID:  c.containerID,
 		Hostname:     c.hostname,
 		MaxFrameSize: c.maxFrameSize,
@@ -816,10 +817,10 @@ func (c *conn) openAMQP() stateFunc {
 		Properties:   c.properties,
 	}
 	debug(1, "TX: %s", open)
-	c.err = c.writeFrame(frame{
-		type_:   frameTypeAMQP,
-		body:    open,
-		channel: 0,
+	c.err = c.writeFrame(frames.Frame{
+		Type:    frameTypeAMQP,
+		Body:    open,
+		Channel: 0,
 	})
 	if c.err != nil {
 		return nil
@@ -831,9 +832,9 @@ func (c *conn) openAMQP() stateFunc {
 		c.err = err
 		return nil
 	}
-	o, ok := fr.body.(*performOpen)
+	o, ok := fr.Body.(*frames.PerformOpen)
 	if !ok {
-		c.err = fmt.Errorf("unexpected frame type %T", fr.body)
+		c.err = fmt.Errorf("unexpected frame type %T", fr.Body)
 		return nil
 	}
 	debug(1, "RX: %s", o)
@@ -863,9 +864,9 @@ func (c *conn) negotiateSASL() stateFunc {
 		c.err = err
 		return nil
 	}
-	sm, ok := fr.body.(*saslMechanisms)
+	sm, ok := fr.Body.(*frames.SASLMechanisms)
 	if !ok {
-		c.err = fmt.Errorf("unexpected frame type %T", fr.body)
+		c.err = fmt.Errorf("unexpected frame type %T", fr.Body)
 		return nil
 	}
 	debug(1, "RX: %s", sm)
@@ -894,15 +895,15 @@ func (c *conn) saslOutcome() stateFunc {
 		c.err = err
 		return nil
 	}
-	so, ok := fr.body.(*saslOutcome)
+	so, ok := fr.Body.(*frames.SASLOutcome)
 	if !ok {
-		c.err = fmt.Errorf("unexpected frame type %T", fr.body)
+		c.err = fmt.Errorf("unexpected frame type %T", fr.Body)
 		return nil
 	}
 	debug(1, "RX: %s", so)
 
 	// check if auth succeeded
-	if so.Code != codeSASLOK {
+	if so.Code != encoding.CodeSASLOK {
 		c.err = fmt.Errorf("SASL PLAIN auth failed with code %#00x: %s", so.Code, so.AdditionalData) // implement Stringer for so.Code
 		return nil
 	}
@@ -915,13 +916,13 @@ func (c *conn) saslOutcome() stateFunc {
 // readFrame is used during connection establishment to read a single frame.
 //
 // After setup, conn.mux handles incoming frames.
-func (c *conn) readFrame() (frame, error) {
+func (c *conn) readFrame() (frames.Frame, error) {
 	var deadline <-chan time.Time
 	if c.connectTimeout != 0 {
 		deadline = time.After(c.connectTimeout)
 	}
 
-	var fr frame
+	var fr frames.Frame
 	select {
 	case fr = <-c.rxFrame:
 		return fr, nil
@@ -1020,7 +1021,7 @@ func parseProtoHeader(r *buffer.Buffer) (protoHeader, error) {
 }
 
 // parseFrameBody reads and unmarshals an AMQP frame.
-func parseFrameBody(r *buffer.Buffer) (frameBody, error) {
+func parseFrameBody(r *buffer.Buffer) (frames.FrameBody, error) {
 	payload := r.Bytes()
 
 	if r.Len() < 3 || payload[0] != 0 || encoding.AMQPType(payload[1]) != encoding.TypeCodeSmallUlong {
@@ -1029,51 +1030,51 @@ func parseFrameBody(r *buffer.Buffer) (frameBody, error) {
 
 	switch pType := encoding.AMQPType(payload[2]); pType {
 	case encoding.TypeCodeOpen:
-		t := new(performOpen)
+		t := new(frames.PerformOpen)
 		err := t.Unmarshal(r)
 		return t, err
 	case encoding.TypeCodeBegin:
-		t := new(performBegin)
+		t := new(frames.PerformBegin)
 		err := t.Unmarshal(r)
 		return t, err
 	case encoding.TypeCodeAttach:
-		t := new(performAttach)
+		t := new(frames.PerformAttach)
 		err := t.Unmarshal(r)
 		return t, err
 	case encoding.TypeCodeFlow:
-		t := new(performFlow)
+		t := new(frames.PerformFlow)
 		err := t.Unmarshal(r)
 		return t, err
 	case encoding.TypeCodeTransfer:
-		t := new(performTransfer)
+		t := new(frames.PerformTransfer)
 		err := t.Unmarshal(r)
 		return t, err
 	case encoding.TypeCodeDisposition:
-		t := new(performDisposition)
+		t := new(frames.PerformDisposition)
 		err := t.Unmarshal(r)
 		return t, err
 	case encoding.TypeCodeDetach:
-		t := new(performDetach)
+		t := new(frames.PerformDetach)
 		err := t.Unmarshal(r)
 		return t, err
 	case encoding.TypeCodeEnd:
-		t := new(performEnd)
+		t := new(frames.PerformEnd)
 		err := t.Unmarshal(r)
 		return t, err
 	case encoding.TypeCodeClose:
-		t := new(performClose)
+		t := new(frames.PerformClose)
 		err := t.Unmarshal(r)
 		return t, err
 	case encoding.TypeCodeSASLMechanism:
-		t := new(saslMechanisms)
+		t := new(frames.SASLMechanisms)
 		err := t.Unmarshal(r)
 		return t, err
 	case encoding.TypeCodeSASLChallenge:
-		t := new(saslChallenge)
+		t := new(frames.SASLChallenge)
 		err := t.Unmarshal(r)
 		return t, err
 	case encoding.TypeCodeSASLOutcome:
-		t := new(saslOutcome)
+		t := new(frames.SASLOutcome)
 		err := t.Unmarshal(r)
 		return t, err
 	default:
@@ -1082,17 +1083,17 @@ func parseFrameBody(r *buffer.Buffer) (frameBody, error) {
 }
 
 // writesFrame encodes fr into buf.
-func writeFrame(buf *buffer.Buffer, fr frame) error {
+func writeFrame(buf *buffer.Buffer, fr frames.Frame) error {
 	// write header
 	buf.Append([]byte{
 		0, 0, 0, 0, // size, overwrite later
-		2,        // doff, see frameHeader.DataOffset comment
-		fr.type_, // frame type
+		2,       // doff, see frameHeader.DataOffset comment
+		fr.Type, // frame type
 	})
-	buf.AppendUint16(fr.channel) // channel
+	buf.AppendUint16(fr.Channel) // channel
 
 	// write AMQP frame body
-	err := encoding.Marshal(buf, fr.body)
+	err := encoding.Marshal(buf, fr.Body)
 	if err != nil {
 		return err
 	}

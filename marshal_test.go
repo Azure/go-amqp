@@ -14,18 +14,19 @@ import (
 
 	"github.com/Azure/go-amqp/internal/buffer"
 	"github.com/Azure/go-amqp/internal/encoding"
+	"github.com/Azure/go-amqp/internal/frames"
 )
 
 var exampleFrames = []struct {
 	label string
-	frame frame
+	frame frames.Frame
 }{
 	{
 		label: "transfer",
-		frame: frame{
-			type_:   frameTypeAMQP,
-			channel: 10,
-			body: &performTransfer{
+		frame: frames.Frame{
+			Type:    frameTypeAMQP,
+			Channel: 10,
+			Body: &frames.PerformTransfer{
 				Handle:             34983,
 				DeliveryID:         uint32Ptr(564),
 				DeliveryTag:        []byte("foo tag"),
@@ -59,19 +60,19 @@ func TestFrameMarshalUnmarshal(t *testing.T) {
 			}
 
 			want := tt.frame
-			if header.Channel != want.channel {
-				t.Errorf("Expected channel to be %d, but it is %d", want.channel, header.Channel)
+			if header.Channel != want.Channel {
+				t.Errorf("Expected channel to be %d, but it is %d", want.Channel, header.Channel)
 			}
-			if header.FrameType != want.type_ {
-				t.Errorf("Expected channel to be %d, but it is %d", want.type_, header.FrameType)
+			if header.FrameType != want.Type {
+				t.Errorf("Expected channel to be %d, but it is %d", want.Type, header.FrameType)
 			}
 
 			payload, err := parseFrameBody(&buf)
 			if err != nil {
 				t.Fatalf("%+v", err)
 			}
-			if !testEqual(want.body, payload) {
-				t.Errorf("Roundtrip produced different results:\n %s", testDiff(want.body, payload))
+			if !testEqual(want.Body, payload) {
+				t.Errorf("Roundtrip produced different results:\n %s", testDiff(want.Body, payload))
 			}
 		})
 	}
@@ -263,7 +264,7 @@ var (
 	remoteChannel = uint16(4321)
 
 	protoTypes = []interface{}{
-		&performOpen{
+		&frames.PerformOpen{
 			ContainerID:         "foo",
 			Hostname:            "bar.host",
 			MaxFrameSize:        4200,
@@ -276,7 +277,7 @@ var (
 				"fooProp": int32(45),
 			},
 		},
-		&performBegin{
+		&frames.PerformBegin{
 			RemoteChannel:       &remoteChannel,
 			NextOutgoingID:      730000,
 			IncomingWindow:      9876654,
@@ -288,13 +289,13 @@ var (
 				"fooProp": int32(45),
 			},
 		},
-		&performAttach{
+		&frames.PerformAttach{
 			Name:               "fooName",
 			Handle:             435982,
-			Role:               roleSender,
+			Role:               encoding.RoleSender,
 			SenderSettleMode:   sndSettle(ModeMixed),
 			ReceiverSettleMode: rcvSettle(ModeSecond),
-			Source: &source{
+			Source: &frames.Source{
 				Address:      "fooAddr",
 				Durable:      DurabilityUnsettledState,
 				ExpiryPolicy: ExpiryLinkDetach,
@@ -313,7 +314,7 @@ var (
 				Outcomes:     []encoding.Symbol{"amqp:accepted:list"},
 				Capabilities: []encoding.Symbol{"barCap"},
 			},
-			Target: &target{
+			Target: &frames.Target{
 				Address:      "fooAddr",
 				Durable:      DurabilityUnsettledState,
 				ExpiryPolicy: ExpiryLinkDetach,
@@ -336,11 +337,11 @@ var (
 				"fooProp": int32(45),
 			},
 		},
-		role(true),
+		encoding.Role(true),
 		&encoding.Unsettled{
 			"fooDeliveryTag": &encoding.StateAccepted{},
 		},
-		&source{
+		&frames.Source{
 			Address:      "fooAddr",
 			Durable:      DurabilityUnsettledState,
 			ExpiryPolicy: ExpiryLinkDetach,
@@ -359,7 +360,7 @@ var (
 			Outcomes:     []encoding.Symbol{"amqp:accepted:list"},
 			Capabilities: []encoding.Symbol{"barCap"},
 		},
-		&target{
+		&frames.Target{
 			Address:      "fooAddr",
 			Durable:      DurabilityUnsettledState,
 			ExpiryPolicy: ExpiryLinkDetach,
@@ -370,7 +371,7 @@ var (
 			},
 			Capabilities: []encoding.Symbol{"barCap"},
 		},
-		&performFlow{
+		&frames.PerformFlow{
 			NextIncomingID: uint32Ptr(354),
 			IncomingWindow: 4352,
 			NextOutgoingID: 85324,
@@ -385,7 +386,7 @@ var (
 				"fooProp": int32(45),
 			},
 		},
-		&performTransfer{
+		&frames.PerformTransfer{
 			Handle:             34983,
 			DeliveryID:         uint32Ptr(564),
 			DeliveryTag:        []byte("foo tag"),
@@ -399,15 +400,15 @@ var (
 			Batchable:          true,
 			Payload:            []byte("very important payload"),
 		},
-		&performDisposition{
-			Role:      roleSender,
+		&frames.PerformDisposition{
+			Role:      encoding.RoleSender,
 			First:     5644444,
 			Last:      uint32Ptr(423),
 			Settled:   true,
 			State:     &encoding.StateReleased{},
 			Batchable: true,
 		},
-		&performDetach{
+		&frames.PerformDetach{
 			Handle: 4352,
 			Closed: true,
 			Error: &Error{
@@ -419,7 +420,7 @@ var (
 				},
 			},
 		},
-		&performDetach{
+		&frames.PerformDetach{
 			Handle: 4352,
 			Closed: true,
 			Error: &Error{
@@ -443,7 +444,7 @@ var (
 				"and":   uint16(875),
 			},
 		},
-		&performEnd{
+		&frames.PerformEnd{
 			Error: &Error{
 				Condition:   ErrorNotAllowed,
 				Description: "foo description",
@@ -453,7 +454,7 @@ var (
 				},
 			},
 		},
-		&performClose{
+		&frames.PerformClose{
 			Error: &Error{
 				Condition:   ErrorNotAllowed,
 				Description: "foo description",
@@ -552,22 +553,22 @@ var (
 		encoding.LifetimePolicy(encoding.TypeCodeDeleteOnClose),
 		SenderSettleMode(1),
 		ReceiverSettleMode(1),
-		&saslInit{
+		&frames.SASLInit{
 			Mechanism:       "FOO",
 			InitialResponse: []byte("BAR\x00RESPONSE\x00"),
 			Hostname:        "me",
 		},
-		&saslMechanisms{
+		&frames.SASLMechanisms{
 			Mechanisms: []encoding.Symbol{"FOO", "BAR", "BAZ"},
 		},
-		&saslChallenge{
+		&frames.SASLChallenge{
 			Challenge: []byte("BAR\x00CHALLENGE\x00"),
 		},
-		&saslResponse{
+		&frames.SASLResponse{
 			Response: []byte("BAR\x00RESPONSE\x00"),
 		},
-		&saslOutcome{
-			Code:           codeSASLSysPerm,
+		&frames.SASLOutcome{
+			Code:           encoding.CodeSASLSysPerm,
 			AdditionalData: []byte("here's some info for you..."),
 		},
 		encoding.Milliseconds(10 * time.Second),

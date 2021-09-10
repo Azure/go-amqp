@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Azure/go-amqp/internal/frames"
 	"github.com/stretchr/testify/require"
 )
 
@@ -64,7 +65,7 @@ func TestLinkFlowThatNeedsToReplenishCredits(t *testing.T) {
 	txFrame := <-l.session.tx
 
 	switch frame := txFrame.(type) {
-	case *performFlow:
+	case *frames.PerformFlow:
 		require.False(t, frame.Drain)
 		// replenished credits: l.receiver.maxCredit-uint32(l.countUnsettled())
 		require.EqualValues(t, 2, *frame.LinkCredit)
@@ -132,7 +133,7 @@ func TestLinkFlowWithManualCreditor(t *testing.T) {
 	txFrame := <-l.session.tx
 
 	switch frame := txFrame.(type) {
-	case *performFlow:
+	case *frames.PerformFlow:
 		require.False(t, frame.Drain)
 		require.EqualValues(t, 100+1, *frame.LinkCredit)
 	default:
@@ -155,7 +156,7 @@ func TestLinkFlowWithDrain(t *testing.T) {
 		txFrame := <-l.session.tx
 
 		switch frame := txFrame.(type) {
-		case *performFlow:
+		case *frames.PerformFlow:
 			require.True(t, frame.Drain)
 			require.EqualValues(t, 1, *frame.LinkCredit)
 		default:
@@ -163,7 +164,7 @@ func TestLinkFlowWithDrain(t *testing.T) {
 		}
 
 		// simulate the return of the flow from the service
-		err := l.muxHandleFrame(&performFlow{
+		err := l.muxHandleFrame(&frames.PerformFlow{
 			Drain: true,
 		})
 
@@ -195,17 +196,17 @@ func TestLinkFlowWithManualCreditorAndNoFlowNeeded(t *testing.T) {
 
 func newTestLink(t *testing.T) *link {
 	l := &link{
-		source: &source{},
+		source: &frames.Source{},
 		receiver: &Receiver{
 			// adding just enough so the debug() print will still work...
 			// debug(1, "FLOW Link Mux half: source: %s, inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s", l.source.Address, len(l.receiver.inFlight.m), l.linkCredit, l.deliveryCount, len(l.messages), l.countUnsettled(), l.receiver.maxCredit, l.receiverSettleMode.String())
 			inFlight: inFlight{},
 		},
 		session: &Session{
-			tx:   make(chan frameBody, 100),
+			tx:   make(chan frames.FrameBody, 100),
 			done: make(chan struct{}),
 		},
-		rx:            make(chan frameBody, 100),
+		rx:            make(chan frames.FrameBody, 100),
 		receiverReady: make(chan struct{}, 1),
 	}
 

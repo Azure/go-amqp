@@ -128,7 +128,7 @@ func Unmarshal(r *buffer.Buffer, i interface{}) error {
 		}
 		*t = val
 	case *bool:
-		b, err := ReadBool(r)
+		b, err := readBool(r)
 		if err != nil {
 			return err
 		}
@@ -494,7 +494,7 @@ func ReadAny(r *buffer.Buffer) (interface{}, error) {
 
 	// bool
 	case TypeCodeBool, TypeCodeBoolTrue, TypeCodeBoolFalse:
-		return ReadBool(r)
+		return readBool(r)
 
 	// uint
 	case TypeCodeUbyte:
@@ -1038,7 +1038,7 @@ func readDouble(r *buffer.Buffer) (float64, error) {
 	return math.Float64frombits(bits), err
 }
 
-func ReadBool(r *buffer.Buffer) (bool, error) {
+func readBool(r *buffer.Buffer) (bool, error) {
 	type_, err := readType(r)
 	if err != nil {
 		return false, err

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Azure/go-amqp/internal/encoding"
+	"github.com/Azure/go-amqp/internal/frames"
 )
 
 func TestLinkOptions(t *testing.T) {
@@ -12,7 +13,7 @@ func TestLinkOptions(t *testing.T) {
 		label string
 		opts  []LinkOption
 
-		wantSource     *source
+		wantSource     *frames.Source
 		wantProperties map[encoding.Symbol]interface{}
 	}{
 		{
@@ -30,7 +31,7 @@ func TestLinkOptions(t *testing.T) {
 				LinkSourceFilter("com.microsoft:session-filter", 0x00000137000000C, "123"),
 			},
 
-			wantSource: &source{
+			wantSource: &frames.Source{
 				Filter: map[encoding.Symbol]*encoding.DescribedType{
 					"apache.org:selector-filter:string": {
 						Descriptor: binary.BigEndian.Uint64([]byte{0x00, 0x00, 0x46, 0x8C, 0x00, 0x00, 0x00, 0x04}),
@@ -55,7 +56,7 @@ func TestLinkOptions(t *testing.T) {
 				LinkSourceFilter("com.microsoft:session-filter", 0x00000137000000C, nil),
 			},
 
-			wantSource: &source{
+			wantSource: &frames.Source{
 				Filter: map[encoding.Symbol]*encoding.DescribedType{
 					"com.microsoft:session-filter": {
 						Descriptor: binary.BigEndian.Uint64([]byte{0x00, 0x00, 0x00, 0x13, 0x70, 0x00, 0x00, 0x0C}),
@@ -69,7 +70,7 @@ func TestLinkOptions(t *testing.T) {
 			opts: []LinkOption{
 				LinkSourceCapabilities("cap1", "cap2", "cap3"),
 			},
-			wantSource: &source{
+			wantSource: &frames.Source{
 				Capabilities: []encoding.Symbol{"cap1", "cap2", "cap3"},
 			},
 		},

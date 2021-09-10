@@ -10,43 +10,20 @@ import (
 
 	"github.com/Azure/go-amqp/internal/buffer"
 	"github.com/Azure/go-amqp/internal/encoding"
+	"github.com/Azure/go-amqp/internal/frames"
 )
-
-type role bool
-
-const (
-	roleSender   role = false
-	roleReceiver role = true
-)
-
-func (rl role) String() string {
-	if rl {
-		return "Receiver"
-	}
-	return "Sender"
-}
-
-func (rl *role) Unmarshal(r *buffer.Buffer) error {
-	b, err := encoding.ReadBool(r)
-	*rl = role(b)
-	return err
-}
-
-func (rl role) Marshal(wr *buffer.Buffer) error {
-	return encoding.Marshal(wr, (bool)(rl))
-}
 
 // link is a unidirectional route.
 //
 // May be used for sending or receiving.
 type link struct {
-	key          linkKey              // Name and direction
-	handle       uint32               // our handle
-	remoteHandle uint32               // remote's handle
-	dynamicAddr  bool                 // request a dynamic link address from the server
-	rx           chan frameBody       // sessions sends frames for this link on this channel
-	transfers    chan performTransfer // sender uses to send transfer frames
-	closeOnce    sync.Once            // closeOnce protects close from being closed multiple times
+	key          linkKey                     // Name and direction
+	handle       uint32                      // our handle
+	remoteHandle uint32                      // remote's handle
+	dynamicAddr  bool                        // request a dynamic link address from the server
+	rx           chan frames.FrameBody       // sessions sends frames for this link on this channel
+	transfers    chan frames.PerformTransfer // sender uses to send transfer frames
+	closeOnce    sync.Once                   // closeOnce protects close from being closed multiple times
 
 	// NOTE: `close` and `detached` BOTH need to be checked to determine if the link
 	// is not in a "closed" state
@@ -61,8 +38,8 @@ type link struct {
 	detachError   *Error     // error to send to remote on detach, set by closeWithError
 	session       *Session   // parent session
 	receiver      *Receiver  // allows link options to modify Receiver
-	source        *source
-	target        *target
+	source        *frames.Source
+	target        *frames.Target
 	properties    map[encoding.Symbol]interface{} // additional properties sent upon link attach
 	// Indicates whether we should allow detaches on disposition errors or not.
 	// Some AMQP servers (like Event Hubs) benefit from keeping the link open on disposition errors
@@ -97,7 +74,7 @@ type link struct {
 
 func newLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 	l := &link{
-		key:                      linkKey{randString(40), role(r != nil)},
+		key:                      linkKey{randString(40), encoding.Role(r != nil)},
 		session:                  s,
 		receiver:                 r,
 		close:                    make(chan struct{}),
@@ -130,12 +107,12 @@ func attachLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 	// attempting to send to a slow reader
 	if isReceiver {
 		if l.receiver.manualCreditor != nil {
-			l.rx = make(chan frameBody, l.receiver.maxCredit)
+			l.rx = make(chan frames.FrameBody, l.receiver.maxCredit)
 		} else {
-			l.rx = make(chan frameBody, l.linkCredit)
+			l.rx = make(chan frames.FrameBody, l.linkCredit)
 		}
 	} else {
-		l.rx = make(chan frameBody, 1)
+		l.rx = make(chan frames.FrameBody, 1)
 	}
 
 	// request handle from Session.mux
@@ -157,7 +134,7 @@ func attachLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 		return nil, l.err
 	}
 
-	attach := &performAttach{
+	attach := &frames.PerformAttach{
 		Name:               l.key.name,
 		Handle:             l.handle,
 		ReceiverSettleMode: l.receiverSettleMode,
@@ -169,15 +146,15 @@ func attachLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 	}
 
 	if isReceiver {
-		attach.Role = roleReceiver
+		attach.Role = encoding.RoleReceiver
 		if attach.Source == nil {
-			attach.Source = new(source)
+			attach.Source = new(frames.Source)
 		}
 		attach.Source.Dynamic = l.dynamicAddr
 	} else {
-		attach.Role = roleSender
+		attach.Role = encoding.RoleSender
 		if attach.Target == nil {
-			attach.Target = new(target)
+			attach.Target = new(frames.Target)
 		}
 		attach.Target.Dynamic = l.dynamicAddr
 	}
@@ -187,14 +164,14 @@ func attachLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 	_ = s.txFrame(attach, nil)
 
 	// wait for response
-	var fr frameBody
+	var fr frames.FrameBody
 	select {
 	case <-s.done:
 		return nil, s.err
 	case fr = <-l.rx:
 	}
 	debug(3, "RX: %s", fr)
-	resp, ok := fr.(*performAttach)
+	resp, ok := fr.(*frames.PerformAttach)
 	if !ok {
 		return nil, fmt.Errorf("unexpected attach response: %#v", fr)
 	}
@@ -216,13 +193,13 @@ func attachLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 		case fr = <-l.rx:
 		}
 
-		detach, ok := fr.(*performDetach)
+		detach, ok := fr.(*frames.PerformDetach)
 		if !ok {
 			return nil, fmt.Errorf("unexpected frame while waiting for detach: %#v", fr)
 		}
 
 		// send return detach
-		fr = &performDetach{
+		fr = &frames.PerformDetach{
 			Handle: l.handle,
 			Closed: true,
 		}
@@ -256,7 +233,7 @@ func attachLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 		if l.dynamicAddr && resp.Target != nil {
 			l.target.Address = resp.Target.Address
 		}
-		l.transfers = make(chan performTransfer)
+		l.transfers = make(chan frames.PerformTransfer)
 	}
 
 	err = l.setSettleModes(resp)
@@ -289,14 +266,14 @@ func (l *link) countUnsettled() int {
 	return count
 }
 
-// setSettleModes sets the settlement modes based on the resp performAttach.
+// setSettleModes sets the settlement modes based on the resp frames.PerformAttach.
 //
 // If a settlement mode has been explicitly set locally and it was not honored by the
 // server an error is returned.
-func (l *link) setSettleModes(resp *performAttach) error {
+func (l *link) setSettleModes(resp *frames.PerformAttach) error {
 	var (
-		localRecvSettle = l.receiverSettleMode.value()
-		respRecvSettle  = resp.ReceiverSettleMode.value()
+		localRecvSettle = receiverSettleModeValue(l.receiverSettleMode)
+		respRecvSettle  = receiverSettleModeValue(resp.ReceiverSettleMode)
 	)
 	if l.receiverSettleMode != nil && localRecvSettle != respRecvSettle {
 		return fmt.Errorf("amqp: receiver settlement mode %q requested, received %q from server", l.receiverSettleMode, &respRecvSettle)
@@ -304,8 +281,8 @@ func (l *link) setSettleModes(resp *performAttach) error {
 	l.receiverSettleMode = &respRecvSettle
 
 	var (
-		localSendSettle = l.senderSettleMode.value()
-		respSendSettle  = resp.SenderSettleMode.value()
+		localSendSettle = senderSettleModeValue(l.senderSettleMode)
+		respSendSettle  = senderSettleModeValue(resp.SenderSettleMode)
 	)
 	if l.senderSettleMode != nil && localSendSettle != respSendSettle {
 		return fmt.Errorf("amqp: sender settlement mode %q requested, received %q from server", l.senderSettleMode, &respSendSettle)
@@ -369,7 +346,7 @@ func (l *link) mux() {
 
 Loop:
 	for {
-		var outgoingTransfers chan performTransfer
+		var outgoingTransfers chan frames.PerformTransfer
 
 		ok, enableOutgoingTransfers := l.doFlow()
 
@@ -440,7 +417,7 @@ func (l *link) muxFlow(linkCredit uint32, drain bool) error {
 
 	debug(3, "link.muxFlow(): len(l.messages):%d - linkCredit: %d - deliveryCount: %d, inFlight: %d", len(l.messages), linkCredit, deliveryCount, len(l.receiver.inFlight.m))
 
-	fr := &performFlow{
+	fr := &frames.PerformFlow{
 		Handle:        &l.handle,
 		DeliveryCount: &deliveryCount,
 		LinkCredit:    &linkCredit, // max number of messages,
@@ -472,7 +449,7 @@ func (l *link) muxFlow(linkCredit uint32, drain bool) error {
 	}
 }
 
-func (l *link) muxReceive(fr performTransfer) error {
+func (l *link) muxReceive(fr frames.PerformTransfer) error {
 	if !l.more {
 		// this is the first transfer of a message,
 		// record the delivery ID, message format,
@@ -592,7 +569,7 @@ func (l *link) muxReceive(fr performTransfer) error {
 	debug(1, "deliveryID %d before push to receiver - deliveryCount : %d - linkCredit: %d, len(messages): %d, len(inflight): %d", l.msg.deliveryID, l.deliveryCount, l.linkCredit, len(l.messages), len(l.receiver.inFlight.m))
 	// send to receiver, this should never block due to buffering
 	// and flow control.
-	if l.receiverSettleMode.value() == ModeSecond {
+	if receiverSettleModeValue(l.receiverSettleMode) == ModeSecond {
 		l.addUnsettled(&l.msg)
 	}
 	l.messages <- l.msg
@@ -645,7 +622,7 @@ func (l *link) issueCredit(credit uint32) error {
 }
 
 // muxHandleFrame processes fr based on type.
-func (l *link) muxHandleFrame(fr frameBody) error {
+func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 	var (
 		isSender               = l.receiver == nil
 		errOnRejectDisposition = l.detachOnDispositionError && (isSender && (l.receiverSettleMode == nil || *l.receiverSettleMode == ModeFirst))
@@ -653,7 +630,7 @@ func (l *link) muxHandleFrame(fr frameBody) error {
 
 	switch fr := fr.(type) {
 	// message frame
-	case *performTransfer:
+	case *frames.PerformTransfer:
 		debug(3, "RX: %s", fr)
 		if isSender {
 			// Senders should never receive transfer frames, but handle it just in case.
@@ -667,7 +644,7 @@ func (l *link) muxHandleFrame(fr frameBody) error {
 		return l.muxReceive(*fr)
 
 	// flow control frame
-	case *performFlow:
+	case *frames.PerformFlow:
 		debug(3, "RX: %s", fr)
 		if isSender {
 			linkCredit := *fr.LinkCredit - l.deliveryCount
@@ -697,7 +674,7 @@ func (l *link) muxHandleFrame(fr frameBody) error {
 		)
 
 		// send flow
-		resp := &performFlow{
+		resp := &frames.PerformFlow{
 			Handle:        &l.handle,
 			DeliveryCount: &deliveryCount,
 			LinkCredit:    &linkCredit, // max number of messages
@@ -706,7 +683,7 @@ func (l *link) muxHandleFrame(fr frameBody) error {
 		_ = l.session.txFrame(resp, nil)
 
 	// remote side is closing links
-	case *performDetach:
+	case *frames.PerformDetach:
 		debug(1, "RX: %s", fr)
 		// don't currently support link detach and reattach
 		if !fr.Closed {
@@ -718,7 +695,7 @@ func (l *link) muxHandleFrame(fr frameBody) error {
 
 		return fmt.Errorf("received detach frame %v", &DetachError{fr.Error})
 
-	case *performDisposition:
+	case *frames.PerformDisposition:
 		debug(3, "RX: %s", fr)
 
 		// Unblock receivers waiting for message disposition
@@ -742,8 +719,8 @@ func (l *link) muxHandleFrame(fr frameBody) error {
 			return nil
 		}
 
-		resp := &performDisposition{
-			Role:    roleSender,
+		resp := &frames.PerformDisposition{
+			Role:    encoding.RoleSender,
 			First:   fr.First,
 			Last:    fr.Last,
 			Settled: true,
@@ -838,7 +815,7 @@ func (l *link) muxDetach() {
 	detachError := l.detachError
 	l.detachErrorMu.Unlock()
 
-	fr := &performDetach{
+	fr := &frames.PerformDetach{
 		Handle: l.handle,
 		Closed: true,
 		Error:  detachError,
@@ -852,7 +829,7 @@ Loop:
 			break Loop
 		case fr := <-l.rx:
 			// discard incoming frames to avoid blocking session.mux
-			if fr, ok := fr.(*performDetach); ok && fr.Closed {
+			if fr, ok := fr.(*frames.PerformDetach); ok && fr.Closed {
 				l.detachReceived = true
 			}
 		case <-l.session.done:
@@ -874,7 +851,7 @@ Loop:
 		// read from link until detach with Close == true is received,
 		// other frames are discarded.
 		case fr := <-l.rx:
-			if fr, ok := fr.(*performDetach); ok && fr.Closed {
+			if fr, ok := fr.(*frames.PerformDetach); ok && fr.Closed {
 				return
 			}
 

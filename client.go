@@ -11,6 +11,9 @@ import (
 	"net/url"
 	"sync"
 	"time"
+
+	"github.com/Azure/go-amqp/internal/encoding"
+	"github.com/Azure/go-amqp/internal/frames"
 )
 
 var (
@@ -127,7 +130,7 @@ func (c *Client) NewSession(opts ...SessionOption) (*Session, error) {
 	}
 
 	// send Begin to server
-	begin := &performBegin{
+	begin := &frames.PerformBegin{
 		NextOutgoingID: 0,
 		IncomingWindow: s.incomingWindow,
 		OutgoingWindow: s.outgoingWindow,
@@ -137,18 +140,18 @@ func (c *Client) NewSession(opts ...SessionOption) (*Session, error) {
 	_ = s.txFrame(begin, nil)
 
 	// wait for response
-	var fr frame
+	var fr frames.Frame
 	select {
 	case <-c.conn.done:
 		return nil, c.conn.getErr()
 	case fr = <-s.rx:
 	}
-	debug(1, "RX: %s", fr.body)
+	debug(1, "RX: %s", fr.Body)
 
-	begin, ok := fr.body.(*performBegin)
+	begin, ok := fr.Body.(*frames.PerformBegin)
 	if !ok {
 		_ = s.Close(context.Background()) // deallocate session on error
-		return nil, fmt.Errorf("unexpected begin response: %+v", fr.body)
+		return nil, fmt.Errorf("unexpected begin response: %+v", fr.Body)
 	}
 
 	// start Session multiplexor
@@ -255,7 +258,7 @@ const (
 // to a boolean flag indicating the direction of the link.
 type linkKey struct {
 	name string
-	role role // Local role: sender/receiver
+	role encoding.Role // Local role: sender/receiver
 }
 
 const maxTransferFrameHeader = 66 // determined by calcMaxTransferFrameHeader

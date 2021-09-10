@@ -7,18 +7,19 @@ import (
 	"sync"
 
 	"github.com/Azure/go-amqp/internal/encoding"
+	"github.com/Azure/go-amqp/internal/frames"
 )
 
 // Session is an AMQP session.
 //
 // A session multiplexes Receivers.
 type Session struct {
-	channel       uint16                // session's local channel
-	remoteChannel uint16                // session's remote channel, owned by conn.mux
-	conn          *conn                 // underlying conn
-	rx            chan frame            // frames destined for this session are sent on this chan by conn.mux
-	tx            chan frameBody        // non-transfer frames to be sent; session must track disposition
-	txTransfer    chan *performTransfer // transfer frames to be sent; session must track disposition
+	channel       uint16                       // session's local channel
+	remoteChannel uint16                       // session's remote channel, owned by conn.mux
+	conn          *conn                        // underlying conn
+	rx            chan frames.Frame            // frames destined for this session are sent on this chan by conn.mux
+	tx            chan frames.FrameBody        // non-transfer frames to be sent; session must track disposition
+	txTransfer    chan *frames.PerformTransfer // transfer frames to be sent; session must track disposition
 
 	// flow control
 	incomingWindow uint32
@@ -41,9 +42,9 @@ func newSession(c *conn, channel uint16) *Session {
 	return &Session{
 		conn:             c,
 		channel:          channel,
-		rx:               make(chan frame),
-		tx:               make(chan frameBody),
-		txTransfer:       make(chan *performTransfer),
+		rx:               make(chan frames.Frame),
+		tx:               make(chan frames.FrameBody),
+		txTransfer:       make(chan *frames.PerformTransfer),
 		incomingWindow:   DefaultWindow,
 		outgoingWindow:   DefaultWindow,
 		handleMax:        DefaultMaxLinks - 1,
@@ -73,12 +74,12 @@ func (s *Session) Close(ctx context.Context) error {
 
 // txFrame sends a frame to the connWriter.
 // it returns an error if the connection has been closed.
-func (s *Session) txFrame(p frameBody, done chan encoding.DeliveryState) error {
-	return s.conn.wantWriteFrame(frame{
-		type_:   frameTypeAMQP,
-		channel: s.channel,
-		body:    p,
-		done:    done,
+func (s *Session) txFrame(p frames.FrameBody, done chan encoding.DeliveryState) error {
+	return s.conn.wantWriteFrame(frames.Frame{
+		Type:    frameTypeAMQP,
+		Channel: s.channel,
+		Body:    p,
+		Done:    done,
 	})
 }
 
@@ -122,7 +123,7 @@ func (s *Session) NewSender(opts ...LinkOption) (*Sender, error) {
 	return &Sender{link: l}, nil
 }
 
-func (s *Session) mux(remoteBegin *performBegin) {
+func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 	defer func() {
 		// clean up session record in conn.mux()
 		select {
@@ -173,14 +174,14 @@ func (s *Session) mux(remoteBegin *performBegin) {
 
 		// session is being closed by user
 		case <-s.close:
-			_ = s.txFrame(&performEnd{}, nil)
+			_ = s.txFrame(&frames.PerformEnd{}, nil)
 
 			// discard frames until End is received or conn closed
 		EndLoop:
 			for {
 				select {
 				case fr := <-s.rx:
-					_, ok := fr.body.(*performEnd)
+					_, ok := fr.Body.(*frames.PerformEnd)
 					if ok {
 						break EndLoop
 					}
@@ -221,12 +222,12 @@ func (s *Session) mux(remoteBegin *performBegin) {
 
 		// incoming frame for link
 		case fr := <-s.rx:
-			debug(1, "RX(Session): %s", fr.body)
+			debug(1, "RX(Session): %s", fr.Body)
 
-			switch body := fr.body.(type) {
+			switch body := fr.Body.(type) {
 			// Disposition frames can reference transfers from more than one
 			// link. Send this frame to all of them.
-			case *performDisposition:
+			case *frames.PerformDisposition:
 				start := body.First
 				end := start
 				if body.Last != nil {
@@ -234,7 +235,7 @@ func (s *Session) mux(remoteBegin *performBegin) {
 				}
 				for deliveryID := start; deliveryID <= end; deliveryID++ {
 					handles := handlesByDeliveryID
-					if body.Role == roleSender {
+					if body.Role == encoding.RoleSender {
 						handles = handlesByRemoteDeliveryID
 					}
 
@@ -244,7 +245,7 @@ func (s *Session) mux(remoteBegin *performBegin) {
 					}
 					delete(handles, deliveryID)
 
-					if body.Settled && body.Role == roleReceiver {
+					if body.Settled && body.Role == encoding.RoleReceiver {
 						// check if settlement confirmation was requested, if so
 						// confirm by closing channel
 						if done, ok := settlementByDeliveryID[deliveryID]; ok {
@@ -262,15 +263,15 @@ func (s *Session) mux(remoteBegin *performBegin) {
 						continue
 					}
 
-					s.muxFrameToLink(link, fr.body)
+					s.muxFrameToLink(link, fr.Body)
 				}
 				continue
-			case *performFlow:
+			case *frames.PerformFlow:
 				if body.NextIncomingID == nil {
 					// This is a protocol error:
 					//       "[...] MUST be set if the peer has received
 					//        the begin frame for the session"
-					_ = s.txFrame(&performEnd{
+					_ = s.txFrame(&frames.PerformEnd{
 						Error: &Error{
 							Condition:   ErrorNotAllowed,
 							Description: "next-incoming-id not set after session established",
@@ -306,13 +307,13 @@ func (s *Session) mux(remoteBegin *performBegin) {
 						continue
 					}
 
-					s.muxFrameToLink(link, fr.body)
+					s.muxFrameToLink(link, fr.Body)
 					continue
 				}
 
 				if body.Echo {
 					niID := nextIncomingID
-					resp := &performFlow{
+					resp := &frames.PerformFlow{
 						NextIncomingID: &niID,
 						IncomingWindow: s.incomingWindow,
 						NextOutgoingID: nextOutgoingID,
@@ -322,7 +323,7 @@ func (s *Session) mux(remoteBegin *performBegin) {
 					_ = s.txFrame(resp, nil)
 				}
 
-			case *performAttach:
+			case *frames.PerformAttach:
 				// On Attach response link should be looked up by name, then added
 				// to the links map with the remote's handle contained in this
 				// attach frame.
@@ -336,9 +337,9 @@ func (s *Session) mux(remoteBegin *performBegin) {
 				link.remoteHandle = body.Handle
 				links[link.remoteHandle] = link
 
-				s.muxFrameToLink(link, fr.body)
+				s.muxFrameToLink(link, fr.Body)
 
-			case *performTransfer:
+			case *frames.PerformTransfer:
 				// "Upon receiving a transfer, the receiving endpoint will
 				// increment the next-incoming-id to match the implicit
 				// transfer-id of the incoming transfer plus one, as well
@@ -356,7 +357,7 @@ func (s *Session) mux(remoteBegin *performBegin) {
 
 				select {
 				case <-s.conn.done:
-				case link.rx <- fr.body:
+				case link.rx <- fr.Body:
 				}
 
 				// if this message is received unsettled and link rcv-settle-mode == second, add to handlesByRemoteDeliveryID
@@ -369,7 +370,7 @@ func (s *Session) mux(remoteBegin *performBegin) {
 				// Update peer's outgoing window if half has been consumed.
 				if remoteOutgoingWindow < s.incomingWindow/2 {
 					nID := nextIncomingID
-					flow := &performFlow{
+					flow := &frames.PerformFlow{
 						NextIncomingID: &nID,
 						IncomingWindow: s.incomingWindow,
 						NextOutgoingID: nextOutgoingID,
@@ -379,15 +380,15 @@ func (s *Session) mux(remoteBegin *performBegin) {
 					_ = s.txFrame(flow, nil)
 				}
 
-			case *performDetach:
+			case *frames.PerformDetach:
 				link, ok := links[body.Handle]
 				if !ok {
 					continue
 				}
-				s.muxFrameToLink(link, fr.body)
+				s.muxFrameToLink(link, fr.Body)
 
-			case *performEnd:
-				_ = s.txFrame(&performEnd{}, nil)
+			case *frames.PerformEnd:
+				_ = s.txFrame(&frames.PerformEnd{}, nil)
 				s.err = fmt.Errorf("session ended by server: %s", body.Error)
 				return
 
@@ -420,13 +421,13 @@ func (s *Session) mux(remoteBegin *performBegin) {
 
 			// if not settled, add done chan to map
 			// and clear from frame so conn doesn't close it.
-			if !fr.Settled && fr.done != nil {
-				settlementByDeliveryID[deliveryID] = fr.done
-				fr.done = nil
+			if !fr.Settled && fr.Done != nil {
+				settlementByDeliveryID[deliveryID] = fr.Done
+				fr.Done = nil
 			}
 
 			debug(2, "TX(Session) - txtransfer: %s", fr)
-			_ = s.txFrame(fr, fr.done)
+			_ = s.txFrame(fr, fr.Done)
 
 			// "Upon sending a transfer, the sending endpoint will increment
 			// its next-outgoing-id, decrement its remote-incoming-window,
@@ -439,7 +440,7 @@ func (s *Session) mux(remoteBegin *performBegin) {
 
 		case fr := <-s.tx:
 			switch fr := fr.(type) {
-			case *performFlow:
+			case *frames.PerformFlow:
 				niID := nextIncomingID
 				fr.NextIncomingID = &niID
 				fr.IncomingWindow = s.incomingWindow
@@ -447,7 +448,7 @@ func (s *Session) mux(remoteBegin *performBegin) {
 				fr.OutgoingWindow = s.outgoingWindow
 				debug(1, "TX(Session) - tx: %s", fr)
 				_ = s.txFrame(fr, nil)
-			case *performTransfer:
+			case *frames.PerformTransfer:
 				panic("transfer frames must use txTransfer")
 			default:
 				debug(1, "TX(Session) - default: %s", fr)
@@ -457,7 +458,7 @@ func (s *Session) mux(remoteBegin *performBegin) {
 	}
 }
 
-func (s *Session) muxFrameToLink(l *link, fr frameBody) {
+func (s *Session) muxFrameToLink(l *link, fr frames.FrameBody) {
 	select {
 	case l.rx <- fr:
 	case <-l.detached:

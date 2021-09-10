@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Azure/go-amqp/internal/encoding"
+	"github.com/Azure/go-amqp/internal/frames"
 )
 
 type messageDisposition struct {
@@ -53,7 +54,7 @@ func (r *Receiver) HandleMessage(ctx context.Context, handle func(*Message) erro
 		msg.receiver = r
 		// we only need to track message disposition for mode second
 		// spec : http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transport-v1.0-os.html#type-receiver-settle-mode
-		if r.link.receiverSettleMode.value() == ModeSecond {
+		if receiverSettleModeValue(r.link.receiverSettleMode) == ModeSecond {
 			go trackCompletion(msg)
 		}
 		// tracks messages until exiting handler
@@ -255,8 +256,8 @@ func (r *Receiver) dispositionBatcher() {
 
 // sendDisposition sends a disposition frame to the peer
 func (r *Receiver) sendDisposition(first uint32, last *uint32, state interface{}) error {
-	fr := &performDisposition{
-		Role:    roleReceiver,
+	fr := &frames.PerformDisposition{
+		Role:    encoding.RoleReceiver,
 		First:   first,
 		Last:    last,
 		Settled: r.link.receiverSettleMode == nil || *r.link.receiverSettleMode == ModeFirst,

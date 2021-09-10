@@ -3,15 +3,8 @@ package amqp
 import (
 	"fmt"
 
-	"github.com/Azure/go-amqp/internal/buffer"
 	"github.com/Azure/go-amqp/internal/encoding"
-)
-
-// SASL Codes
-const (
-	codeSASLOK      saslCode = iota // Connection authentication succeeded.
-	codeSASLAuth                    // Connection authentication failed due to an unspecified problem with the supplied credentials.
-	codeSASLSysPerm                 // Connection authentication failed due to a system error that is unlikely to be corrected without intervention.
+	"github.com/Azure/go-amqp/internal/frames"
 )
 
 // SASL Mechanisms
@@ -25,18 +18,6 @@ const (
 	frameTypeAMQP = 0x0
 	frameTypeSASL = 0x1
 )
-
-type saslCode uint8
-
-func (s saslCode) Marshal(wr *buffer.Buffer) error {
-	return encoding.Marshal(wr, uint8(s))
-}
-
-func (s *saslCode) Unmarshal(r *buffer.Buffer) error {
-	n, err := encoding.ReadUbyte(r)
-	*s = saslCode(n)
-	return err
-}
 
 // ConnSASLPlain enables SASL PLAIN authentication for the connection.
 //
@@ -53,15 +34,15 @@ func ConnSASLPlain(username, password string) ConnOption {
 		// add the handler the the map
 		c.saslHandlers[saslMechanismPLAIN] = func() stateFunc {
 			// send saslInit with PLAIN payload
-			init := &saslInit{
+			init := &frames.SASLInit{
 				Mechanism:       "PLAIN",
 				InitialResponse: []byte("\x00" + username + "\x00" + password),
 				Hostname:        "",
 			}
 			debug(1, "TX: %s", init)
-			c.err = c.writeFrame(frame{
-				type_: frameTypeSASL,
-				body:  init,
+			c.err = c.writeFrame(frames.Frame{
+				Type: frameTypeSASL,
+				Body: init,
 			})
 			if c.err != nil {
 				return nil
@@ -84,14 +65,14 @@ func ConnSASLAnonymous() ConnOption {
 
 		// add the handler the the map
 		c.saslHandlers[saslMechanismANONYMOUS] = func() stateFunc {
-			init := &saslInit{
+			init := &frames.SASLInit{
 				Mechanism:       saslMechanismANONYMOUS,
 				InitialResponse: []byte("anonymous"),
 			}
 			debug(1, "TX: %s", init)
-			c.err = c.writeFrame(frame{
-				type_: frameTypeSASL,
-				body:  init,
+			c.err = c.writeFrame(frames.Frame{
+				Type: frameTypeSASL,
+				Body: init,
 			})
 			if c.err != nil {
 				return nil
@@ -149,9 +130,9 @@ func (s saslXOAUTH2Handler) init() stateFunc {
 	if s.maxFrameSizeOverride > s.conn.peerMaxFrameSize {
 		s.conn.peerMaxFrameSize = s.maxFrameSizeOverride
 	}
-	s.conn.err = s.conn.writeFrame(frame{
-		type_: frameTypeSASL,
-		body: &saslInit{
+	s.conn.err = s.conn.writeFrame(frames.Frame{
+		Type: frameTypeSASL,
+		Body: &frames.SASLInit{
 			Mechanism:       saslMechanismXOAUTH2,
 			InitialResponse: s.response,
 		},
@@ -172,10 +153,10 @@ func (s saslXOAUTH2Handler) step() stateFunc {
 		return nil
 	}
 
-	switch v := fr.body.(type) {
-	case *saslOutcome:
+	switch v := fr.Body.(type) {
+	case *frames.SASLOutcome:
 		// check if auth succeeded
-		if v.Code != codeSASLOK {
+		if v.Code != encoding.CodeSASLOK {
 			s.conn.err = fmt.Errorf("SASL XOAUTH2 auth failed with code %#00x: %s : %s",
 				v.Code, v.AdditionalData, s.errorResponse)
 			return nil
@@ -184,14 +165,14 @@ func (s saslXOAUTH2Handler) step() stateFunc {
 		// return to c.negotiateProto
 		s.conn.saslComplete = true
 		return s.conn.negotiateProto
-	case *saslChallenge:
+	case *frames.SASLChallenge:
 		if s.errorResponse == nil {
 			s.errorResponse = v.Challenge
 
 			// The SASL protocol requires clients to send an empty response to this challenge.
-			s.conn.err = s.conn.writeFrame(frame{
-				type_: frameTypeSASL,
-				body: &saslResponse{
+			s.conn.err = s.conn.writeFrame(frames.Frame{
+				Type: frameTypeSASL,
+				Body: &frames.SASLResponse{
 					Response: []byte{},
 				},
 			})
@@ -202,7 +183,7 @@ func (s saslXOAUTH2Handler) step() stateFunc {
 			return nil
 		}
 	default:
-		s.conn.err = fmt.Errorf("unexpected frame type %T", fr.body)
+		s.conn.err = fmt.Errorf("unexpected frame type %T", fr.Body)
 		return nil
 	}
 }

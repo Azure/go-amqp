@@ -10,6 +10,7 @@ import (
 
 	"github.com/Azure/go-amqp/internal/buffer"
 	"github.com/Azure/go-amqp/internal/encoding"
+	"github.com/Azure/go-amqp/internal/frames"
 	"github.com/Azure/go-amqp/internal/testconn"
 )
 
@@ -79,21 +80,21 @@ func TestSaslXOAUTH2EmptyUsername(t *testing.T) {
 func TestConnSASLXOAUTH2AuthSuccess(t *testing.T) {
 	buf, err := peerResponse(
 		[]byte("AMQP\x03\x01\x00\x00"),
-		frame{
-			type_:   frameTypeSASL,
-			channel: 0,
-			body:    &saslMechanisms{Mechanisms: []encoding.Symbol{saslMechanismXOAUTH2}},
+		frames.Frame{
+			Type:    frameTypeSASL,
+			Channel: 0,
+			Body:    &frames.SASLMechanisms{Mechanisms: []encoding.Symbol{saslMechanismXOAUTH2}},
 		},
-		frame{
-			type_:   frameTypeSASL,
-			channel: 0,
-			body:    &saslOutcome{Code: codeSASLOK},
+		frames.Frame{
+			Type:    frameTypeSASL,
+			Channel: 0,
+			Body:    &frames.SASLOutcome{Code: encoding.CodeSASLOK},
 		},
 		[]byte("AMQP\x00\x01\x00\x00"),
-		frame{
-			type_:   frameTypeAMQP,
-			channel: 0,
-			body:    &performOpen{},
+		frames.Frame{
+			Type:    frameTypeAMQP,
+			Channel: 0,
+			Body:    &frames.PerformOpen{},
 		},
 	)
 
@@ -114,15 +115,15 @@ func TestConnSASLXOAUTH2AuthSuccess(t *testing.T) {
 func TestConnSASLXOAUTH2AuthFail(t *testing.T) {
 	buf, err := peerResponse(
 		[]byte("AMQP\x03\x01\x00\x00"),
-		frame{
-			type_:   frameTypeSASL,
-			channel: 0,
-			body:    &saslMechanisms{Mechanisms: []encoding.Symbol{saslMechanismXOAUTH2}},
+		frames.Frame{
+			Type:    frameTypeSASL,
+			Channel: 0,
+			Body:    &frames.SASLMechanisms{Mechanisms: []encoding.Symbol{saslMechanismXOAUTH2}},
 		},
-		frame{
-			type_:   frameTypeSASL,
-			channel: 0,
-			body:    &saslOutcome{Code: codeSASLAuth},
+		frames.Frame{
+			Type:    frameTypeSASL,
+			Channel: 0,
+			Body:    &frames.SASLOutcome{Code: encoding.CodeSASLAuth},
 		},
 	)
 
@@ -140,7 +141,7 @@ func TestConnSASLXOAUTH2AuthFail(t *testing.T) {
 	switch {
 	case err == nil:
 		t.Errorf("authentication is expected to fail ")
-	case !strings.Contains(err.Error(), fmt.Sprintf("code %#00x", codeSASLAuth)):
+	case !strings.Contains(err.Error(), fmt.Sprintf("code %#00x", encoding.CodeSASLAuth)):
 		t.Errorf("unexpected connection failure : %s", err)
 	}
 }
@@ -148,20 +149,20 @@ func TestConnSASLXOAUTH2AuthFail(t *testing.T) {
 func TestConnSASLXOAUTH2AuthFailWithErrorResponse(t *testing.T) {
 	buf, err := peerResponse(
 		[]byte("AMQP\x03\x01\x00\x00"),
-		frame{
-			type_:   frameTypeSASL,
-			channel: 0,
-			body:    &saslMechanisms{Mechanisms: []encoding.Symbol{saslMechanismXOAUTH2}},
+		frames.Frame{
+			Type:    frameTypeSASL,
+			Channel: 0,
+			Body:    &frames.SASLMechanisms{Mechanisms: []encoding.Symbol{saslMechanismXOAUTH2}},
 		},
-		frame{
-			type_:   frameTypeSASL,
-			channel: 0,
-			body:    &saslChallenge{Challenge: []byte("{ \"status\":\"401\", \"schemes\":\"bearer\", \"scope\":\"https://mail.google.com/\" }")},
+		frames.Frame{
+			Type:    frameTypeSASL,
+			Channel: 0,
+			Body:    &frames.SASLChallenge{Challenge: []byte("{ \"status\":\"401\", \"schemes\":\"bearer\", \"scope\":\"https://mail.google.com/\" }")},
 		},
-		frame{
-			type_:   frameTypeSASL,
-			channel: 0,
-			body:    &saslOutcome{Code: codeSASLAuth},
+		frames.Frame{
+			Type:    frameTypeSASL,
+			Channel: 0,
+			Body:    &frames.SASLOutcome{Code: encoding.CodeSASLAuth},
 		},
 	)
 
@@ -179,7 +180,7 @@ func TestConnSASLXOAUTH2AuthFailWithErrorResponse(t *testing.T) {
 	switch {
 	case err == nil:
 		t.Errorf("authentication is expected to fail ")
-	case !strings.Contains(err.Error(), fmt.Sprintf("code %#00x", codeSASLAuth)):
+	case !strings.Contains(err.Error(), fmt.Sprintf("code %#00x", encoding.CodeSASLAuth)):
 		t.Errorf("unexpected connection failure : %s", err)
 	}
 }
@@ -187,20 +188,20 @@ func TestConnSASLXOAUTH2AuthFailWithErrorResponse(t *testing.T) {
 func TestConnSASLXOAUTH2AuthFailsAdditionalErrorResponse(t *testing.T) {
 	buf, err := peerResponse(
 		[]byte("AMQP\x03\x01\x00\x00"),
-		frame{
-			type_:   frameTypeSASL,
-			channel: 0,
-			body:    &saslMechanisms{Mechanisms: []encoding.Symbol{saslMechanismXOAUTH2}},
+		frames.Frame{
+			Type:    frameTypeSASL,
+			Channel: 0,
+			Body:    &frames.SASLMechanisms{Mechanisms: []encoding.Symbol{saslMechanismXOAUTH2}},
 		},
-		frame{
-			type_:   frameTypeSASL,
-			channel: 0,
-			body:    &saslChallenge{Challenge: []byte("fail1")},
+		frames.Frame{
+			Type:    frameTypeSASL,
+			Channel: 0,
+			Body:    &frames.SASLChallenge{Challenge: []byte("fail1")},
 		},
-		frame{
-			type_:   frameTypeSASL,
-			channel: 0,
-			body:    &saslChallenge{Challenge: []byte("fail2")},
+		frames.Frame{
+			Type:    frameTypeSASL,
+			Channel: 0,
+			Body:    &frames.SASLChallenge{Challenge: []byte("fail2")},
 		},
 	)
 
@@ -227,7 +228,7 @@ func peerResponse(items ...interface{}) ([]byte, error) {
 	buf := make([]byte, 0)
 	for _, item := range items {
 		switch v := item.(type) {
-		case frame:
+		case frames.Frame:
 			b := &buffer.Buffer{}
 			e := writeFrame(b, v)
 			if e != nil {

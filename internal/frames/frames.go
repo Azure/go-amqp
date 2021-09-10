@@ -1,4 +1,4 @@
-package amqp
+package frames
 
 import (
 	"errors"
@@ -26,7 +26,7 @@ import (
     <field name="capabilities" type="symbol" multiple="true"/>
 </type>
 */
-type source struct {
+type Source struct {
 	// the address of the source
 	//
 	// The address of the source MUST NOT be set when sent on a attach frame sent by
@@ -49,7 +49,7 @@ type source struct {
 	// 0: none
 	// 1: configuration
 	// 2: unsettled-state
-	Durable Durability
+	Durable encoding.Durability
 
 	// the expiry policy of the source
 	//
@@ -59,7 +59,7 @@ type source struct {
 	// connection-close: The expiry timer starts when most recently associated connection
 	//                   is closed.
 	// never: The terminus never expires.
-	ExpiryPolicy ExpiryPolicy
+	ExpiryPolicy encoding.ExpiryPolicy
 
 	// duration that an expiring source will be retained
 	//
@@ -144,11 +144,11 @@ type source struct {
 	Capabilities encoding.MultiSymbol
 }
 
-func (s *source) Marshal(wr *buffer.Buffer) error {
+func (s *Source) Marshal(wr *buffer.Buffer) error {
 	return encoding.MarshalComposite(wr, encoding.TypeCodeSource, []encoding.MarshalField{
 		{Value: &s.Address, Omit: s.Address == ""},
-		{Value: &s.Durable, Omit: s.Durable == DurabilityNone},
-		{Value: &s.ExpiryPolicy, Omit: s.ExpiryPolicy == "" || s.ExpiryPolicy == ExpirySessionEnd},
+		{Value: &s.Durable, Omit: s.Durable == encoding.DurabilityNone},
+		{Value: &s.ExpiryPolicy, Omit: s.ExpiryPolicy == "" || s.ExpiryPolicy == encoding.ExpirySessionEnd},
 		{Value: &s.Timeout, Omit: s.Timeout == 0},
 		{Value: &s.Dynamic, Omit: !s.Dynamic},
 		{Value: s.DynamicNodeProperties, Omit: len(s.DynamicNodeProperties) == 0},
@@ -160,11 +160,11 @@ func (s *source) Marshal(wr *buffer.Buffer) error {
 	})
 }
 
-func (s *source) Unmarshal(r *buffer.Buffer) error {
+func (s *Source) Unmarshal(r *buffer.Buffer) error {
 	return encoding.UnmarshalComposite(r, encoding.TypeCodeSource, []encoding.UnmarshalField{
 		{Field: &s.Address},
 		{Field: &s.Durable},
-		{Field: &s.ExpiryPolicy, HandleNull: func() error { s.ExpiryPolicy = ExpirySessionEnd; return nil }},
+		{Field: &s.ExpiryPolicy, HandleNull: func() error { s.ExpiryPolicy = encoding.ExpirySessionEnd; return nil }},
 		{Field: &s.Timeout},
 		{Field: &s.Dynamic},
 		{Field: &s.DynamicNodeProperties},
@@ -176,7 +176,7 @@ func (s *source) Unmarshal(r *buffer.Buffer) error {
 	}...)
 }
 
-func (s source) String() string {
+func (s Source) String() string {
 	return fmt.Sprintf("source{Address: %s, Durable: %d, ExpiryPolicy: %s, Timeout: %d, "+
 		"Dynamic: %t, DynamicNodeProperties: %v, DistributionMode: %s, Filter: %v, DefaultOutcome: %v"+
 		"Outcomes: %v, Capabilities: %v}",
@@ -206,7 +206,7 @@ func (s source) String() string {
     <field name="capabilities" type="symbol" multiple="true"/>
 </type>
 */
-type target struct {
+type Target struct {
 	// the address of the target
 	//
 	// The address of the target MUST NOT be set when sent on a attach frame sent by
@@ -229,7 +229,7 @@ type target struct {
 	// 0: none
 	// 1: configuration
 	// 2: unsettled-state
-	Durable Durability
+	Durable encoding.Durability
 
 	// the expiry policy of the target
 	//
@@ -239,7 +239,7 @@ type target struct {
 	// connection-close: The expiry timer starts when most recently associated connection
 	//                   is closed.
 	// never: The terminus never expires.
-	ExpiryPolicy ExpiryPolicy
+	ExpiryPolicy encoding.ExpiryPolicy
 
 	// duration that an expiring target will be retained
 	//
@@ -291,11 +291,11 @@ type target struct {
 	Capabilities encoding.MultiSymbol
 }
 
-func (t *target) Marshal(wr *buffer.Buffer) error {
+func (t *Target) Marshal(wr *buffer.Buffer) error {
 	return encoding.MarshalComposite(wr, encoding.TypeCodeTarget, []encoding.MarshalField{
 		{Value: &t.Address, Omit: t.Address == ""},
-		{Value: &t.Durable, Omit: t.Durable == DurabilityNone},
-		{Value: &t.ExpiryPolicy, Omit: t.ExpiryPolicy == "" || t.ExpiryPolicy == ExpirySessionEnd},
+		{Value: &t.Durable, Omit: t.Durable == encoding.DurabilityNone},
+		{Value: &t.ExpiryPolicy, Omit: t.ExpiryPolicy == "" || t.ExpiryPolicy == encoding.ExpirySessionEnd},
 		{Value: &t.Timeout, Omit: t.Timeout == 0},
 		{Value: &t.Dynamic, Omit: !t.Dynamic},
 		{Value: t.DynamicNodeProperties, Omit: len(t.DynamicNodeProperties) == 0},
@@ -303,11 +303,11 @@ func (t *target) Marshal(wr *buffer.Buffer) error {
 	})
 }
 
-func (t *target) Unmarshal(r *buffer.Buffer) error {
+func (t *Target) Unmarshal(r *buffer.Buffer) error {
 	return encoding.UnmarshalComposite(r, encoding.TypeCodeTarget, []encoding.UnmarshalField{
 		{Field: &t.Address},
 		{Field: &t.Durable},
-		{Field: &t.ExpiryPolicy, HandleNull: func() error { t.ExpiryPolicy = ExpirySessionEnd; return nil }},
+		{Field: &t.ExpiryPolicy, HandleNull: func() error { t.ExpiryPolicy = encoding.ExpirySessionEnd; return nil }},
 		{Field: &t.Timeout},
 		{Field: &t.Dynamic},
 		{Field: &t.DynamicNodeProperties},
@@ -315,7 +315,7 @@ func (t *target) Unmarshal(r *buffer.Buffer) error {
 	}...)
 }
 
-func (t target) String() string {
+func (t Target) String() string {
 	return fmt.Sprintf("source{Address: %s, Durable: %d, ExpiryPolicy: %s, Timeout: %d, "+
 		"Dynamic: %t, DynamicNodeProperties: %v, Capabilities: %v}",
 		t.Address,
@@ -329,17 +329,17 @@ func (t target) String() string {
 }
 
 // frame is the decoded representation of a frame
-type frame struct {
-	type_   uint8     // AMQP/SASL
-	channel uint16    // channel this frame is for
-	body    frameBody // body of the frame
+type Frame struct {
+	Type    uint8     // AMQP/SASL
+	Channel uint16    // channel this frame is for
+	Body    FrameBody // body of the frame
 
 	// optional channel which will be closed after net transmit
-	done chan encoding.DeliveryState
+	Done chan encoding.DeliveryState
 }
 
 // frameBody adds some type safety to frame encoding
-type frameBody interface {
+type FrameBody interface {
 	frameBody()
 }
 
@@ -359,7 +359,7 @@ type frameBody interface {
 </type>
 */
 
-type performOpen struct {
+type PerformOpen struct {
 	ContainerID         string // required
 	Hostname            string
 	MaxFrameSize        uint32        // default: 4294967295
@@ -372,9 +372,9 @@ type performOpen struct {
 	Properties          map[encoding.Symbol]interface{}
 }
 
-func (o *performOpen) frameBody() {}
+func (o *PerformOpen) frameBody() {}
 
-func (o *performOpen) Marshal(wr *buffer.Buffer) error {
+func (o *PerformOpen) Marshal(wr *buffer.Buffer) error {
 	return encoding.MarshalComposite(wr, encoding.TypeCodeOpen, []encoding.MarshalField{
 		{Value: &o.ContainerID, Omit: false},
 		{Value: &o.Hostname, Omit: o.Hostname == ""},
@@ -389,7 +389,7 @@ func (o *performOpen) Marshal(wr *buffer.Buffer) error {
 	})
 }
 
-func (o *performOpen) Unmarshal(r *buffer.Buffer) error {
+func (o *PerformOpen) Unmarshal(r *buffer.Buffer) error {
 	return encoding.UnmarshalComposite(r, encoding.TypeCodeOpen, []encoding.UnmarshalField{
 		{Field: &o.ContainerID, HandleNull: func() error { return errors.New("Open.ContainerID is required") }},
 		{Field: &o.Hostname},
@@ -404,7 +404,7 @@ func (o *performOpen) Unmarshal(r *buffer.Buffer) error {
 	}...)
 }
 
-func (o *performOpen) String() string {
+func (o *PerformOpen) String() string {
 	return fmt.Sprintf("Open{ContainerID : %s, Hostname: %s, MaxFrameSize: %d, "+
 		"ChannelMax: %d, IdleTimeout: %v, "+
 		"OutgoingLocales: %v, IncomingLocales: %v, "+
@@ -436,7 +436,7 @@ func (o *performOpen) String() string {
     <field name="properties" type="fields"/>
 </type>
 */
-type performBegin struct {
+type PerformBegin struct {
 	// the remote channel for this session
 	// If a session is locally initiated, the remote-channel MUST NOT be set.
 	// When an endpoint responds to a remotely initiated session, the remote-channel
@@ -474,9 +474,9 @@ type performBegin struct {
 	Properties map[encoding.Symbol]interface{}
 }
 
-func (b *performBegin) frameBody() {}
+func (b *PerformBegin) frameBody() {}
 
-func (b *performBegin) String() string {
+func (b *PerformBegin) String() string {
 	return fmt.Sprintf("Begin{RemoteChannel: %v, NextOutgoingID: %d, IncomingWindow: %d, "+
 		"OutgoingWindow: %d, HandleMax: %d, OfferedCapabilities: %v, DesiredCapabilities: %v, "+
 		"Properties: %v}",
@@ -498,7 +498,7 @@ func formatUint16Ptr(p *uint16) string {
 	return strconv.FormatUint(uint64(*p), 10)
 }
 
-func (b *performBegin) Marshal(wr *buffer.Buffer) error {
+func (b *PerformBegin) Marshal(wr *buffer.Buffer) error {
 	return encoding.MarshalComposite(wr, encoding.TypeCodeBegin, []encoding.MarshalField{
 		{Value: b.RemoteChannel, Omit: b.RemoteChannel == nil},
 		{Value: &b.NextOutgoingID, Omit: false},
@@ -511,7 +511,7 @@ func (b *performBegin) Marshal(wr *buffer.Buffer) error {
 	})
 }
 
-func (b *performBegin) Unmarshal(r *buffer.Buffer) error {
+func (b *PerformBegin) Unmarshal(r *buffer.Buffer) error {
 	return encoding.UnmarshalComposite(r, encoding.TypeCodeBegin, []encoding.UnmarshalField{
 		{Field: &b.RemoteChannel},
 		{Field: &b.NextOutgoingID, HandleNull: func() error { return errors.New("Begin.NextOutgoingID is required") }},
@@ -543,7 +543,7 @@ func (b *performBegin) Unmarshal(r *buffer.Buffer) error {
     <field name="properties" type="fields"/>
 </type>
 */
-type performAttach struct {
+type PerformAttach struct {
 	// the name of the link
 	//
 	// This name uniquely identifies the link from the container of the source
@@ -572,7 +572,7 @@ type performAttach struct {
 	//
 	// The role being played by the peer, i.e., whether the peer is the sender or the
 	// receiver of messages on the link.
-	Role role
+	Role encoding.Role
 
 	// settlement policy for the sender
 	//
@@ -585,7 +585,7 @@ type performAttach struct {
 	// 0: unsettled - The sender will send all deliveries initially unsettled to the receiver.
 	// 1: settled - The sender will send all deliveries settled to the receiver.
 	// 2: mixed - The sender MAY send a mixture of settled and unsettled deliveries to the receiver.
-	SenderSettleMode *SenderSettleMode
+	SenderSettleMode *encoding.SenderSettleMode
 
 	// the settlement policy of the receiver
 	//
@@ -599,19 +599,19 @@ type performAttach struct {
 	// 1: second - The receiver will only settle after sending the disposition to
 	//             the sender and receiving a disposition indicating settlement of
 	//             the delivery from the sender.
-	ReceiverSettleMode *ReceiverSettleMode
+	ReceiverSettleMode *encoding.ReceiverSettleMode
 
 	// the source for messages
 	//
 	// If no source is specified on an outgoing link, then there is no source currently
 	// attached to the link. A link with no source will never produce outgoing messages.
-	Source *source
+	Source *Source
 
 	// the target for messages
 	//
 	// If no target is specified on an incoming link, then there is no target currently
 	// attached to the link. A link with no target will never permit incoming messages.
-	Target *target
+	Target *Target
 
 	// unsettled delivery state
 	//
@@ -674,9 +674,9 @@ type performAttach struct {
 	Properties map[encoding.Symbol]interface{}
 }
 
-func (a *performAttach) frameBody() {}
+func (a *PerformAttach) frameBody() {}
 
-func (a performAttach) String() string {
+func (a PerformAttach) String() string {
 	return fmt.Sprintf("Attach{Name: %s, Handle: %d, Role: %s, SenderSettleMode: %s, ReceiverSettleMode: %s, "+
 		"Source: %v, Target: %v, Unsettled: %v, IncompleteUnsettled: %t, InitialDeliveryCount: %d, MaxMessageSize: %d, "+
 		"OfferedCapabilities: %v, DesiredCapabilities: %v, Properties: %v}",
@@ -697,7 +697,7 @@ func (a performAttach) String() string {
 	)
 }
 
-func (a *performAttach) Marshal(wr *buffer.Buffer) error {
+func (a *PerformAttach) Marshal(wr *buffer.Buffer) error {
 	return encoding.MarshalComposite(wr, encoding.TypeCodeAttach, []encoding.MarshalField{
 		{Value: &a.Name, Omit: false},
 		{Value: &a.Handle, Omit: false},
@@ -708,7 +708,7 @@ func (a *performAttach) Marshal(wr *buffer.Buffer) error {
 		{Value: a.Target, Omit: a.Target == nil},
 		{Value: a.Unsettled, Omit: len(a.Unsettled) == 0},
 		{Value: &a.IncompleteUnsettled, Omit: !a.IncompleteUnsettled},
-		{Value: &a.InitialDeliveryCount, Omit: a.Role == roleReceiver},
+		{Value: &a.InitialDeliveryCount, Omit: a.Role == encoding.RoleReceiver},
 		{Value: &a.MaxMessageSize, Omit: a.MaxMessageSize == 0},
 		{Value: &a.OfferedCapabilities, Omit: len(a.OfferedCapabilities) == 0},
 		{Value: &a.DesiredCapabilities, Omit: len(a.DesiredCapabilities) == 0},
@@ -716,7 +716,7 @@ func (a *performAttach) Marshal(wr *buffer.Buffer) error {
 	})
 }
 
-func (a *performAttach) Unmarshal(r *buffer.Buffer) error {
+func (a *PerformAttach) Unmarshal(r *buffer.Buffer) error {
 	return encoding.UnmarshalComposite(r, encoding.TypeCodeAttach, []encoding.UnmarshalField{
 		{Field: &a.Name, HandleNull: func() error { return errors.New("Attach.Name is required") }},
 		{Field: &a.Handle, HandleNull: func() error { return errors.New("Attach.Handle is required") }},
@@ -751,7 +751,7 @@ func (a *performAttach) Unmarshal(r *buffer.Buffer) error {
     <field name="properties" type="fields"/>
 </type>
 */
-type performFlow struct {
+type PerformFlow struct {
 	// Identifies the expected transfer-id of the next incoming transfer frame.
 	// This value MUST be set if the peer has received the begin frame for the
 	// session, and MUST NOT be set if it has not. See subsection 2.5.6 for more details.
@@ -850,9 +850,9 @@ type performFlow struct {
 	Properties map[encoding.Symbol]interface{}
 }
 
-func (f *performFlow) frameBody() {}
+func (f *PerformFlow) frameBody() {}
 
-func (f *performFlow) String() string {
+func (f *PerformFlow) String() string {
 	return fmt.Sprintf("Flow{NextIncomingID: %s, IncomingWindow: %d, NextOutgoingID: %d, OutgoingWindow: %d, "+
 		"Handle: %s, DeliveryCount: %s, LinkCredit: %s, Available: %s, Drain: %t, Echo: %t, Properties: %+v}",
 		formatUint32Ptr(f.NextIncomingID),
@@ -876,7 +876,7 @@ func formatUint32Ptr(p *uint32) string {
 	return strconv.FormatUint(uint64(*p), 10)
 }
 
-func (f *performFlow) Marshal(wr *buffer.Buffer) error {
+func (f *PerformFlow) Marshal(wr *buffer.Buffer) error {
 	return encoding.MarshalComposite(wr, encoding.TypeCodeFlow, []encoding.MarshalField{
 		{Value: f.NextIncomingID, Omit: f.NextIncomingID == nil},
 		{Value: &f.IncomingWindow, Omit: false},
@@ -892,7 +892,7 @@ func (f *performFlow) Marshal(wr *buffer.Buffer) error {
 	})
 }
 
-func (f *performFlow) Unmarshal(r *buffer.Buffer) error {
+func (f *PerformFlow) Unmarshal(r *buffer.Buffer) error {
 	return encoding.UnmarshalComposite(r, encoding.TypeCodeFlow, []encoding.UnmarshalField{
 		{Field: &f.NextIncomingID},
 		{Field: &f.IncomingWindow, HandleNull: func() error { return errors.New("Flow.IncomingWindow is required") }},
@@ -924,7 +924,7 @@ func (f *performFlow) Unmarshal(r *buffer.Buffer) error {
     <field name="batchable" type="boolean" default="false"/>
 </type>
 */
-type performTransfer struct {
+type PerformTransfer struct {
 	// Specifies the link on which the message is transferred.
 	Handle uint32 // required
 
@@ -997,7 +997,7 @@ type performTransfer struct {
 	// 1: second - The receiver will only settle after sending the disposition to
 	//             the sender and receiving a disposition indicating settlement of
 	//             the delivery from the sender.
-	ReceiverSettleMode *ReceiverSettleMode
+	ReceiverSettleMode *encoding.ReceiverSettleMode
 
 	// the state of the delivery at the sender
 	//
@@ -1065,12 +1065,12 @@ type performTransfer struct {
 	//
 	// Settled=true: closed when the transferred on network.
 	// Settled=false: closed when the receiver has confirmed settlement.
-	done chan encoding.DeliveryState
+	Done chan encoding.DeliveryState
 }
 
-func (t *performTransfer) frameBody() {}
+func (t *PerformTransfer) frameBody() {}
 
-func (t performTransfer) String() string {
+func (t PerformTransfer) String() string {
 	deliveryTag := "<nil>"
 	if t.DeliveryTag != nil {
 		deliveryTag = fmt.Sprintf("%q", t.DeliveryTag)
@@ -1094,7 +1094,7 @@ func (t performTransfer) String() string {
 	)
 }
 
-func (t *performTransfer) Marshal(wr *buffer.Buffer) error {
+func (t *PerformTransfer) Marshal(wr *buffer.Buffer) error {
 	err := encoding.MarshalComposite(wr, encoding.TypeCodeTransfer, []encoding.MarshalField{
 		{Value: &t.Handle},
 		{Value: t.DeliveryID, Omit: t.DeliveryID == nil},
@@ -1116,7 +1116,7 @@ func (t *performTransfer) Marshal(wr *buffer.Buffer) error {
 	return nil
 }
 
-func (t *performTransfer) Unmarshal(r *buffer.Buffer) error {
+func (t *PerformTransfer) Unmarshal(r *buffer.Buffer) error {
 	err := encoding.UnmarshalComposite(r, encoding.TypeCodeTransfer, []encoding.UnmarshalField{
 		{Field: &t.Handle, HandleNull: func() error { return errors.New("Transfer.Handle is required") }},
 		{Field: &t.DeliveryID},
@@ -1150,12 +1150,12 @@ func (t *performTransfer) Unmarshal(r *buffer.Buffer) error {
     <field name="batchable" type="boolean" default="false"/>
 </type>
 */
-type performDisposition struct {
+type PerformDisposition struct {
 	// directionality of disposition
 	//
 	// The role identifies whether the disposition frame contains information about
 	// sending link endpoints or receiving link endpoints.
-	Role role
+	Role encoding.Role
 
 	// lower bound of deliveries
 	//
@@ -1188,9 +1188,9 @@ type performDisposition struct {
 	Batchable bool
 }
 
-func (d *performDisposition) frameBody() {}
+func (d *PerformDisposition) frameBody() {}
 
-func (d performDisposition) String() string {
+func (d PerformDisposition) String() string {
 	return fmt.Sprintf("Disposition{Role: %s, First: %d, Last: %s, Settled: %t, State: %s, Batchable: %t}",
 		d.Role,
 		d.First,
@@ -1201,7 +1201,7 @@ func (d performDisposition) String() string {
 	)
 }
 
-func (d *performDisposition) Marshal(wr *buffer.Buffer) error {
+func (d *PerformDisposition) Marshal(wr *buffer.Buffer) error {
 	return encoding.MarshalComposite(wr, encoding.TypeCodeDisposition, []encoding.MarshalField{
 		{Value: &d.Role, Omit: false},
 		{Value: &d.First, Omit: false},
@@ -1212,7 +1212,7 @@ func (d *performDisposition) Marshal(wr *buffer.Buffer) error {
 	})
 }
 
-func (d *performDisposition) Unmarshal(r *buffer.Buffer) error {
+func (d *PerformDisposition) Unmarshal(r *buffer.Buffer) error {
 	return encoding.UnmarshalComposite(r, encoding.TypeCodeDisposition, []encoding.UnmarshalField{
 		{Field: &d.Role, HandleNull: func() error { return errors.New("Disposition.Role is required") }},
 		{Field: &d.First, HandleNull: func() error { return errors.New("Disposition.Handle is required") }},
@@ -1231,7 +1231,7 @@ func (d *performDisposition) Unmarshal(r *buffer.Buffer) error {
     <field name="error" type="error"/>
 </type>
 */
-type performDetach struct {
+type PerformDetach struct {
 	// the local handle of the link to be detached
 	Handle uint32 //required
 
@@ -1242,12 +1242,12 @@ type performDetach struct {
 	//
 	// If set, this field indicates that the link is being detached due to an error
 	// condition. The value of the field SHOULD contain details on the cause of the error.
-	Error *Error
+	Error *encoding.Error
 }
 
-func (d *performDetach) frameBody() {}
+func (d *PerformDetach) frameBody() {}
 
-func (d performDetach) String() string {
+func (d PerformDetach) String() string {
 	return fmt.Sprintf("Detach{Handle: %d, Closed: %t, Error: %v}",
 		d.Handle,
 		d.Closed,
@@ -1255,7 +1255,7 @@ func (d performDetach) String() string {
 	)
 }
 
-func (d *performDetach) Marshal(wr *buffer.Buffer) error {
+func (d *PerformDetach) Marshal(wr *buffer.Buffer) error {
 	return encoding.MarshalComposite(wr, encoding.TypeCodeDetach, []encoding.MarshalField{
 		{Value: &d.Handle, Omit: false},
 		{Value: &d.Closed, Omit: !d.Closed},
@@ -1263,7 +1263,7 @@ func (d *performDetach) Marshal(wr *buffer.Buffer) error {
 	})
 }
 
-func (d *performDetach) Unmarshal(r *buffer.Buffer) error {
+func (d *PerformDetach) Unmarshal(r *buffer.Buffer) error {
 	return encoding.UnmarshalComposite(r, encoding.TypeCodeDetach, []encoding.UnmarshalField{
 		{Field: &d.Handle, HandleNull: func() error { return errors.New("Detach.Handle is required") }},
 		{Field: &d.Closed},
@@ -1277,23 +1277,23 @@ func (d *performDetach) Unmarshal(r *buffer.Buffer) error {
     <field name="error" type="error"/>
 </type>
 */
-type performEnd struct {
+type PerformEnd struct {
 	// error causing the end
 	//
 	// If set, this field indicates that the session is being ended due to an error
 	// condition. The value of the field SHOULD contain details on the cause of the error.
-	Error *Error
+	Error *encoding.Error
 }
 
-func (e *performEnd) frameBody() {}
+func (e *PerformEnd) frameBody() {}
 
-func (e *performEnd) Marshal(wr *buffer.Buffer) error {
+func (e *PerformEnd) Marshal(wr *buffer.Buffer) error {
 	return encoding.MarshalComposite(wr, encoding.TypeCodeEnd, []encoding.MarshalField{
 		{Value: e.Error, Omit: e.Error == nil},
 	})
 }
 
-func (e *performEnd) Unmarshal(r *buffer.Buffer) error {
+func (e *PerformEnd) Unmarshal(r *buffer.Buffer) error {
 	return encoding.UnmarshalComposite(r, encoding.TypeCodeEnd,
 		encoding.UnmarshalField{Field: &e.Error},
 	)
@@ -1305,29 +1305,29 @@ func (e *performEnd) Unmarshal(r *buffer.Buffer) error {
     <field name="error" type="error"/>
 </type>
 */
-type performClose struct {
+type PerformClose struct {
 	// error causing the close
 	//
 	// If set, this field indicates that the session is being closed due to an error
 	// condition. The value of the field SHOULD contain details on the cause of the error.
-	Error *Error
+	Error *encoding.Error
 }
 
-func (c *performClose) frameBody() {}
+func (c *PerformClose) frameBody() {}
 
-func (c *performClose) Marshal(wr *buffer.Buffer) error {
+func (c *PerformClose) Marshal(wr *buffer.Buffer) error {
 	return encoding.MarshalComposite(wr, encoding.TypeCodeClose, []encoding.MarshalField{
 		{Value: c.Error, Omit: c.Error == nil},
 	})
 }
 
-func (c *performClose) Unmarshal(r *buffer.Buffer) error {
+func (c *PerformClose) Unmarshal(r *buffer.Buffer) error {
 	return encoding.UnmarshalComposite(r, encoding.TypeCodeClose,
 		encoding.UnmarshalField{Field: &c.Error},
 	)
 }
 
-func (c *performClose) String() string {
+func (c *PerformClose) String() string {
 	return fmt.Sprintf("Close{Error: %s}", c.Error)
 }
 
@@ -1340,15 +1340,15 @@ func (c *performClose) String() string {
 </type>
 */
 
-type saslInit struct {
+type SASLInit struct {
 	Mechanism       encoding.Symbol
 	InitialResponse []byte
 	Hostname        string
 }
 
-func (si *saslInit) frameBody() {}
+func (si *SASLInit) frameBody() {}
 
-func (si *saslInit) Marshal(wr *buffer.Buffer) error {
+func (si *SASLInit) Marshal(wr *buffer.Buffer) error {
 	return encoding.MarshalComposite(wr, encoding.TypeCodeSASLInit, []encoding.MarshalField{
 		{Value: &si.Mechanism, Omit: false},
 		{Value: &si.InitialResponse, Omit: len(si.InitialResponse) == 0},
@@ -1356,7 +1356,7 @@ func (si *saslInit) Marshal(wr *buffer.Buffer) error {
 	})
 }
 
-func (si *saslInit) Unmarshal(r *buffer.Buffer) error {
+func (si *SASLInit) Unmarshal(r *buffer.Buffer) error {
 	return encoding.UnmarshalComposite(r, encoding.TypeCodeSASLInit, []encoding.UnmarshalField{
 		{Field: &si.Mechanism, HandleNull: func() error { return errors.New("saslInit.Mechanism is required") }},
 		{Field: &si.InitialResponse},
@@ -1364,7 +1364,7 @@ func (si *saslInit) Unmarshal(r *buffer.Buffer) error {
 	}...)
 }
 
-func (si *saslInit) String() string {
+func (si *SASLInit) String() string {
 	// Elide the InitialResponse as it may contain a plain text secret.
 	return fmt.Sprintf("SaslInit{Mechanism : %s, InitialResponse: ********, Hostname: %s}",
 		si.Mechanism,
@@ -1379,25 +1379,25 @@ func (si *saslInit) String() string {
 </type>
 */
 
-type saslMechanisms struct {
+type SASLMechanisms struct {
 	Mechanisms encoding.MultiSymbol
 }
 
-func (sm *saslMechanisms) frameBody() {}
+func (sm *SASLMechanisms) frameBody() {}
 
-func (sm *saslMechanisms) Marshal(wr *buffer.Buffer) error {
+func (sm *SASLMechanisms) Marshal(wr *buffer.Buffer) error {
 	return encoding.MarshalComposite(wr, encoding.TypeCodeSASLMechanism, []encoding.MarshalField{
 		{Value: &sm.Mechanisms, Omit: false},
 	})
 }
 
-func (sm *saslMechanisms) Unmarshal(r *buffer.Buffer) error {
+func (sm *SASLMechanisms) Unmarshal(r *buffer.Buffer) error {
 	return encoding.UnmarshalComposite(r, encoding.TypeCodeSASLMechanism,
 		encoding.UnmarshalField{Field: &sm.Mechanisms, HandleNull: func() error { return errors.New("saslMechanisms.Mechanisms is required") }},
 	)
 }
 
-func (sm *saslMechanisms) String() string {
+func (sm *SASLMechanisms) String() string {
 	return fmt.Sprintf("SaslMechanisms{Mechanisms : %v}",
 		sm.Mechanisms,
 	)
@@ -1410,23 +1410,23 @@ func (sm *saslMechanisms) String() string {
 </type>
 */
 
-type saslChallenge struct {
+type SASLChallenge struct {
 	Challenge []byte
 }
 
-func (sc *saslChallenge) String() string {
+func (sc *SASLChallenge) String() string {
 	return "Challenge{Challenge: ********}"
 }
 
-func (sc *saslChallenge) frameBody() {}
+func (sc *SASLChallenge) frameBody() {}
 
-func (sc *saslChallenge) Marshal(wr *buffer.Buffer) error {
+func (sc *SASLChallenge) Marshal(wr *buffer.Buffer) error {
 	return encoding.MarshalComposite(wr, encoding.TypeCodeSASLChallenge, []encoding.MarshalField{
 		{Value: &sc.Challenge, Omit: false},
 	})
 }
 
-func (sc *saslChallenge) Unmarshal(r *buffer.Buffer) error {
+func (sc *SASLChallenge) Unmarshal(r *buffer.Buffer) error {
 	return encoding.UnmarshalComposite(r, encoding.TypeCodeSASLChallenge, []encoding.UnmarshalField{
 		{Field: &sc.Challenge, HandleNull: func() error { return errors.New("saslChallenge.Challenge is required") }},
 	}...)
@@ -1439,23 +1439,23 @@ func (sc *saslChallenge) Unmarshal(r *buffer.Buffer) error {
 </type>
 */
 
-type saslResponse struct {
+type SASLResponse struct {
 	Response []byte
 }
 
-func (sr *saslResponse) String() string {
+func (sr *SASLResponse) String() string {
 	return "Response{Response: ********}"
 }
 
-func (sr *saslResponse) frameBody() {}
+func (sr *SASLResponse) frameBody() {}
 
-func (sr *saslResponse) Marshal(wr *buffer.Buffer) error {
+func (sr *SASLResponse) Marshal(wr *buffer.Buffer) error {
 	return encoding.MarshalComposite(wr, encoding.TypeCodeSASLResponse, []encoding.MarshalField{
 		{Value: &sr.Response, Omit: false},
 	})
 }
 
-func (sr *saslResponse) Unmarshal(r *buffer.Buffer) error {
+func (sr *SASLResponse) Unmarshal(r *buffer.Buffer) error {
 	return encoding.UnmarshalComposite(r, encoding.TypeCodeSASLResponse, []encoding.UnmarshalField{
 		{Field: &sr.Response, HandleNull: func() error { return errors.New("saslResponse.Response is required") }},
 	}...)
@@ -1469,28 +1469,28 @@ func (sr *saslResponse) Unmarshal(r *buffer.Buffer) error {
 </type>
 */
 
-type saslOutcome struct {
-	Code           saslCode
+type SASLOutcome struct {
+	Code           encoding.SASLCode
 	AdditionalData []byte
 }
 
-func (so *saslOutcome) frameBody() {}
+func (so *SASLOutcome) frameBody() {}
 
-func (so *saslOutcome) Marshal(wr *buffer.Buffer) error {
+func (so *SASLOutcome) Marshal(wr *buffer.Buffer) error {
 	return encoding.MarshalComposite(wr, encoding.TypeCodeSASLOutcome, []encoding.MarshalField{
 		{Value: &so.Code, Omit: false},
 		{Value: &so.AdditionalData, Omit: len(so.AdditionalData) == 0},
 	})
 }
 
-func (so *saslOutcome) Unmarshal(r *buffer.Buffer) error {
+func (so *SASLOutcome) Unmarshal(r *buffer.Buffer) error {
 	return encoding.UnmarshalComposite(r, encoding.TypeCodeSASLOutcome, []encoding.UnmarshalField{
 		{Field: &so.Code, HandleNull: func() error { return errors.New("saslOutcome.AdditionalData is required") }},
 		{Field: &so.AdditionalData},
 	}...)
 }
 
-func (so *saslOutcome) String() string {
+func (so *SASLOutcome) String() string {
 	return fmt.Sprintf("SaslOutcome{Code : %v, AdditionalData: %v}",
 		so.Code,
 		so.AdditionalData,

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Azure/go-amqp/internal/encoding"
+	"github.com/Azure/go-amqp/internal/frames"
 )
 
 // LinkOption is a function for configuring an AMQP link.
@@ -78,7 +79,7 @@ func LinkName(name string) LinkOption {
 func LinkSourceCapabilities(capabilities ...string) LinkOption {
 	return func(l *link) error {
 		if l.source == nil {
-			l.source = new(source)
+			l.source = new(frames.Source)
 		}
 
 		// Convert string to symbol
@@ -96,7 +97,7 @@ func LinkSourceCapabilities(capabilities ...string) LinkOption {
 func LinkSourceAddress(addr string) LinkOption {
 	return func(l *link) error {
 		if l.source == nil {
-			l.source = new(source)
+			l.source = new(frames.Source)
 		}
 		l.source.Address = addr
 		return nil
@@ -107,7 +108,7 @@ func LinkSourceAddress(addr string) LinkOption {
 func LinkTargetAddress(addr string) LinkOption {
 	return func(l *link) error {
 		if l.target == nil {
-			l.target = new(target)
+			l.target = new(frames.Target)
 		}
 		l.target.Address = addr
 		return nil
@@ -235,7 +236,7 @@ func LinkSelectorFilter(filter string) LinkOption {
 func LinkSourceFilter(name string, code uint64, value interface{}) LinkOption {
 	return func(l *link) error {
 		if l.source == nil {
-			l.source = new(source)
+			l.source = new(frames.Source)
 		}
 		if l.source.Filter == nil {
 			l.source.Filter = make(map[encoding.Symbol]*encoding.DescribedType)
@@ -279,7 +280,7 @@ func LinkTargetDurability(d Durability) LinkOption {
 		}
 
 		if l.target == nil {
-			l.target = new(target)
+			l.target = new(frames.Target)
 		}
 		l.target.Durable = d
 
@@ -292,13 +293,13 @@ func LinkTargetDurability(d Durability) LinkOption {
 // Default: ExpirySessionEnd.
 func LinkTargetExpiryPolicy(p ExpiryPolicy) LinkOption {
 	return func(l *link) error {
-		err := p.validate()
+		err := encoding.ValidateExpiryPolicy(p)
 		if err != nil {
 			return err
 		}
 
 		if l.target == nil {
-			l.target = new(target)
+			l.target = new(frames.Target)
 		}
 		l.target.ExpiryPolicy = p
 
@@ -312,7 +313,7 @@ func LinkTargetExpiryPolicy(p ExpiryPolicy) LinkOption {
 func LinkTargetTimeout(timeout uint32) LinkOption {
 	return func(l *link) error {
 		if l.target == nil {
-			l.target = new(target)
+			l.target = new(frames.Target)
 		}
 		l.target.Timeout = timeout
 
@@ -330,7 +331,7 @@ func LinkSourceDurability(d Durability) LinkOption {
 		}
 
 		if l.source == nil {
-			l.source = new(source)
+			l.source = new(frames.Source)
 		}
 		l.source.Durable = d
 
@@ -343,13 +344,13 @@ func LinkSourceDurability(d Durability) LinkOption {
 // Default: ExpirySessionEnd.
 func LinkSourceExpiryPolicy(p ExpiryPolicy) LinkOption {
 	return func(l *link) error {
-		err := p.validate()
+		err := encoding.ValidateExpiryPolicy(p)
 		if err != nil {
 			return err
 		}
 
 		if l.source == nil {
-			l.source = new(source)
+			l.source = new(frames.Source)
 		}
 		l.source.ExpiryPolicy = p
 
@@ -363,7 +364,7 @@ func LinkSourceExpiryPolicy(p ExpiryPolicy) LinkOption {
 func LinkSourceTimeout(timeout uint32) LinkOption {
 	return func(l *link) error {
 		if l.source == nil {
-			l.source = new(source)
+			l.source = new(frames.Source)
 		}
 		l.source.Timeout = timeout
 

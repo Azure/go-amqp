@@ -26,6 +26,11 @@ func (s *Sender) ID() string {
 	return s.link.key.name
 }
 
+// MaxMessageSize is the maximum size of a single message.
+func (s *Sender) MaxMessageSize() uint64 {
+	return s.link.maxMessageSize
+}
+
 // Send sends a Message.
 //
 // Blocks until the message is sent, ctx completes, or an error occurs.

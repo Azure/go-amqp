@@ -9,10 +9,10 @@ import (
 func makeLink(mode ReceiverSettleMode) *link {
 	return &link{
 		close:              make(chan struct{}),
-		detached:           make(chan struct{}),
-		receiverReady:      make(chan struct{}, 1),
-		messages:           make(chan Message, 1),
-		receiverSettleMode: &mode,
+		Detached:           make(chan struct{}),
+		ReceiverReady:      make(chan struct{}, 1),
+		Messages:           make(chan Message, 1),
+		ReceiverSettleMode: &mode,
 		unsettledMessages:  map[string]struct{}{},
 	}
 }
@@ -46,7 +46,7 @@ func TestReceiver_HandleMessageModeFirst_AutoAccept(t *testing.T) {
 		dispositions: make(chan messageDisposition, 2),
 	}
 	msg := makeMessage(ModeFirst)
-	r.link.messages <- msg
+	r.link.Messages <- msg
 	if r.link.countUnsettled() != 0 {
 		// mode first messages have no delivery tag, thus there should be no unsettled message
 		t.Fatal("expected zero unsettled count")
@@ -67,7 +67,7 @@ func TestReceiver_HandleMessageModeSecond_DontDispose(t *testing.T) {
 		dispositions: make(chan messageDisposition, 2),
 	}
 	msg := makeMessage(ModeSecond)
-	r.link.messages <- msg
+	r.link.Messages <- msg
 	r.link.addUnsettled(&msg)
 	if err := r.HandleMessage(context.TODO(), doNothing); err != nil {
 		t.Errorf("HandleMessage() error = %v", err)
@@ -96,7 +96,7 @@ func TestReceiver_HandleMessageModeSecond_removeFromUnsettledMapOnDisposition(t 
 		dispositions: make(chan messageDisposition, 1),
 	}
 	msg := makeMessage(ModeSecond)
-	r.link.messages <- msg
+	r.link.Messages <- msg
 	r.link.addUnsettled(&msg)
 	// unblock the accept waiting on inflight disposition for modeSecond
 	loop := true

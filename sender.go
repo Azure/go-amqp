@@ -23,12 +23,12 @@ type Sender struct {
 
 // LinkName() is the name of the link used for this Sender.
 func (s *Sender) LinkName() string {
-	return s.link.key.name
+	return s.link.Key.name
 }
 
 // MaxMessageSize is the maximum size of a single message.
 func (s *Sender) MaxMessageSize() uint64 {
-	return s.link.maxMessageSize
+	return s.link.MaxMessageSize
 }
 
 // Send sends a Message.
@@ -57,7 +57,7 @@ func (s *Sender) Send(ctx context.Context, msg *Message) error {
 			return state.Error
 		}
 		return nil
-	case <-s.link.detached:
+	case <-s.link.Detached:
 		return s.link.err
 	case <-ctx.Done():
 		return fmt.Errorf("awaiting send: %v", ctx.Err())
@@ -81,15 +81,15 @@ func (s *Sender) send(ctx context.Context, msg *Message) (chan encoding.Delivery
 		return nil, err
 	}
 
-	if s.link.maxMessageSize != 0 && uint64(s.buf.Len()) > s.link.maxMessageSize {
-		return nil, fmt.Errorf("encoded message size exceeds max of %d", s.link.maxMessageSize)
+	if s.link.MaxMessageSize != 0 && uint64(s.buf.Len()) > s.link.MaxMessageSize {
+		return nil, fmt.Errorf("encoded message size exceeds max of %d", s.link.MaxMessageSize)
 	}
 
 	var (
-		maxPayloadSize = int64(s.link.session.conn.PeerMaxFrameSize) - maxTransferFrameHeader
-		sndSettleMode  = s.link.senderSettleMode
+		maxPayloadSize = int64(s.link.Session.conn.PeerMaxFrameSize) - maxTransferFrameHeader
+		sndSettleMode  = s.link.SenderSettleMode
 		senderSettled  = sndSettleMode != nil && (*sndSettleMode == ModeSettled || (*sndSettleMode == ModeMixed && msg.SendSettled))
-		deliveryID     = atomic.AddUint32(&s.link.session.nextDeliveryID, 1)
+		deliveryID     = atomic.AddUint32(&s.link.Session.nextDeliveryID, 1)
 	)
 
 	deliveryTag := msg.DeliveryTag
@@ -101,7 +101,7 @@ func (s *Sender) send(ctx context.Context, msg *Message) (chan encoding.Delivery
 	}
 
 	fr := frames.PerformTransfer{
-		Handle:        s.link.handle,
+		Handle:        s.link.Handle,
 		DeliveryID:    &deliveryID,
 		DeliveryTag:   deliveryTag,
 		MessageFormat: &msg.Format,
@@ -126,8 +126,8 @@ func (s *Sender) send(ctx context.Context, msg *Message) (chan encoding.Delivery
 		}
 
 		select {
-		case s.link.transfers <- fr:
-		case <-s.link.detached:
+		case s.link.Transfers <- fr:
+		case <-s.link.Detached:
 			return nil, s.link.err
 		case <-ctx.Done():
 			return nil, fmt.Errorf("awaiting send: %v", ctx.Err())
@@ -144,10 +144,10 @@ func (s *Sender) send(ctx context.Context, msg *Message) (chan encoding.Delivery
 
 // Address returns the link's address.
 func (s *Sender) Address() string {
-	if s.link.target == nil {
+	if s.link.Target == nil {
 		return ""
 	}
-	return s.link.target.Address
+	return s.link.Target.Address
 }
 
 // Close closes the Sender and AMQP link.

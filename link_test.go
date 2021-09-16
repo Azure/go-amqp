@@ -18,15 +18,15 @@ func TestLinkFlowForSender(t *testing.T) {
 	l := newTestLink(t)
 	l.receiver = nil
 
-	err := l.drainCredit(context.Background())
+	err := l.DrainCredit(context.Background())
 	require.Error(t, err, "drain can only be used with receiver links using manual credit management")
 
-	err = l.issueCredit(1)
+	err = l.IssueCredit(1)
 	require.Error(t, err, "issueCredit can only be used with receiver links using manual credit management")
 
 	// and flow goes through the non-manual credit path
 	require.EqualValues(t, 0, l.linkCredit, "No link credits have been added")
-	require.EqualValues(t, 0, l.paused, "Link not paused")
+	require.EqualValues(t, 0, l.Paused, "Link not paused")
 
 	// if we have link credit we can enable outgoing transfers
 	l.linkCredit = 1
@@ -34,21 +34,21 @@ func TestLinkFlowForSender(t *testing.T) {
 
 	require.True(t, ok, "no errors, should continue to process")
 	require.True(t, enableOutgoingTransfers, "outgoing transfers needed for senders")
-	require.EqualValues(t, 0, l.paused, "Link not paused")
+	require.EqualValues(t, 0, l.Paused, "Link not paused")
 }
 
 func TestLinkFlowThatNeedsToReplenishCredits(t *testing.T) {
 	l := newTestLink(t)
 
-	err := l.drainCredit(context.Background())
+	err := l.DrainCredit(context.Background())
 	require.Error(t, err, "drain can only be used with receiver links using manual credit management")
 
-	err = l.issueCredit(1)
+	err = l.IssueCredit(1)
 	require.Error(t, err, "issueCredit can only be used with receiver links using manual credit management")
 
 	// and flow goes through the non-manual credit path
 	require.EqualValues(t, 0, l.linkCredit, "No link credits have been added")
-	require.EqualValues(t, 0, l.paused, "Link not paused")
+	require.EqualValues(t, 0, l.Paused, "Link not paused")
 
 	// we've consumed half of the maximum credit we're allowed to have - reflow!
 	l.receiver.maxCredit = 2
@@ -59,10 +59,10 @@ func TestLinkFlowThatNeedsToReplenishCredits(t *testing.T) {
 
 	require.True(t, ok, "no errors, should continue to process")
 	require.False(t, enableOutgoingTransfers, "outgoing transfers only needed for senders")
-	require.EqualValues(t, 0, l.paused, "Link not paused")
+	require.EqualValues(t, 0, l.Paused, "Link not paused")
 
 	// flow happens immmediately in 'mux'
-	txFrame := <-l.session.tx
+	txFrame := <-l.Session.tx
 
 	switch frame := txFrame.(type) {
 	case *frames.PerformFlow:
@@ -77,15 +77,15 @@ func TestLinkFlowThatNeedsToReplenishCredits(t *testing.T) {
 func TestLinkFlowWithZeroCredits(t *testing.T) {
 	l := newTestLink(t)
 
-	err := l.drainCredit(context.Background())
+	err := l.DrainCredit(context.Background())
 	require.Error(t, err, "drain can only be used with receiver links using manual credit management")
 
-	err = l.issueCredit(1)
+	err = l.IssueCredit(1)
 	require.Error(t, err, "issueCredit can only be used with receiver links using manual credit management")
 
 	// and flow goes through the non-manual credit path
 	require.EqualValues(t, 0, l.linkCredit, "No link credits have been added")
-	require.EqualValues(t, 0, l.paused, "Link not paused...yet")
+	require.EqualValues(t, 0, l.Paused, "Link not paused...yet")
 
 	l.receiver.maxCredit = 2
 	l.linkCredit = 0
@@ -98,7 +98,7 @@ func TestLinkFlowWithZeroCredits(t *testing.T) {
 
 	require.True(t, ok)
 	require.False(t, enableOutgoingTransfers)
-	require.EqualValues(t, uint32(1), l.paused, "Link is paused because credits are zero")
+	require.EqualValues(t, uint32(1), l.Paused, "Link is paused because credits are zero")
 }
 
 func TestLinkFlowDrain(t *testing.T) {
@@ -111,11 +111,11 @@ func TestLinkFlowDrain(t *testing.T) {
 	wg.Add(1)
 
 	go func() {
-		<-l.receiverReady
+		<-l.ReceiverReady
 		l.receiver.manualCreditor.EndDrain()
 	}()
 
-	require.NoError(t, l.drainCredit(context.Background()))
+	require.NoError(t, l.DrainCredit(context.Background()))
 }
 
 func TestLinkFlowWithManualCreditor(t *testing.T) {
@@ -123,14 +123,14 @@ func TestLinkFlowWithManualCreditor(t *testing.T) {
 	require.NoError(t, LinkWithManualCredits()(l))
 
 	l.linkCredit = 1
-	require.NoError(t, l.issueCredit(100))
+	require.NoError(t, l.IssueCredit(100))
 
 	ok, enableOutgoingTransfers := l.doFlow()
 	require.True(t, ok)
 	require.False(t, enableOutgoingTransfers, "sender related state is not enabled")
 
 	// flow happens immmediately in 'mux'
-	txFrame := <-l.session.tx
+	txFrame := <-l.Session.tx
 
 	switch frame := txFrame.(type) {
 	case *frames.PerformFlow:
@@ -146,14 +146,14 @@ func TestLinkFlowWithDrain(t *testing.T) {
 	require.NoError(t, LinkWithManualCredits()(l))
 
 	go func() {
-		<-l.receiverReady
+		<-l.ReceiverReady
 
 		ok, enableOutgoingTransfers := l.doFlow()
 		require.True(t, ok)
 		require.False(t, enableOutgoingTransfers, "sender related state is not enabled")
 
 		// flow happens immmediately in 'mux'
-		txFrame := <-l.session.tx
+		txFrame := <-l.Session.tx
 
 		switch frame := txFrame.(type) {
 		case *frames.PerformFlow:
@@ -172,7 +172,7 @@ func TestLinkFlowWithDrain(t *testing.T) {
 	}()
 
 	l.linkCredit = 1
-	require.NoError(t, l.drainCredit(context.Background()))
+	require.NoError(t, l.DrainCredit(context.Background()))
 }
 
 func TestLinkFlowWithManualCreditorAndNoFlowNeeded(t *testing.T) {
@@ -187,7 +187,7 @@ func TestLinkFlowWithManualCreditorAndNoFlowNeeded(t *testing.T) {
 
 	// flow happens immmediately in 'mux'
 	select {
-	case fr := <-l.session.tx: // there won't be a flow this time.
+	case fr := <-l.Session.tx: // there won't be a flow this time.
 		require.Failf(t, "No flow frame would be needed since no link credits were added and drain was not requested", "Frame was %+v", fr)
 	case <-time.After(time.Second * 2):
 		// this is the expected case since no frame will be sent.
@@ -196,18 +196,18 @@ func TestLinkFlowWithManualCreditorAndNoFlowNeeded(t *testing.T) {
 
 func newTestLink(t *testing.T) *link {
 	l := &link{
-		source: &frames.Source{},
+		Source: &frames.Source{},
 		receiver: &Receiver{
 			// adding just enough so the debug() print will still work...
 			// debug(1, "FLOW Link Mux half: source: %s, inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s", l.source.Address, len(l.receiver.inFlight.m), l.linkCredit, l.deliveryCount, len(l.messages), l.countUnsettled(), l.receiver.maxCredit, l.receiverSettleMode.String())
 			inFlight: inFlight{},
 		},
-		session: &Session{
+		Session: &Session{
 			tx:   make(chan frames.FrameBody, 100),
 			done: make(chan struct{}),
 		},
-		rx:            make(chan frames.FrameBody, 100),
-		receiverReady: make(chan struct{}, 1),
+		RX:            make(chan frames.FrameBody, 100),
+		ReceiverReady: make(chan struct{}, 1),
 	}
 
 	return l

@@ -32,18 +32,18 @@ type Receiver struct {
 // or the unsettled message tracker will get out of sync, and reduce the flow.
 // When using ModeFirst, the message is spontaneously Accepted at reception.
 func (r *Receiver) HandleMessage(ctx context.Context, handle func(*Message) error) error {
-	debug(3, "Entering link %s Receive()", r.link.key.name)
+	debug(3, "Entering link %s Receive()", r.link.Key.name)
 
 	trackCompletion := func(msg *Message) {
 		if msg.doneSignal == nil {
 			msg.doneSignal = make(chan struct{})
 		}
 		<-msg.doneSignal
-		r.link.deleteUnsettled(msg)
+		r.link.DeleteUnsettled(msg)
 		debug(3, "Receive() deleted unsettled %d", msg.deliveryID)
-		if atomic.LoadUint32(&r.link.paused) == 1 {
+		if atomic.LoadUint32(&r.link.Paused) == 1 {
 			select {
-			case r.link.receiverReady <- struct{}{}:
+			case r.link.ReceiverReady <- struct{}{}:
 				debug(3, "Receive() unpause link on completion")
 			default:
 			}
@@ -54,7 +54,7 @@ func (r *Receiver) HandleMessage(ctx context.Context, handle func(*Message) erro
 		msg.receiver = r
 		// we only need to track message disposition for mode second
 		// spec : http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transport-v1.0-os.html#type-receiver-settle-mode
-		if receiverSettleModeValue(r.link.receiverSettleMode) == ModeSecond {
+		if receiverSettleModeValue(r.link.ReceiverSettleMode) == ModeSecond {
 			go trackCompletion(msg)
 		}
 		// tracks messages until exiting handler
@@ -66,7 +66,7 @@ func (r *Receiver) HandleMessage(ctx context.Context, handle func(*Message) erro
 	}
 
 	select {
-	case msg := <-r.link.messages:
+	case msg := <-r.link.Messages:
 		return callHandler(&msg)
 	case <-ctx.Done():
 		return ctx.Err()
@@ -75,9 +75,9 @@ func (r *Receiver) HandleMessage(ctx context.Context, handle func(*Message) erro
 	}
 
 	select {
-	case msg := <-r.link.messages:
+	case msg := <-r.link.Messages:
 		return callHandler(&msg)
-	case <-r.link.detached:
+	case <-r.link.Detached:
 		return r.link.err
 	case <-ctx.Done():
 		return ctx.Err()
@@ -87,13 +87,13 @@ func (r *Receiver) HandleMessage(ctx context.Context, handle func(*Message) erro
 // IssueCredit adds credits to be requested in the next flow
 // request.
 func (r *Receiver) IssueCredit(credit uint32) error {
-	return r.link.issueCredit(credit)
+	return r.link.IssueCredit(credit)
 }
 
 // DrainCredit sets the drain flag on the next flow frame and
 // waits for the drain to be acknowledged.
 func (r *Receiver) DrainCredit(ctx context.Context) error {
-	return r.link.drainCredit(ctx)
+	return r.link.DrainCredit(ctx)
 }
 
 // Receive returns the next message from the sender.
@@ -101,9 +101,9 @@ func (r *Receiver) DrainCredit(ctx context.Context) error {
 // Blocks until a message is received, ctx completes, or an error occurs.
 // Deprecated: prefer HandleMessage
 func (r *Receiver) Receive(ctx context.Context) (*Message, error) {
-	if atomic.LoadUint32(&r.link.paused) == 1 {
+	if atomic.LoadUint32(&r.link.Paused) == 1 {
 		select {
-		case r.link.receiverReady <- struct{}{}:
+		case r.link.ReceiverReady <- struct{}{}:
 		default:
 		}
 	}
@@ -111,11 +111,11 @@ func (r *Receiver) Receive(ctx context.Context) (*Message, error) {
 	// non-blocking receive to ensure buffered messages are
 	// delivered regardless of whether the link has been closed.
 	select {
-	case msg := <-r.link.messages:
+	case msg := <-r.link.Messages:
 		// we remove the message from unsettled map as soon as it's popped off the channel
 		// This makes the unsettled count the same as messages buffer count
 		// and keeps the behavior the same as before the unsettled messages tracking was introduced
-		defer r.link.deleteUnsettled(&msg)
+		defer r.link.DeleteUnsettled(&msg)
 		debug(3, "Receive() non blocking %d", msg.deliveryID)
 		msg.receiver = r
 		return &msg, nil
@@ -126,15 +126,15 @@ func (r *Receiver) Receive(ctx context.Context) (*Message, error) {
 
 	// wait for the next message
 	select {
-	case msg := <-r.link.messages:
+	case msg := <-r.link.Messages:
 		// we remove the message from unsettled map as soon as it's popped off the channel
 		// This makes the unsettled count the same as messages buffer count
 		// and keeps the behavior the same as before the unsettled messages tracking was introduced
-		defer r.link.deleteUnsettled(&msg)
+		defer r.link.DeleteUnsettled(&msg)
 		debug(3, "Receive() blocking %d", msg.deliveryID)
 		msg.receiver = r
 		return &msg, nil
-	case <-r.link.detached:
+	case <-r.link.Detached:
 		return nil, r.link.err
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -143,23 +143,23 @@ func (r *Receiver) Receive(ctx context.Context) (*Message, error) {
 
 // Address returns the link's address.
 func (r *Receiver) Address() string {
-	if r.link.source == nil {
+	if r.link.Source == nil {
 		return ""
 	}
-	return r.link.source.Address
+	return r.link.Source.Address
 }
 
 // LinkName returns associated link name or an empty string if link is not defined.
 func (r *Receiver) LinkName() string {
-	return r.link.key.name
+	return r.link.Key.name
 }
 
 // LinkSourceFilterValue retrieves the specified link source filter value or nil if it doesn't exist.
 func (r *Receiver) LinkSourceFilterValue(name string) interface{} {
-	if r.link.source == nil {
+	if r.link.Source == nil {
 		return nil
 	}
-	filter, ok := r.link.source.Filter[encoding.Symbol(name)]
+	filter, ok := r.link.Source.Filter[encoding.Symbol(name)]
 	if !ok {
 		return nil
 	}
@@ -253,7 +253,7 @@ func (r *Receiver) dispositionBatcher() {
 			batchStarted = false
 			batchTimer.Stop()
 
-		case <-r.link.detached:
+		case <-r.link.Detached:
 			return
 		}
 	}
@@ -265,17 +265,17 @@ func (r *Receiver) sendDisposition(first uint32, last *uint32, state interface{}
 		Role:    encoding.RoleReceiver,
 		First:   first,
 		Last:    last,
-		Settled: r.link.receiverSettleMode == nil || *r.link.receiverSettleMode == ModeFirst,
+		Settled: r.link.ReceiverSettleMode == nil || *r.link.ReceiverSettleMode == ModeFirst,
 		State:   state,
 	}
 
 	debug(1, "TX: %s", fr)
-	return r.link.session.txFrame(fr, nil)
+	return r.link.Session.txFrame(fr, nil)
 }
 
 func (r *Receiver) messageDisposition(ctx context.Context, id uint32, state interface{}) error {
 	var wait chan error
-	if r.link.receiverSettleMode != nil && *r.link.receiverSettleMode == ModeSecond {
+	if r.link.ReceiverSettleMode != nil && *r.link.ReceiverSettleMode == ModeSecond {
 		debug(3, "RX: add %d to inflight", id)
 		wait = r.inFlight.add(id)
 	}

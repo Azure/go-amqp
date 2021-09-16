@@ -83,8 +83,8 @@ func TestLinkOptions(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if !testEqual(got.source, tt.wantSource) {
-				t.Errorf("Source properties don't match expected:\n %s", testDiff(got.source, tt.wantSource))
+			if !testEqual(got.Source, tt.wantSource) {
+				t.Errorf("Source properties don't match expected:\n %s", testDiff(got.Source, tt.wantSource))
 			}
 
 			if !testEqual(got.properties, tt.wantProperties) {
@@ -105,7 +105,7 @@ func TestSourceName(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got.key.name != expectedSourceName {
-		t.Errorf("Link Source Name does not match expected: %v got: %v", expectedSourceName, got.key.name)
+	if got.Key.name != expectedSourceName {
+		t.Errorf("Link Source Name does not match expected: %v got: %v", expectedSourceName, got.Key.name)
 	}
 }

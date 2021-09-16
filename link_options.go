@@ -70,7 +70,7 @@ func linkProperty(key string, value interface{}) LinkOption {
 // Default: randomly generated.
 func LinkName(name string) LinkOption {
 	return func(l *link) error {
-		l.key.name = name
+		l.Key.name = name
 		return nil
 	}
 }
@@ -78,8 +78,8 @@ func LinkName(name string) LinkOption {
 // LinkSourceCapabilities sets the source capabilities.
 func LinkSourceCapabilities(capabilities ...string) LinkOption {
 	return func(l *link) error {
-		if l.source == nil {
-			l.source = new(frames.Source)
+		if l.Source == nil {
+			l.Source = new(frames.Source)
 		}
 
 		// Convert string to symbol
@@ -88,7 +88,7 @@ func LinkSourceCapabilities(capabilities ...string) LinkOption {
 			symbolCapabilities[i] = encoding.Symbol(v)
 		}
 
-		l.source.Capabilities = append(l.source.Capabilities, symbolCapabilities...)
+		l.Source.Capabilities = append(l.Source.Capabilities, symbolCapabilities...)
 		return nil
 	}
 }
@@ -96,10 +96,10 @@ func LinkSourceCapabilities(capabilities ...string) LinkOption {
 // LinkSourceAddress sets the source address.
 func LinkSourceAddress(addr string) LinkOption {
 	return func(l *link) error {
-		if l.source == nil {
-			l.source = new(frames.Source)
+		if l.Source == nil {
+			l.Source = new(frames.Source)
 		}
-		l.source.Address = addr
+		l.Source.Address = addr
 		return nil
 	}
 }
@@ -107,10 +107,10 @@ func LinkSourceAddress(addr string) LinkOption {
 // LinkTargetAddress sets the target address.
 func LinkTargetAddress(addr string) LinkOption {
 	return func(l *link) error {
-		if l.target == nil {
-			l.target = new(frames.Target)
+		if l.Target == nil {
+			l.Target = new(frames.Target)
 		}
-		l.target.Address = addr
+		l.Target.Address = addr
 		return nil
 	}
 }
@@ -182,7 +182,7 @@ func LinkSenderSettle(mode SenderSettleMode) LinkOption {
 		if mode > ModeMixed {
 			return fmt.Errorf("invalid SenderSettlementMode %d", mode)
 		}
-		l.senderSettleMode = &mode
+		l.SenderSettleMode = &mode
 		return nil
 	}
 }
@@ -198,7 +198,7 @@ func LinkReceiverSettle(mode ReceiverSettleMode) LinkOption {
 		if mode > ModeSecond {
 			return fmt.Errorf("invalid ReceiverSettlementMode %d", mode)
 		}
-		l.receiverSettleMode = &mode
+		l.ReceiverSettleMode = &mode
 		return nil
 	}
 }
@@ -235,11 +235,11 @@ func LinkSelectorFilter(filter string) LinkOption {
 //  http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-types-v1.0-os.html#section-descriptor-values
 func LinkSourceFilter(name string, code uint64, value interface{}) LinkOption {
 	return func(l *link) error {
-		if l.source == nil {
-			l.source = new(frames.Source)
+		if l.Source == nil {
+			l.Source = new(frames.Source)
 		}
-		if l.source.Filter == nil {
-			l.source.Filter = make(map[encoding.Symbol]*encoding.DescribedType)
+		if l.Source.Filter == nil {
+			l.Source.Filter = make(map[encoding.Symbol]*encoding.DescribedType)
 		}
 
 		var descriptor interface{}
@@ -249,7 +249,7 @@ func LinkSourceFilter(name string, code uint64, value interface{}) LinkOption {
 			descriptor = encoding.Symbol(name)
 		}
 
-		l.source.Filter[encoding.Symbol(name)] = &encoding.DescribedType{
+		l.Source.Filter[encoding.Symbol(name)] = &encoding.DescribedType{
 			Descriptor: descriptor,
 			Value:      value,
 		}
@@ -265,7 +265,7 @@ func LinkSourceFilter(name string, code uint64, value interface{}) LinkOption {
 // Default: 0.
 func LinkMaxMessageSize(size uint64) LinkOption {
 	return func(l *link) error {
-		l.maxMessageSize = size
+		l.MaxMessageSize = size
 		return nil
 	}
 }
@@ -279,10 +279,10 @@ func LinkTargetDurability(d Durability) LinkOption {
 			return fmt.Errorf("invalid Durability %d", d)
 		}
 
-		if l.target == nil {
-			l.target = new(frames.Target)
+		if l.Target == nil {
+			l.Target = new(frames.Target)
 		}
-		l.target.Durable = d
+		l.Target.Durable = d
 
 		return nil
 	}
@@ -298,10 +298,10 @@ func LinkTargetExpiryPolicy(p ExpiryPolicy) LinkOption {
 			return err
 		}
 
-		if l.target == nil {
-			l.target = new(frames.Target)
+		if l.Target == nil {
+			l.Target = new(frames.Target)
 		}
-		l.target.ExpiryPolicy = p
+		l.Target.ExpiryPolicy = p
 
 		return nil
 	}
@@ -312,10 +312,10 @@ func LinkTargetExpiryPolicy(p ExpiryPolicy) LinkOption {
 // Default: 0.
 func LinkTargetTimeout(timeout uint32) LinkOption {
 	return func(l *link) error {
-		if l.target == nil {
-			l.target = new(frames.Target)
+		if l.Target == nil {
+			l.Target = new(frames.Target)
 		}
-		l.target.Timeout = timeout
+		l.Target.Timeout = timeout
 
 		return nil
 	}
@@ -330,10 +330,10 @@ func LinkSourceDurability(d Durability) LinkOption {
 			return fmt.Errorf("invalid Durability %d", d)
 		}
 
-		if l.source == nil {
-			l.source = new(frames.Source)
+		if l.Source == nil {
+			l.Source = new(frames.Source)
 		}
-		l.source.Durable = d
+		l.Source.Durable = d
 
 		return nil
 	}
@@ -349,10 +349,10 @@ func LinkSourceExpiryPolicy(p ExpiryPolicy) LinkOption {
 			return err
 		}
 
-		if l.source == nil {
-			l.source = new(frames.Source)
+		if l.Source == nil {
+			l.Source = new(frames.Source)
 		}
-		l.source.ExpiryPolicy = p
+		l.Source.ExpiryPolicy = p
 
 		return nil
 	}
@@ -363,10 +363,10 @@ func LinkSourceExpiryPolicy(p ExpiryPolicy) LinkOption {
 // Default: 0.
 func LinkSourceTimeout(timeout uint32) LinkOption {
 	return func(l *link) error {
-		if l.source == nil {
-			l.source = new(frames.Source)
+		if l.Source == nil {
+			l.Source = new(frames.Source)
 		}
-		l.source.Timeout = timeout
+		l.Source.Timeout = timeout
 
 		return nil
 	}

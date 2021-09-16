@@ -2,13 +2,11 @@ package amqp
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"math/rand"
 	"net"
-	"net/url"
 	"sync"
 	"time"
 
@@ -43,51 +41,11 @@ type Client struct {
 // If username and password information is not empty it's used as SASL PLAIN
 // credentials, equal to passing ConnSASLPlain option.
 func Dial(addr string, opts ...ConnOption) (*Client, error) {
-	u, err := url.Parse(addr)
+	c, err := dialConn(addr, opts...)
 	if err != nil {
 		return nil, err
 	}
-	host, port := u.Hostname(), u.Port()
-	if port == "" {
-		port = "5672"
-		if u.Scheme == "amqps" {
-			port = "5671"
-		}
-	}
-
-	// prepend SASL credentials when the user/pass segment is not empty
-	if u.User != nil {
-		pass, _ := u.User.Password()
-		opts = append([]ConnOption{
-			ConnSASLPlain(u.User.Username(), pass),
-		}, opts...)
-	}
-
-	// append default options so user specified can overwrite
-	opts = append([]ConnOption{
-		ConnServerHostname(host),
-	}, opts...)
-
-	c, err := newConn(nil, opts...)
-	if err != nil {
-		return nil, err
-	}
-
-	dialer := &net.Dialer{Timeout: c.connectTimeout}
-	switch u.Scheme {
-	case "amqp", "":
-		c.net, err = dialer.Dial("tcp", net.JoinHostPort(host, port))
-	case "amqps":
-		c.initTLSConfig()
-		c.tlsNegotiation = false
-		c.net, err = tls.DialWithDialer(dialer, "tcp", net.JoinHostPort(host, port), c.tlsConfig)
-	default:
-		return nil, fmt.Errorf("unsupported scheme %q", u.Scheme)
-	}
-	if err != nil {
-		return nil, err
-	}
-	err = c.start()
+	err = c.Start()
 	return &Client{conn: c}, err
 }
 
@@ -97,7 +55,7 @@ func New(conn net.Conn, opts ...ConnOption) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = c.start()
+	err = c.Start()
 	return &Client{conn: c}, err
 }
 
@@ -111,9 +69,9 @@ func (c *Client) NewSession(opts ...SessionOption) (*Session, error) {
 	// get a session allocated by Client.mux
 	var sResp newSessionResp
 	select {
-	case <-c.conn.done:
-		return nil, c.conn.getErr()
-	case sResp = <-c.conn.newSession:
+	case <-c.conn.Done:
+		return nil, c.conn.Err()
+	case sResp = <-c.conn.NewSession:
 	}
 
 	if sResp.err != nil {
@@ -142,8 +100,8 @@ func (c *Client) NewSession(opts ...SessionOption) (*Session, error) {
 	// wait for response
 	var fr frames.Frame
 	select {
-	case <-c.conn.done:
-		return nil, c.conn.getErr()
+	case <-c.conn.Done:
+		return nil, c.conn.Err()
 	case fr = <-s.rx:
 	}
 	debug(1, "RX: %s", fr.Body)

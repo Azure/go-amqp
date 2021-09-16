@@ -76,7 +76,7 @@ func (s *Session) Close(ctx context.Context) error {
 // txFrame sends a frame to the connWriter.
 // it returns an error if the connection has been closed.
 func (s *Session) txFrame(p frames.FrameBody, done chan encoding.DeliveryState) error {
-	return s.conn.wantWriteFrame(frames.Frame{
+	return s.conn.SendFrame(frames.Frame{
 		Type:    frameTypeAMQP,
 		Channel: s.channel,
 		Body:    p,
@@ -128,9 +128,9 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 	defer func() {
 		// clean up session record in conn.mux()
 		select {
-		case s.conn.delSession <- s:
-		case <-s.conn.done:
-			s.err = s.conn.getErr()
+		case s.conn.DelSession <- s:
+		case <-s.conn.Done:
+			s.err = s.conn.Err()
 		}
 		if s.err == nil {
 			s.err = ErrSessionClosed
@@ -169,8 +169,8 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 		select {
 		// conn has completed, exit
-		case <-s.conn.done:
-			s.err = s.conn.getErr()
+		case <-s.conn.Done:
+			s.err = s.conn.Err()
 			return
 
 		// session is being closed by user
@@ -186,8 +186,8 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 					if ok {
 						break EndLoop
 					}
-				case <-s.conn.done:
-					s.err = s.conn.getErr()
+				case <-s.conn.Done:
+					s.err = s.conn.Err()
 					return
 				}
 			}
@@ -357,7 +357,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				}
 
 				select {
-				case <-s.conn.done:
+				case <-s.conn.Done:
 				case link.rx <- fr.Body:
 				}
 
@@ -463,6 +463,6 @@ func (s *Session) muxFrameToLink(l *link, fr frames.FrameBody) {
 	select {
 	case l.rx <- fr:
 	case <-l.detached:
-	case <-s.conn.done:
+	case <-s.conn.Done:
 	}
 }

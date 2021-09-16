@@ -86,7 +86,7 @@ func (s *Sender) send(ctx context.Context, msg *Message) (chan encoding.Delivery
 	}
 
 	var (
-		maxPayloadSize = int64(s.link.session.conn.peerMaxFrameSize) - maxTransferFrameHeader
+		maxPayloadSize = int64(s.link.session.conn.PeerMaxFrameSize) - maxTransferFrameHeader
 		sndSettleMode  = s.link.senderSettleMode
 		senderSettled  = sndSettleMode != nil && (*sndSettleMode == ModeSettled || (*sndSettleMode == ModeMixed && msg.SendSettled))
 		deliveryID     = atomic.AddUint32(&s.link.session.nextDeliveryID, 1)

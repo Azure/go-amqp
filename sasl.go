@@ -159,9 +159,9 @@ type saslXOAUTH2Handler struct {
 }
 
 func (s saslXOAUTH2Handler) init() stateFunc {
-	originalPeerMaxFrameSize := s.conn.peerMaxFrameSize
-	if s.maxFrameSizeOverride > s.conn.peerMaxFrameSize {
-		s.conn.peerMaxFrameSize = s.maxFrameSizeOverride
+	originalPeerMaxFrameSize := s.conn.PeerMaxFrameSize
+	if s.maxFrameSizeOverride > s.conn.PeerMaxFrameSize {
+		s.conn.PeerMaxFrameSize = s.maxFrameSizeOverride
 	}
 	s.conn.err = s.conn.writeFrame(frames.Frame{
 		Type: frameTypeSASL,
@@ -170,7 +170,7 @@ func (s saslXOAUTH2Handler) init() stateFunc {
 			InitialResponse: s.response,
 		},
 	})
-	s.conn.peerMaxFrameSize = originalPeerMaxFrameSize
+	s.conn.PeerMaxFrameSize = originalPeerMaxFrameSize
 	if s.conn.err != nil {
 		return nil
 	}

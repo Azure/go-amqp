@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/Azure/go-amqp/internal/bitmap"
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/frames"
 )
@@ -139,9 +140,9 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 	}()
 
 	var (
-		links      = make(map[uint32]*link)    // mapping of remote handles to links
-		linksByKey = make(map[linkKey]*link)   // mapping of name+role link
-		handles    = &bitmap{max: s.handleMax} // allocated handles
+		links      = make(map[uint32]*link)  // mapping of remote handles to links
+		linksByKey = make(map[linkKey]*link) // mapping of name+role link
+		handles    = bitmap.New(s.handleMax) // allocated handles
 
 		handlesByDeliveryID       = make(map[uint32]uint32) // mapping of deliveryIDs to handles
 		deliveryIDByHandle        = make(map[uint32]uint32) // mapping of handles to latest deliveryID
@@ -201,7 +202,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				continue
 			}
 
-			next, ok := handles.next()
+			next, ok := handles.Next()
 			if !ok {
 				l.err = fmt.Errorf("reached session handle max (%d)", s.handleMax)
 				l.rx <- nil
@@ -217,7 +218,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 			delete(links, l.remoteHandle)
 			delete(deliveryIDByHandle, l.handle)
 			delete(linksByKey, l.key)
-			handles.remove(l.handle)
+			handles.Remove(l.handle)
 			close(l.rx) // close channel to indicate deallocation
 
 		// incoming frame for link

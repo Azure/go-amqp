@@ -1,13 +1,17 @@
-package amqp
+package bitmap
 
 import (
 	"math/bits"
 )
 
 // bitmap is a lazily initialized bitmap
-type bitmap struct {
+type Bitmap struct {
 	max  uint32
 	bits []uint64
+}
+
+func New(max uint32) *Bitmap {
+	return &Bitmap{max: max}
 }
 
 // add sets n in the bitmap.
@@ -15,7 +19,7 @@ type bitmap struct {
 // bits will be expanded as needed.
 //
 // If n is greater than max, the call has no effect.
-func (b *bitmap) add(n uint32) {
+func (b *Bitmap) Add(n uint32) {
 	if n > b.max {
 		return
 	}
@@ -35,7 +39,7 @@ func (b *bitmap) add(n uint32) {
 // remove clears n from the bitmap.
 //
 // If n is not set or greater than max the call has not effect.
-func (b *bitmap) remove(n uint32) {
+func (b *Bitmap) Remove(n uint32) {
 	var (
 		idx    = n / 64
 		offset = n % 64
@@ -54,7 +58,7 @@ func (b *bitmap) remove(n uint32) {
 //
 // If there are no unset bits below max, the second return
 // value will be false.
-func (b *bitmap) next() (uint32, bool) {
+func (b *Bitmap) Next() (uint32, bool) {
 	// find the first unset bit
 	for i, v := range b.bits {
 		// skip if all bits are set

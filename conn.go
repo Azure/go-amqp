@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Azure/go-amqp/internal/bitmap"
 	"github.com/Azure/go-amqp/internal/buffer"
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/frames"
@@ -333,10 +334,10 @@ func (c *conn) getErr() error {
 func (c *conn) mux() {
 	var (
 		// allocated channels
-		channels = &bitmap{max: uint32(c.channelMax)}
+		channels = bitmap.New(uint32(c.channelMax))
 
 		// create the next session to allocate
-		nextChannel, _ = channels.next()
+		nextChannel, _ = channels.Next()
 		nextSession    = newSessionResp{session: newSession(c, uint16(nextChannel))}
 
 		// map channels to sessions
@@ -421,7 +422,7 @@ func (c *conn) mux() {
 			sessionsByChannel[ch] = nextSession.session
 
 			// get next available channel
-			next, ok := channels.next()
+			next, ok := channels.Next()
 			if !ok {
 				nextSession = newSessionResp{err: fmt.Errorf("reached connection channel max (%d)", c.channelMax)}
 				continue
@@ -434,7 +435,7 @@ func (c *conn) mux() {
 		case s := <-c.delSession:
 			delete(sessionsByChannel, s.channel)
 			delete(sessionsByRemoteChannel, s.remoteChannel)
-			channels.remove(uint32(s.channel))
+			channels.Remove(uint32(s.channel))
 
 		// connection is complete
 		case <-c.closeMux:

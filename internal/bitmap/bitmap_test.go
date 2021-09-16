@@ -1,4 +1,4 @@
-package amqp
+package bitmap
 
 import (
 	"math"
@@ -118,24 +118,24 @@ func TestBitmap(t *testing.T) {
 
 	for i, tt := range tests {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			bm := &bitmap{max: tt.max}
+			bm := New(tt.max)
 
 			for _, op := range tt.ops {
 				switch op := op.(type) {
 				case add:
-					bm.add(uint32(op))
+					bm.Add(uint32(op))
 				case rem:
-					bm.remove(uint32(op))
+					bm.Remove(uint32(op))
 				case next:
 					for i := int64(0); i < int64(op); i++ {
-						bm.next()
+						bm.Next()
 					}
 				default:
 					panic("unhandled op " + reflect.TypeOf(op).String())
 				}
 			}
 
-			next, ok := bm.next()
+			next, ok := bm.Next()
 			if ok == tt.nextFail {
 				t.Errorf("next() failed with %d", next)
 			}
@@ -154,10 +154,10 @@ func TestBitmap(t *testing.T) {
 
 func TestBitmap_Sequence(t *testing.T) {
 	const max = 1024
-	bm := &bitmap{max: max}
+	bm := New(max)
 
 	for i := uint32(0); i <= max; i++ {
-		next, ok := bm.next()
+		next, ok := bm.Next()
 		if !ok {
 			t.Errorf("next() failed with %d", next)
 		}
@@ -173,7 +173,7 @@ func TestBitmap_Sequence(t *testing.T) {
 	}
 }
 
-func countBitmap(bm *bitmap) uint32 {
+func countBitmap(bm *Bitmap) uint32 {
 	var count uint32
 	for _, v := range bm.bits {
 		count += uint32(bits.OnesCount64(v))

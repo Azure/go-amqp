@@ -101,6 +101,7 @@ func ConnSASLExternal() ConnOption {
 				Mechanism:       saslMechanismEXTERNAL,
 				InitialResponse: []byte(""),
 			}
+			debug(1, "TX: %s", init)
 			c.err = c.writeFrame(frames.Frame{
 				Type: frameTypeSASL,
 				Body: init,

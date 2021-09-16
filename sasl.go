@@ -86,9 +86,10 @@ func ConnSASLAnonymous() ConnOption {
 	}
 }
 
-// ConnSASLExternal enables SASL EXTERNAL authentication for the
-// connection if secured by TLS and offered by server.
-func ConnSASLExternal() ConnOption {
+// ConnSASLExternal enables SASL EXTERNAL authentication for the connection.
+// The value for resp is dependent on the type of authentication (empty string is common for TLS).
+// See https://datatracker.ietf.org/doc/html/rfc4422#appendix-A for additional info.
+func ConnSASLExternal(resp string) ConnOption {
 	return func(c *conn) error {
 		// make handlers map if no other mechanism has
 		if c.saslHandlers == nil {
@@ -99,7 +100,7 @@ func ConnSASLExternal() ConnOption {
 		c.saslHandlers[saslMechanismEXTERNAL] = func() stateFunc {
 			init := &frames.SASLInit{
 				Mechanism:       saslMechanismEXTERNAL,
-				InitialResponse: []byte(""),
+				InitialResponse: []byte(resp),
 			}
 			debug(1, "TX: %s", init)
 			c.err = c.writeFrame(frames.Frame{

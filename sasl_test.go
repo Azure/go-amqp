@@ -251,7 +251,7 @@ func TestConnSASLExternal(t *testing.T) {
 
 	c := testconn.New(buf)
 	client, err := New(c,
-		ConnSASLExternal(),
+		ConnSASLExternal(""),
 		ConnIdleTimeout(10*time.Minute))
 	if err != nil {
 		t.Fatal(err)

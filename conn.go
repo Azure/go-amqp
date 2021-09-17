@@ -814,7 +814,7 @@ func (c *conn) openAMQP() stateFunc {
 		Hostname:     c.hostname,
 		MaxFrameSize: c.maxFrameSize,
 		ChannelMax:   c.channelMax,
-		IdleTimeout:  c.idleTimeout,
+		IdleTimeout:  c.idleTimeout / 2, // per spec, advertise half our idle timeout
 		Properties:   c.properties,
 	}
 	debug(1, "TX: %s", open)

@@ -476,6 +476,7 @@ func (c *conn) connReader() {
 			}
 			err := buf.ReadFromOnce(c.net)
 			if err != nil {
+				debug(1, "connReader error: %v", err)
 				select {
 				// check if error was due to close in progress
 				case <-c.done:

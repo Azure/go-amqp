@@ -528,6 +528,7 @@ func (c *conn) connReader() {
 			}
 			err := buf.ReadFromOnce(c.net)
 			if err != nil {
+				debug(1, "connReader error: %v", err)
 				select {
 				// check if error was due to close in progress
 				case <-c.Done:
@@ -866,7 +867,7 @@ func (c *conn) openAMQP() stateFunc {
 		Hostname:     c.hostname,
 		MaxFrameSize: c.maxFrameSize,
 		ChannelMax:   c.channelMax,
-		IdleTimeout:  c.idleTimeout,
+		IdleTimeout:  c.idleTimeout / 2, // per spec, advertise half our idle timeout
 		Properties:   c.properties,
 	}
 	debug(1, "TX: %s", open)

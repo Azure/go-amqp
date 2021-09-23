@@ -707,7 +707,11 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 			// bubble disposition error up to the receiver
 			var dispositionError error
 			if state, ok := fr.State.(*encoding.StateRejected); ok {
-				dispositionError = state.Error
+				// state.Error isn't required to be filled out. For instance if you dead letter a message
+				// you will get a rejected response that doesn't contain an error.
+				if state.Error != nil {
+					dispositionError = state.Error
+				}
 			}
 			l.receiver.inFlight.remove(fr.First, fr.Last, dispositionError)
 		}

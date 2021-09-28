@@ -25,7 +25,7 @@ func Example() {
 		log.Fatal("Creating AMQP session:", err)
 	}
 
-	ctx := context.Background()
+	ctx := context.TODO()
 
 	// Send a message
 	{
@@ -73,7 +73,7 @@ func Example() {
 			}
 
 			// Accept message
-			if err = msg.Accept(context.Background()); err != nil {
+			if err = receiver.AcceptMessage(context.TODO(), msg); err != nil {
 				log.Fatalf("Failure accepting message: %v", err)
 			}
 

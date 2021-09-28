@@ -532,9 +532,7 @@ func (l *link) muxReceive(fr frames.PerformTransfer) error {
 	// discard message if it's been aborted
 	if fr.Aborted {
 		l.buf.Reset()
-		l.msg = Message{
-			doneSignal: make(chan struct{}),
-		}
+		l.msg = Message{}
 		l.more = false
 		return nil
 	}

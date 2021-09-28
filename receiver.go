@@ -26,64 +26,6 @@ type Receiver struct {
 	manualCreditor *manualCreditor         // allows for credits to be managed manually (via calls to IssueCredit/DrainCredit)
 }
 
-// HandleMessage takes in a func to handle the incoming message.
-// Blocks until a message is received, ctx completes, or an error occurs.
-// When using ModeSecond, You must take an action on the message in the provided handler (Accept/Reject/Release/Modify)
-// or the unsettled message tracker will get out of sync, and reduce the flow.
-// When using ModeFirst, the message is spontaneously Accepted at reception.
-func (r *Receiver) HandleMessage(ctx context.Context, handle func(*Message) error) error {
-	debug(3, "Entering link %s Receive()", r.link.Key.name)
-
-	trackCompletion := func(msg *Message) {
-		if msg.doneSignal == nil {
-			msg.doneSignal = make(chan struct{})
-		}
-		<-msg.doneSignal
-		r.link.DeleteUnsettled(msg)
-		debug(3, "Receive() deleted unsettled %d", msg.deliveryID)
-		if atomic.LoadUint32(&r.link.Paused) == 1 {
-			select {
-			case r.link.ReceiverReady <- struct{}{}:
-				debug(3, "Receive() unpause link on completion")
-			default:
-			}
-		}
-	}
-	callHandler := func(msg *Message) error {
-		debug(3, "Receive() blocking %d", msg.deliveryID)
-		msg.receiver = r
-		// we only need to track message disposition for mode second
-		// spec : http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transport-v1.0-os.html#type-receiver-settle-mode
-		if receiverSettleModeValue(r.link.ReceiverSettleMode) == ModeSecond {
-			go trackCompletion(msg)
-		}
-		// tracks messages until exiting handler
-		if err := handle(msg); err != nil {
-			debug(3, "Receive() blocking %d - error: %s", msg.deliveryID, err.Error())
-			return err
-		}
-		return nil
-	}
-
-	select {
-	case msg := <-r.link.Messages:
-		return callHandler(&msg)
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-		// pass through, to buffer msgs when the handler is busy
-	}
-
-	select {
-	case msg := <-r.link.Messages:
-		return callHandler(&msg)
-	case <-r.link.Detached:
-		return r.link.err
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
 // IssueCredit adds credits to be requested in the next flow
 // request.
 func (r *Receiver) IssueCredit(credit uint32) error {
@@ -99,7 +41,9 @@ func (r *Receiver) DrainCredit(ctx context.Context) error {
 // Receive returns the next message from the sender.
 //
 // Blocks until a message is received, ctx completes, or an error occurs.
-// Deprecated: prefer HandleMessage
+// When using ModeSecond, you *must* take an action on the message by calling
+// one of the following: AcceptMessage, RejectMessage, ReleaseMessage, ModifyMessage.
+// When using ModeFirst, the message is spontaneously Accepted at reception.
 func (r *Receiver) Receive(ctx context.Context) (*Message, error) {
 	if atomic.LoadUint32(&r.link.Paused) == 1 {
 		select {
@@ -108,37 +52,111 @@ func (r *Receiver) Receive(ctx context.Context) (*Message, error) {
 		}
 	}
 
+	// for ModeFirst, auto-accept the message
+	modeFirstAccept := func(ctx context.Context, msg *Message) (*Message, error) {
+		if receiverSettleModeValue(r.link.ReceiverSettleMode) == ModeSecond {
+			return msg, nil
+		}
+		if err := r.AcceptMessage(ctx, msg); err != nil {
+			return nil, err
+		}
+		return msg, nil
+	}
+
 	// non-blocking receive to ensure buffered messages are
 	// delivered regardless of whether the link has been closed.
 	select {
 	case msg := <-r.link.Messages:
-		// we remove the message from unsettled map as soon as it's popped off the channel
-		// This makes the unsettled count the same as messages buffer count
-		// and keeps the behavior the same as before the unsettled messages tracking was introduced
-		defer r.link.DeleteUnsettled(&msg)
 		debug(3, "Receive() non blocking %d", msg.deliveryID)
-		msg.receiver = r
-		return &msg, nil
+		msg.link = r.link
+		return modeFirstAccept(ctx, &msg)
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	default:
+		// done draining messages
 	}
 
 	// wait for the next message
 	select {
 	case msg := <-r.link.Messages:
-		// we remove the message from unsettled map as soon as it's popped off the channel
-		// This makes the unsettled count the same as messages buffer count
-		// and keeps the behavior the same as before the unsettled messages tracking was introduced
-		defer r.link.DeleteUnsettled(&msg)
 		debug(3, "Receive() blocking %d", msg.deliveryID)
-		msg.receiver = r
-		return &msg, nil
+		msg.link = r.link
+		return modeFirstAccept(ctx, &msg)
+	case <-r.link.close:
+		return nil, r.link.err
 	case <-r.link.Detached:
 		return nil, r.link.err
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+}
+
+// Accept notifies the server that the message has been
+// accepted and does not require redelivery.
+func (r *Receiver) AcceptMessage(ctx context.Context, msg *Message) error {
+	if !msg.shouldSendDisposition() {
+		return nil
+	}
+	if err := r.messageDisposition(ctx, msg, &encoding.StateAccepted{}); err != nil {
+		return err
+	}
+	msg.settled = true
+	return nil
+}
+
+// Reject notifies the server that the message is invalid.
+//
+// Rejection error is optional.
+func (r *Receiver) RejectMessage(ctx context.Context, msg *Message, e *Error) error {
+	if !msg.shouldSendDisposition() {
+		return nil
+	}
+	if err := r.messageDisposition(ctx, msg, &encoding.StateRejected{Error: e}); err != nil {
+		return err
+	}
+	msg.settled = true
+	return nil
+}
+
+// Release releases the message back to the server. The message
+// may be redelivered to this or another consumer.
+func (r *Receiver) ReleaseMessage(ctx context.Context, msg *Message) error {
+	if !msg.shouldSendDisposition() {
+		return nil
+	}
+	if err := r.messageDisposition(ctx, msg, &encoding.StateReleased{}); err != nil {
+		return err
+	}
+	msg.settled = true
+	return nil
+}
+
+// Modify notifies the server that the message was not acted upon
+// and should be modifed.
+//
+// deliveryFailed indicates that the server must consider this and
+// unsuccessful delivery attempt and increment the delivery count.
+//
+// undeliverableHere indicates that the server must not redeliver
+// the message to this link.
+//
+// messageAnnotations is an optional annotation map to be merged
+// with the existing message annotations, overwriting existing keys
+// if necessary.
+func (r *Receiver) ModifyMessage(ctx context.Context, msg *Message, deliveryFailed, undeliverableHere bool, messageAnnotations Annotations) error {
+	if !msg.shouldSendDisposition() {
+		return nil
+	}
+	if err := r.messageDisposition(ctx,
+		msg, &encoding.StateModified{
+			DeliveryFailed:     deliveryFailed,
+			UndeliverableHere:  undeliverableHere,
+			MessageAnnotations: messageAnnotations,
+		}); err != nil {
+		return err
+	}
+	msg.settled = true
+	return nil
 }
 
 // Address returns the link's address.
@@ -273,17 +291,18 @@ func (r *Receiver) sendDisposition(first uint32, last *uint32, state encoding.De
 	return r.link.Session.txFrame(fr, nil)
 }
 
-func (r *Receiver) messageDisposition(ctx context.Context, id uint32, state encoding.DeliveryState) error {
+func (r *Receiver) messageDisposition(ctx context.Context, msg *Message, state encoding.DeliveryState) error {
 	var wait chan error
 	if r.link.ReceiverSettleMode != nil && *r.link.ReceiverSettleMode == ModeSecond {
-		debug(3, "RX: add %d to inflight", id)
-		wait = r.inFlight.add(id)
+		debug(3, "RX: add %d to inflight", msg.deliveryID)
+		wait = r.inFlight.add(msg.deliveryID)
+		defer func() { r.link.DeleteUnsettled(msg) }()
 	}
 
 	if r.batching {
-		r.dispositions <- messageDisposition{id: id, state: state}
+		r.dispositions <- messageDisposition{id: msg.deliveryID, state: state}
 	} else {
-		err := r.sendDisposition(id, nil, state)
+		err := r.sendDisposition(msg.deliveryID, nil, state)
 		if err != nil {
 			return err
 		}

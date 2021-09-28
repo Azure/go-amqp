@@ -1,7 +1,6 @@
 package amqp
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -104,12 +103,9 @@ type Message struct {
 	// This field is ignored when LinkSenderSettle is not ModeMixed.
 	SendSettled bool
 
-	receiver   *Receiver // Receiver the message was received from
-	deliveryID uint32    // used when sending disposition
-	settled    bool      // whether transfer was settled by sender
-
-	// doneSignal is a channel that indicate when a message is considered acted upon by downstream handler
-	doneSignal chan struct{}
+	link       *link  // the receiving link
+	deliveryID uint32 // used when sending disposition
+	settled    bool   // whether transfer was settled by sender
 }
 
 // NewMessage returns a *Message with data as the payload.
@@ -119,16 +115,7 @@ type Message struct {
 // more complex usages.
 func NewMessage(data []byte) *Message {
 	return &Message{
-		Data:       [][]byte{data},
-		doneSignal: make(chan struct{}),
-	}
-}
-
-// done closes the internal doneSignal channel to let the receiver know that this message has been acted upon
-func (m *Message) done() {
-	// TODO: move initialization in ctor and use ctor everywhere?
-	if m.doneSignal != nil {
-		close(m.doneSignal)
+		Data: [][]byte{data},
 	}
 }
 
@@ -141,77 +128,12 @@ func (m *Message) GetData() []byte {
 	return m.Data[0]
 }
 
-// GetLinkName returns associated link name or empty string if receiver or link is not defined.
+// LinkName returns the receiving link name or the empty string.
 func (m *Message) LinkName() string {
-	if m.receiver != nil {
-		return m.receiver.LinkName()
+	if m.link != nil {
+		return m.link.Key.name
 	}
 	return ""
-}
-
-// Accept notifies the server that the message has been
-// accepted and does not require redelivery.
-func (m *Message) Accept(ctx context.Context) error {
-	if !m.shouldSendDisposition() {
-		return nil
-	}
-	defer m.done()
-	return m.receiver.messageDisposition(ctx, m.deliveryID, &encoding.StateAccepted{})
-}
-
-// Reject notifies the server that the message is invalid.
-//
-// Rejection error is optional.
-func (m *Message) Reject(ctx context.Context, e *Error) error {
-	if !m.shouldSendDisposition() {
-		return nil
-	}
-	defer m.done()
-	return m.receiver.messageDisposition(ctx, m.deliveryID, &encoding.StateRejected{Error: e})
-}
-
-// Release releases the message back to the server. The message
-// may be redelivered to this or another consumer.
-func (m *Message) Release(ctx context.Context) error {
-	if !m.shouldSendDisposition() {
-		return nil
-	}
-	defer m.done()
-	return m.receiver.messageDisposition(ctx, m.deliveryID, &encoding.StateReleased{})
-}
-
-// Modify notifies the server that the message was not acted upon
-// and should be modifed.
-//
-// deliveryFailed indicates that the server must consider this and
-// unsuccessful delivery attempt and increment the delivery count.
-//
-// undeliverableHere indicates that the server must not redeliver
-// the message to this link.
-//
-// messageAnnotations is an optional annotation map to be merged
-// with the existing message annotations, overwriting existing keys
-// if necessary.
-func (m *Message) Modify(ctx context.Context, deliveryFailed, undeliverableHere bool, messageAnnotations encoding.Annotations) error {
-	if !m.shouldSendDisposition() {
-		return nil
-	}
-	defer m.done()
-	return m.receiver.messageDisposition(ctx,
-		m.deliveryID, &encoding.StateModified{
-			DeliveryFailed:     deliveryFailed,
-			UndeliverableHere:  undeliverableHere,
-			MessageAnnotations: messageAnnotations,
-		})
-}
-
-// Ignore notifies the amqp message pump that the message has been handled
-// without any disposition. It frees the amqp receiver to get the next message
-// this is implicitly done after calling message dispositions (Accept/Release/Reject/Modify)
-func (m *Message) Ignore() {
-	if m.shouldSendDisposition() {
-		m.done()
-	}
 }
 
 // MarshalBinary encodes the message into binary form.
@@ -543,6 +465,9 @@ func (p *MessageProperties) Unmarshal(r *buffer.Buffer) error {
 	}...)
 }
 
+// Annotations keys must be of type string, int, or int64.
+//
+// String keys are encoded as AMQP Symbols.
 type Annotations = encoding.Annotations
 
 type UUID = encoding.UUID

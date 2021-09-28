@@ -53,10 +53,14 @@ func BenchmarkSimple(b *testing.B) {
 			cancel()
 
 			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-			err := receiver.HandleMessage(ctx, func(msg *amqp.Message) error {
-				defer cancel()
-				return msg.Accept(ctx)
-			})
+			msg, err := receiver.Receive(ctx)
+			cancel()
+			if err != nil {
+				b.Fatal(err)
+			}
+			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+			err = receiver.AcceptMessage(ctx, msg)
+			cancel()
 			if err != nil {
 				b.Fatal(err)
 			}

@@ -17,25 +17,14 @@ func makeLink(mode ReceiverSettleMode) *link {
 	}
 }
 
-func doNothing(msg *Message) error {
-	return nil
-}
-
-func accept(msg *Message) error {
-	return msg.Accept(context.TODO())
-}
-
 func makeMessage(mode ReceiverSettleMode) Message {
 	var tag []byte
-	var done chan struct{}
 	if mode == ModeSecond {
 		tag = []byte("one")
-		done = make(chan struct{})
 	}
 	return Message{
 		deliveryID:  uint32(1),
 		DeliveryTag: tag,
-		doneSignal:  done,
 	}
 }
 
@@ -51,12 +40,12 @@ func TestReceiver_HandleMessageModeFirst_AutoAccept(t *testing.T) {
 		// mode first messages have no delivery tag, thus there should be no unsettled message
 		t.Fatal("expected zero unsettled count")
 	}
-	if err := r.HandleMessage(context.TODO(), doNothing); err != nil {
-		t.Errorf("HandleMessage() error = %v", err)
+	if _, err := r.Receive(context.TODO()); err != nil {
+		t.Errorf("Receive() error = %v", err)
 	}
 
-	if len(r.dispositions) != 0 {
-		t.Errorf("the message should not have triggered a disposition")
+	if len(r.dispositions) != 1 {
+		t.Errorf("the message should have triggered a disposition")
 	}
 }
 
@@ -69,23 +58,14 @@ func TestReceiver_HandleMessageModeSecond_DontDispose(t *testing.T) {
 	msg := makeMessage(ModeSecond)
 	r.link.Messages <- msg
 	r.link.addUnsettled(&msg)
-	if err := r.HandleMessage(context.TODO(), doNothing); err != nil {
-		t.Errorf("HandleMessage() error = %v", err)
+	if _, err := r.Receive(context.TODO()); err != nil {
+		t.Errorf("Receive() error = %v", err)
 	}
 	if len(r.dispositions) != 0 {
 		t.Errorf("it is up to the message handler to settle messages")
 	}
 	if r.link.countUnsettled() == 0 {
 		t.Errorf("the message should still be tracked until settled")
-	}
-	// ensure channel wasn't closed
-	select {
-	case _, ok := <-msg.doneSignal:
-		if !ok {
-			t.Fatal("unexpected closing of doneSignal")
-		}
-	default:
-		// channel wasn't closed
 	}
 }
 
@@ -102,8 +82,12 @@ func TestReceiver_HandleMessageModeSecond_removeFromUnsettledMapOnDisposition(t 
 	loop := true
 	// call handle with the accept handler in a goroutine because it will block on inflight disposition.
 	go func() {
-		if err := r.HandleMessage(context.TODO(), accept); err != nil {
-			t.Errorf("HandleMessage() error = %v", err)
+		msg, err := r.Receive(context.TODO())
+		if err != nil {
+			t.Errorf("Receive() error = %v", err)
+		}
+		if err = r.AcceptMessage(context.TODO(), msg); err != nil {
+			t.Errorf("AcceptMessage() error = %v", err)
 		}
 	}()
 
@@ -125,14 +109,5 @@ func TestReceiver_HandleMessageModeSecond_removeFromUnsettledMapOnDisposition(t 
 	}
 	if r.link.countUnsettled() != 0 {
 		t.Errorf("the message should be removed from unsettled map")
-	}
-	// ensure channel was closed
-	select {
-	case _, ok := <-msg.doneSignal:
-		if !ok {
-			t.Log("channel was closed")
-		}
-	default:
-		t.Fatal("expected closed of doneSignal")
 	}
 }

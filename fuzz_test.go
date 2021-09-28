@@ -42,7 +42,7 @@ func fuzzConn(data []byte) int {
 		return 0
 	}
 
-	if err = msg.Accept(context.Background()); err != nil {
+	if err = r.AcceptMessage(context.Background(), msg); err != nil {
 		return 0
 	}
 

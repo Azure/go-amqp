@@ -3,6 +3,7 @@ package amqp_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"os"
@@ -132,7 +133,6 @@ func TestIntegrationRoundTrip(t *testing.T) {
 							msg.ApplicationProperties["i"] = index
 							ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 							err := sender.Send(ctx, msg)
-							//fmt.Println("sending msg ", index, " with data ", data, "to ", sender.Address())
 							cancel()
 							if err != nil {
 								sendErr.write(fmt.Errorf("error after %d sends: %+v", index, err))
@@ -159,27 +159,34 @@ func TestIntegrationRoundTrip(t *testing.T) {
 
 					for i := 0; i < len(tt.data); i++ {
 						ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-						err := receiver.HandleMessage(ctx, func(msg *amqp.Message) error {
-							// Accept message
-							if err = msg.Accept(context.Background()); err != nil {
-								return fmt.Errorf("failed to accept message: %v", err)
-							}
-							//fmt.Println("receiving msg ", i, " with data ", tt.data[i], "to ", receiver.Address())
-							if msg.DeliveryTag == nil {
-								return fmt.Errorf("error after %d receives: nil deliverytag received", i)
-							}
-							msgIndex, ok := msg.ApplicationProperties["i"].(int64)
-							if !ok {
-								return fmt.Errorf("failed to parse i. %v", msg.ApplicationProperties["i"])
-							}
-							expectedData := tt.data[msgIndex]
-							if !bytes.Equal([]byte(expectedData), msg.GetData()) {
-								return fmt.Errorf("expected received message %d to be %v, but it was %v", msgIndex, expectedData, string(msg.GetData()))
-							}
-							cancel()
-							receiveCount++
-							return nil
-						})
+						msg, err := receiver.Receive(ctx)
+						cancel()
+						if err != nil {
+							receiveErr.write(fmt.Errorf("error after %d receives: %+v", i, err))
+							break
+						}
+						ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+						err = receiver.AcceptMessage(ctx, msg)
+						cancel()
+						if err != nil {
+							receiveErr.write(fmt.Errorf("failed to accept message: %v", err))
+							break
+						}
+						if msg.DeliveryTag == nil {
+							receiveErr.write(fmt.Errorf("error after %d receives: nil deliverytag received", i))
+							break
+						}
+						msgIndex, ok := msg.ApplicationProperties["i"].(int64)
+						if !ok {
+							receiveErr.write(fmt.Errorf("failed to parse i. %v", msg.ApplicationProperties["i"]))
+							break
+						}
+						expectedData := tt.data[msgIndex]
+						if !bytes.Equal([]byte(expectedData), msg.GetData()) {
+							receiveErr.write(fmt.Errorf("expected received message %d to be %v, but it was %v", msgIndex, expectedData, string(msg.GetData())))
+							break
+						}
+						receiveCount++
 						if err != nil {
 							receiveErr.write(fmt.Errorf("error after %d receives: %+v", i, err))
 							break
@@ -274,15 +281,19 @@ func TestIntegrationRoundTrip_Buffered(t *testing.T) {
 			// read buffered messages
 			for i, data := range tt.data {
 				ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-				err = receiver.HandleMessage(ctx, func(msg *amqp.Message) error {
-					cancel()
-					if !bytes.Equal([]byte(data), msg.GetData()) {
-						t.Fatalf("Expected received message %d to be %v, but it was %v", i+1, string(data), string(msg.GetData()))
-					}
-					return nil
-				})
+				msg, err := receiver.Receive(ctx)
+				cancel()
 				if err != nil {
 					t.Fatalf("Error after %d receives: %+v", i, err)
+				}
+				if !bytes.Equal([]byte(data), msg.GetData()) {
+					t.Fatalf("Expected received message %d to be %v, but it was %v", i+1, string(data), string(msg.GetData()))
+				}
+				ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+				err = receiver.AcceptMessage(ctx, msg)
+				cancel()
+				if err != nil {
+					t.Fatal(err)
 				}
 			}
 
@@ -381,21 +392,22 @@ func TestIntegrationReceiverModeSecond(t *testing.T) {
 
 					for i, data := range tt.data {
 						ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-						err = receiver.HandleMessage(ctx, func(msg *amqp.Message) error {
-							// Accept message
-							err = msg.Accept(context.Background())
-							if err != nil {
-								return fmt.Errorf("Error accepting message: %+v", err)
-							}
-							if !bytes.Equal([]byte(data), msg.GetData()) {
-								return fmt.Errorf("Expected received message %d to be %v, but it was %v", i+1, string(data), string(msg.GetData()))
-							}
-							return nil
-						})
+						msg, err := receiver.Receive(ctx)
 						cancel()
 						if err != nil {
 							receiveErr.write(fmt.Errorf("Error after %d receives: %+v", i, err))
-							return
+							break
+						}
+						if !bytes.Equal([]byte(data), msg.GetData()) {
+							receiveErr.write(fmt.Errorf("Expected received message %d to be %v, but it was %v", i+1, string(data), string(msg.GetData())))
+							break
+						}
+						ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
+						err = receiver.AcceptMessage(ctx, msg)
+						cancel()
+						if err != nil {
+							receiveErr.write(fmt.Errorf("Error accepting message: %+v", err))
+							break
 						}
 					}
 				}()
@@ -649,10 +661,13 @@ func TestIntegrationClose(t *testing.T) {
 
 		testClose(t, session.Close)
 
-		err = receiver.HandleMessage(context.Background(), nil)
-		if err != amqp.ErrSessionClosed {
+		msg, err := receiver.Receive(context.Background())
+		if !errors.Is(err, amqp.ErrSessionClosed) {
 			t.Fatalf("Expected ErrSessionClosed from receiver.Receiver, got: %+v", err)
 			return
+		}
+		if msg != nil {
+			t.Fatal("expected nil message")
 		}
 
 		err = client.Close() // close before leak check
@@ -693,10 +708,13 @@ func TestIntegrationClose(t *testing.T) {
 			t.Fatalf("Expected nil error from client.Close(), got: %+v", err)
 		}
 
-		err = receiver.HandleMessage(context.Background(), nil)
+		msg, err := receiver.Receive(context.Background())
 		if err != amqp.ErrConnClosed {
 			t.Fatalf("Expected ErrConnClosed from receiver.Receiver, got: %+v", err)
 			return
+		}
+		if msg != nil {
+			t.Fatal("expected nil message")
 		}
 
 		checkLeaks()

@@ -97,11 +97,7 @@ func (r *Receiver) AcceptMessage(ctx context.Context, msg *Message) error {
 	if !msg.shouldSendDisposition() {
 		return nil
 	}
-	if err := r.messageDisposition(ctx, msg, &encoding.StateAccepted{}); err != nil {
-		return err
-	}
-	msg.settled = true
-	return nil
+	return r.messageDisposition(ctx, msg, &encoding.StateAccepted{})
 }
 
 // Reject notifies the server that the message is invalid.
@@ -111,11 +107,7 @@ func (r *Receiver) RejectMessage(ctx context.Context, msg *Message, e *Error) er
 	if !msg.shouldSendDisposition() {
 		return nil
 	}
-	if err := r.messageDisposition(ctx, msg, &encoding.StateRejected{Error: e}); err != nil {
-		return err
-	}
-	msg.settled = true
-	return nil
+	return r.messageDisposition(ctx, msg, &encoding.StateRejected{Error: e})
 }
 
 // Release releases the message back to the server. The message
@@ -124,11 +116,7 @@ func (r *Receiver) ReleaseMessage(ctx context.Context, msg *Message) error {
 	if !msg.shouldSendDisposition() {
 		return nil
 	}
-	if err := r.messageDisposition(ctx, msg, &encoding.StateReleased{}); err != nil {
-		return err
-	}
-	msg.settled = true
-	return nil
+	return r.messageDisposition(ctx, msg, &encoding.StateReleased{})
 }
 
 // Modify notifies the server that the message was not acted upon
@@ -147,16 +135,12 @@ func (r *Receiver) ModifyMessage(ctx context.Context, msg *Message, deliveryFail
 	if !msg.shouldSendDisposition() {
 		return nil
 	}
-	if err := r.messageDisposition(ctx,
+	return r.messageDisposition(ctx,
 		msg, &encoding.StateModified{
 			DeliveryFailed:     deliveryFailed,
 			UndeliverableHere:  undeliverableHere,
 			MessageAnnotations: messageAnnotations,
-		}); err != nil {
-		return err
-	}
-	msg.settled = true
-	return nil
+		})
 }
 
 // Address returns the link's address.

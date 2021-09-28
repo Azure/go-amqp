@@ -57,10 +57,10 @@ func TestManualCreditorDrain(t *testing.T) {
 
 	// unblock the last of the drainers
 	mc.EndDrain()
-	require.Nil(t, mc.drained, "drain completes and removes the drained channel")
 
 	// wait for all the drain routines to end
 	drainRoutines.Wait()
+	require.Nil(t, mc.drained, "drain completes and removes the drained channel")
 
 	// one of them should have failed (if both succeeded we've somehow let them both run)
 	require.False(t, err1 == nil && err2 == nil)

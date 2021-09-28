@@ -28,7 +28,6 @@ func (mc *manualCreditor) EndDrain() {
 
 	if mc.drained != nil {
 		close(mc.drained)
-		mc.drained = nil
 	}
 }
 
@@ -63,6 +62,10 @@ func (mc *manualCreditor) Drain(ctx context.Context) error {
 	// send drain, wait for responding flow frame
 	select {
 	case <-mc.drained:
+		// reset state here after the channel has been closed.
+		// we must do this here and not EndDrain() since we don't
+		// hold mu at this point.
+		mc.drained = nil
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()

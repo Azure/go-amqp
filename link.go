@@ -315,7 +315,7 @@ func (l *link) doFlow() (ok bool, enableOutgoingTransfers bool) {
 
 		if drain || credits > 0 {
 			debug(1, "FLOW Link Mux (manual): source: %s, inflight: %d, credit: %d, creditsToAdd: %d, drain: %v, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s",
-				l.Source.Address, len(l.receiver.inFlight.m), l.linkCredit, credits, drain, l.deliveryCount, len(l.Messages), l.countUnsettled(), l.receiver.maxCredit, l.ReceiverSettleMode.String())
+				l.Source.Address, l.receiver.inFlight.len(), l.linkCredit, credits, drain, l.deliveryCount, len(l.Messages), l.countUnsettled(), l.receiver.maxCredit, l.ReceiverSettleMode.String())
 
 			newCredits := credits + l.linkCredit
 			// send a flow frame.
@@ -324,7 +324,7 @@ func (l *link) doFlow() (ok bool, enableOutgoingTransfers bool) {
 
 	// if receiver && half maxCredits have been processed, send more credits
 	case isReceiver && l.linkCredit+uint32(l.countUnsettled()) <= l.receiver.maxCredit/2:
-		debug(1, "FLOW Link Mux half: source: %s, inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s", l.Source.Address, len(l.receiver.inFlight.m), l.linkCredit, l.deliveryCount, len(l.Messages), l.countUnsettled(), l.receiver.maxCredit, l.ReceiverSettleMode.String())
+		debug(1, "FLOW Link Mux half: source: %s, inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s", l.Source.Address, l.receiver.inFlight.len(), l.linkCredit, l.deliveryCount, len(l.Messages), l.countUnsettled(), l.receiver.maxCredit, l.ReceiverSettleMode.String())
 
 		linkCredit := l.receiver.maxCredit - uint32(l.countUnsettled())
 		l.err = l.muxFlow(linkCredit, false)
@@ -335,7 +335,7 @@ func (l *link) doFlow() (ok bool, enableOutgoingTransfers bool) {
 		atomic.StoreUint32(&l.Paused, 0)
 
 	case isReceiver && l.linkCredit == 0:
-		debug(1, "PAUSE Link Mux pause: inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s", len(l.receiver.inFlight.m), l.linkCredit, l.deliveryCount, len(l.Messages), l.countUnsettled(), l.receiver.maxCredit, l.ReceiverSettleMode.String())
+		debug(1, "PAUSE Link Mux pause: inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s", l.receiver.inFlight.len(), l.linkCredit, l.deliveryCount, len(l.Messages), l.countUnsettled(), l.receiver.maxCredit, l.ReceiverSettleMode.String())
 		atomic.StoreUint32(&l.Paused, 1)
 	}
 
@@ -416,7 +416,7 @@ func (l *link) muxFlow(linkCredit uint32, drain bool) error {
 		deliveryCount = l.deliveryCount
 	)
 
-	debug(3, "link.muxFlow(): len(l.Messages):%d - linkCredit: %d - deliveryCount: %d, inFlight: %d", len(l.Messages), linkCredit, deliveryCount, len(l.receiver.inFlight.m))
+	debug(3, "link.muxFlow(): len(l.Messages):%d - linkCredit: %d - deliveryCount: %d, inFlight: %d", len(l.Messages), linkCredit, deliveryCount, l.receiver.inFlight.len())
 
 	fr := &frames.PerformFlow{
 		Handle:        &l.Handle,
@@ -567,7 +567,7 @@ func (l *link) muxReceive(fr frames.PerformTransfer) error {
 	if err != nil {
 		return err
 	}
-	debug(1, "deliveryID %d before push to receiver - deliveryCount : %d - linkCredit: %d, len(messages): %d, len(inflight): %d", l.msg.deliveryID, l.deliveryCount, l.linkCredit, len(l.Messages), len(l.receiver.inFlight.m))
+	debug(1, "deliveryID %d before push to receiver - deliveryCount : %d - linkCredit: %d, len(messages): %d, len(inflight): %d", l.msg.deliveryID, l.deliveryCount, l.linkCredit, len(l.Messages), l.receiver.inFlight.len())
 	// send to receiver, this should never block due to buffering
 	// and flow control.
 	if receiverSettleModeValue(l.ReceiverSettleMode) == ModeSecond {
@@ -575,7 +575,7 @@ func (l *link) muxReceive(fr frames.PerformTransfer) error {
 	}
 	l.Messages <- l.msg
 
-	debug(1, "deliveryID %d after push to receiver - deliveryCount : %d - linkCredit: %d, len(messages): %d, len(inflight): %d", l.msg.deliveryID, l.deliveryCount, l.linkCredit, len(l.Messages), len(l.receiver.inFlight.m))
+	debug(1, "deliveryID %d after push to receiver - deliveryCount : %d - linkCredit: %d, len(messages): %d, len(inflight): %d", l.msg.deliveryID, l.deliveryCount, l.linkCredit, len(l.Messages), l.receiver.inFlight.len())
 
 	// reset progress
 	l.buf.Reset()

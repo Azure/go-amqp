@@ -305,7 +305,7 @@ func (r *Receiver) messageDisposition(ctx context.Context, id uint32, state enco
 // to block waiting for the server to respond when an appropriate
 // settlement mode is configured.
 type inFlight struct {
-	mu sync.Mutex
+	mu sync.RWMutex
 	m  map[uint32]chan error
 }
 
@@ -354,4 +354,10 @@ func (f *inFlight) clear(err error) {
 		delete(f.m, id)
 	}
 	f.mu.Unlock()
+}
+
+func (f *inFlight) len() int {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return len(f.m)
 }

@@ -12,7 +12,7 @@ import (
 
 type messageDisposition struct {
 	id    uint32
-	state interface{}
+	state encoding.DeliveryState
 }
 
 // Receiver receives messages on a single AMQP link.
@@ -260,7 +260,7 @@ func (r *Receiver) dispositionBatcher() {
 }
 
 // sendDisposition sends a disposition frame to the peer
-func (r *Receiver) sendDisposition(first uint32, last *uint32, state interface{}) error {
+func (r *Receiver) sendDisposition(first uint32, last *uint32, state encoding.DeliveryState) error {
 	fr := &frames.PerformDisposition{
 		Role:    encoding.RoleReceiver,
 		First:   first,
@@ -273,7 +273,7 @@ func (r *Receiver) sendDisposition(first uint32, last *uint32, state interface{}
 	return r.link.Session.txFrame(fr, nil)
 }
 
-func (r *Receiver) messageDisposition(ctx context.Context, id uint32, state interface{}) error {
+func (r *Receiver) messageDisposition(ctx context.Context, id uint32, state encoding.DeliveryState) error {
 	var wait chan error
 	if r.link.ReceiverSettleMode != nil && *r.link.ReceiverSettleMode == ModeSecond {
 		debug(3, "RX: add %d to inflight", id)

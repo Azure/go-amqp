@@ -343,7 +343,12 @@ func (s *SASLCode) Unmarshal(r *buffer.Buffer) error {
 	return err
 }
 
-type DeliveryState interface{} // TODO: http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transactions-v1.0-os.html#type-declared
+// DeliveryState encapsulates the various concrete delivery states.
+// http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#section-delivery-state
+// TODO: http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transactions-v1.0-os.html#type-declared
+type DeliveryState interface {
+	deliveryState() // marker method
+}
 
 type Unsettled map[string]DeliveryState
 
@@ -579,6 +584,8 @@ type StateReceived struct {
 	SectionOffset uint64
 }
 
+func (sr *StateReceived) deliveryState() {}
+
 func (sr *StateReceived) Marshal(wr *buffer.Buffer) error {
 	return MarshalComposite(wr, TypeCodeStateReceived, []MarshalField{
 		{Value: &sr.SectionNumber, Omit: false},
@@ -600,6 +607,8 @@ func (sr *StateReceived) Unmarshal(r *buffer.Buffer) error {
 */
 
 type StateAccepted struct{}
+
+func (sr *StateAccepted) deliveryState() {}
 
 func (sa *StateAccepted) Marshal(wr *buffer.Buffer) error {
 	return MarshalComposite(wr, TypeCodeStateAccepted, nil)
@@ -624,6 +633,8 @@ type StateRejected struct {
 	Error *Error
 }
 
+func (sr *StateRejected) deliveryState() {}
+
 func (sr *StateRejected) Marshal(wr *buffer.Buffer) error {
 	return MarshalComposite(wr, TypeCodeStateRejected, []MarshalField{
 		{Value: sr.Error, Omit: sr.Error == nil},
@@ -647,6 +658,8 @@ func (sr *StateRejected) String() string {
 */
 
 type StateReleased struct{}
+
+func (sr *StateReleased) deliveryState() {}
 
 func (sr *StateReleased) Marshal(wr *buffer.Buffer) error {
 	return MarshalComposite(wr, TypeCodeStateReleased, nil)
@@ -691,6 +704,8 @@ type StateModified struct {
 	// the value in this map is added.
 	MessageAnnotations Annotations
 }
+
+func (sr *StateModified) deliveryState() {}
 
 func (sm *StateModified) Marshal(wr *buffer.Buffer) error {
 	return MarshalComposite(wr, TypeCodeStateModified, []MarshalField{

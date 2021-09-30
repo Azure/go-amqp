@@ -280,7 +280,6 @@ func (r *Receiver) messageDisposition(ctx context.Context, msg *Message, state e
 	if r.link.ReceiverSettleMode != nil && *r.link.ReceiverSettleMode == ModeSecond {
 		debug(3, "RX: add %d to inflight", msg.deliveryID)
 		wait = r.inFlight.add(msg.deliveryID)
-		defer func() { r.link.DeleteUnsettled(msg) }()
 	}
 
 	if r.batching {
@@ -298,6 +297,8 @@ func (r *Receiver) messageDisposition(ctx context.Context, msg *Message, state e
 
 	select {
 	case err := <-wait:
+		// we've received confirmation of disposition
+		r.link.DeleteUnsettled(msg)
 		return err
 	case <-ctx.Done():
 		return ctx.Err()

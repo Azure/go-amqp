@@ -711,6 +711,7 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 					dispositionError = state.Error
 				}
 			}
+			// removal from the in-flight map will also remove the message from the unsettled map
 			l.receiver.inFlight.remove(fr.First, fr.Last, dispositionError)
 		}
 

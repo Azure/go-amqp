@@ -11,12 +11,12 @@ import (
 	"github.com/Azure/go-amqp/internal/frames"
 )
 
-// NewConnection creates a new instance of MockConnection.
+// NewNetConn creates a new instance of NetConn.
 // Responder is invoked by Write when a frame is received.
 // Return a nil slice/nil error to swallow the frame.
 // Return a non-nil error to simulate a write error.
-func NewConnection(resp func(frames.FrameBody) ([]byte, error)) *MockConnection {
-	return &MockConnection{
+func NewNetConn(resp func(frames.FrameBody) ([]byte, error)) *NetConn {
+	return &NetConn{
 		resp: resp,
 		// during shutdown, connReader can close before connWriter as they both
 		// both return on c.Done being closed, so there is some non-determinism
@@ -28,8 +28,8 @@ func NewConnection(resp func(frames.FrameBody) ([]byte, error)) *MockConnection 
 	}
 }
 
-// MockConnection is a mock connection that satisfies the net.Conn interface.
-type MockConnection struct {
+// NetConn is a mock network connection that satisfies the net.Conn interface.
+type NetConn struct {
 	resp      func(frames.FrameBody) ([]byte, error)
 	readDL    *time.Timer
 	readData  chan []byte
@@ -46,7 +46,7 @@ type MockConnection struct {
 // Read is invoked by conn.connReader to recieve frame data.
 // It blocks until Write or Close are called, or the read
 // deadline expires which will return an error.
-func (m *MockConnection) Read(b []byte) (n int, err error) {
+func (m *NetConn) Read(b []byte) (n int, err error) {
 	select {
 	case <-m.readClose:
 		return 0, errors.New("mock connection was closed")
@@ -70,7 +70,7 @@ func (m *MockConnection) Read(b []byte) (n int, err error) {
 //  1. an encoded frame and nil error
 //  2. a non-nil error to similate a write failure
 //  3. a nil slice and nil error indicating the frame should be ignored
-func (m *MockConnection) Write(b []byte) (n int, err error) {
+func (m *NetConn) Write(b []byte) (n int, err error) {
 	select {
 	case <-m.readClose:
 		return 0, errors.New("mock connection was closed")
@@ -93,7 +93,7 @@ func (m *MockConnection) Write(b []byte) (n int, err error) {
 }
 
 // Close is called by conn.close when conn.mux unwinds.
-func (m *MockConnection) Close() error {
+func (m *NetConn) Close() error {
 	if m.closed {
 		return errors.New("double close")
 	}
@@ -102,23 +102,23 @@ func (m *MockConnection) Close() error {
 	return nil
 }
 
-func (m *MockConnection) LocalAddr() net.Addr {
+func (m *NetConn) LocalAddr() net.Addr {
 	return &net.IPAddr{
 		IP: net.IPv4(127, 0, 0, 2),
 	}
 }
 
-func (m *MockConnection) RemoteAddr() net.Addr {
+func (m *NetConn) RemoteAddr() net.Addr {
 	return &net.IPAddr{
 		IP: net.IPv4(127, 0, 0, 2),
 	}
 }
 
-func (m *MockConnection) SetDeadline(t time.Time) error {
+func (m *NetConn) SetDeadline(t time.Time) error {
 	return errors.New("not used")
 }
 
-func (m *MockConnection) SetReadDeadline(t time.Time) error {
+func (m *NetConn) SetReadDeadline(t time.Time) error {
 	// called by conn.connReader before calling Read
 	// stop the last timer if available
 	if m.readDL != nil && !m.readDL.Stop() {
@@ -128,7 +128,7 @@ func (m *MockConnection) SetReadDeadline(t time.Time) error {
 	return nil
 }
 
-func (m *MockConnection) SetWriteDeadline(t time.Time) error {
+func (m *NetConn) SetWriteDeadline(t time.Time) error {
 	// called by conn.connWriter before calling Write
 	return nil
 }

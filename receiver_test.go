@@ -60,7 +60,7 @@ func TestReceive_ModeFirst(t *testing.T) {
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	conn := mocks.NewConnection(responder)
+	conn := mocks.NewNetConn(responder)
 	client, err := New(conn)
 	assert.NoError(t, err)
 	session, err := client.NewSession()
@@ -115,7 +115,7 @@ func TestReceive_ModeSecond(t *testing.T) {
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	conn := mocks.NewConnection(responder)
+	conn := mocks.NewNetConn(responder)
 	client, err := New(conn)
 	assert.NoError(t, err)
 	session, err := client.NewSession()

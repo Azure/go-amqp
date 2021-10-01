@@ -241,7 +241,6 @@ type frameType uint8
 
 const (
 	frameAMQP frameType = 0x0
-	frameSASL frameType = 0x1
 )
 
 func encodeFrame(t frameType, f frames.FrameBody) ([]byte, error) {

@@ -309,7 +309,6 @@ func TestIntegrationReceiverModeSecond(t *testing.T) {
 	if localBrokerAddr == "" {
 		t.Skip()
 	}
-	t.Skip("test fails due to race condition")
 	tests := []struct {
 		label    string
 		sessions int

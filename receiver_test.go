@@ -2,112 +2,161 @@ package amqp
 
 import (
 	"context"
+	"fmt"
+	"runtime"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/Azure/go-amqp/internal/encoding"
+	"github.com/Azure/go-amqp/internal/frames"
+	"github.com/Azure/go-amqp/internal/mocks"
+	"github.com/stretchr/testify/assert"
 )
 
-func makeLink(mode ReceiverSettleMode) *link {
-	return &link{
-		close:              make(chan struct{}),
-		Detached:           make(chan struct{}),
-		ReceiverReady:      make(chan struct{}, 1),
-		Messages:           make(chan Message, 1),
-		ReceiverSettleMode: &mode,
-		unsettledMessages:  map[string]struct{}{},
+// helper to wait for a link to pause/resume
+// returns an error if it times out waiting
+func waitForLink(l *link, paused bool) error {
+	state := uint32(0) // unpaused
+	if paused {
+		state = 1
 	}
-}
-
-func makeMessage(mode ReceiverSettleMode) Message {
-	var tag []byte
-	if mode == ModeSecond {
-		tag = []byte("one")
-	}
-	return Message{
-		deliveryID:  uint32(1),
-		DeliveryTag: tag,
-	}
-}
-
-func TestReceiver_HandleMessageModeFirst_AutoAccept(t *testing.T) {
-	r := &Receiver{
-		link:         makeLink(ModeFirst),
-		batching:     true, // allows to  avoid making the outgoing call on dispostion
-		dispositions: make(chan messageDisposition, 2),
-	}
-	msg := makeMessage(ModeFirst)
-	r.link.Messages <- msg
-	if r.link.countUnsettled() != 0 {
-		// mode first messages have no delivery tag, thus there should be no unsettled message
-		t.Fatal("expected zero unsettled count")
-	}
-	if _, err := r.Receive(context.TODO()); err != nil {
-		t.Errorf("Receive() error = %v", err)
-	}
-
-	if len(r.dispositions) != 1 {
-		t.Errorf("the message should have triggered a disposition")
-	}
-}
-
-func TestReceiver_HandleMessageModeSecond_DontDispose(t *testing.T) {
-	r := &Receiver{
-		link:         makeLink(ModeSecond),
-		batching:     true, // allows to  avoid making the outgoing call on dispostion
-		dispositions: make(chan messageDisposition, 2),
-	}
-	msg := makeMessage(ModeSecond)
-	r.link.Messages <- msg
-	r.link.addUnsettled(&msg)
-	if _, err := r.Receive(context.TODO()); err != nil {
-		t.Errorf("Receive() error = %v", err)
-	}
-	if len(r.dispositions) != 0 {
-		t.Errorf("it is up to the message handler to settle messages")
-	}
-	if r.link.countUnsettled() == 0 {
-		t.Errorf("the message should still be tracked until settled")
-	}
-}
-
-func TestReceiver_HandleMessageModeSecond_removeFromUnsettledMapOnDisposition(t *testing.T) {
-	r := &Receiver{
-		link:         makeLink(ModeSecond),
-		batching:     true, // allows to  avoid making the outgoing call on dispostion
-		dispositions: make(chan messageDisposition, 1),
-	}
-	msg := makeMessage(ModeSecond)
-	r.link.Messages <- msg
-	r.link.addUnsettled(&msg)
-	// unblock the accept waiting on inflight disposition for modeSecond
-	loop := true
-	// call handle with the accept handler in a goroutine because it will block on inflight disposition.
-	go func() {
-		msg, err := r.Receive(context.TODO())
-		if err != nil {
-			t.Errorf("Receive() error = %v", err)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	for {
+		if atomic.LoadUint32(&l.Paused) == state {
+			return nil
+		} else if err := ctx.Err(); err != nil {
+			return err
 		}
-		if err = r.AcceptMessage(context.TODO(), msg); err != nil {
-			t.Errorf("AcceptMessage() error = %v", err)
-		}
-	}()
+		runtime.Gosched()
+	}
+}
 
-	// simulate batch disposition.
-	// when the inflight has an entry, we know the Accept has been called
-	for loop {
-		r.inFlight.mu.Lock()
-		inflightCount := len(r.inFlight.m)
-		r.inFlight.mu.Unlock()
-		if inflightCount > 0 {
-			r.inFlight.remove(msg.deliveryID, nil, nil)
-			loop = false
+func TestReceive_ModeFirst(t *testing.T) {
+	const linkName = "test"
+	const linkHandle = 0
+	deliveryID := uint32(1)
+	responder := func(req frames.FrameBody) ([]byte, error) {
+		switch ff := req.(type) {
+		case *mocks.AMQPProto:
+			return mocks.ProtoHeader(mocks.ProtoAMQP)
+		case *frames.PerformOpen:
+			return mocks.PerformOpen("test")
+		case *frames.PerformBegin:
+			return mocks.PerformBegin(0)
+		case *frames.PerformAttach:
+			return mocks.ReceiverAttach(linkName, linkHandle, ModeFirst)
+		case *frames.PerformFlow:
+			if *ff.NextIncomingID == deliveryID {
+				// this is the first flow frame, send our payload
+				return mocks.PerformTransfer(linkHandle, deliveryID, []byte("hello"))
+			}
+			// ignore future flow frames as we have no response
+			return nil, nil
+		case *frames.PerformDisposition:
+			return mocks.PerformDisposition(deliveryID, &encoding.StateAccepted{})
+		default:
+			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
-		time.Sleep(1 * time.Millisecond)
 	}
+	conn := mocks.NewConnection(responder)
+	client, err := New(conn)
+	assert.NoError(t, err)
+	session, err := client.NewSession()
+	assert.NoError(t, err)
+	r, err := session.NewReceiver(LinkName(linkName), LinkReceiverSettle(ModeFirst))
+	assert.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	msg, err := r.Receive(ctx)
+	cancel()
+	assert.NoError(t, err)
+	if c := r.link.countUnsettled(); c != 0 {
+		t.Fatalf("unexpected unsettled count %d", c)
+	}
+	// wait for the link to unpause as credit should now be available
+	assert.NoError(t, waitForLink(r.link, false))
+	// link credit should be 1
+	if c := r.link.linkCredit; c != 1 {
+		t.Fatalf("unexpected link credit %d", c)
+	}
+	// subsequent dispositions should have no effect
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	err = r.AcceptMessage(ctx, msg)
+	cancel()
+	assert.NoError(t, err)
+	assert.NoError(t, client.Close())
+}
 
-	if len(r.dispositions) == 0 {
-		t.Errorf("the message should have triggered a disposition")
+func TestReceive_ModeSecond(t *testing.T) {
+	const linkName = "test"
+	const linkHandle = 0
+	deliveryID := uint32(1)
+	responder := func(req frames.FrameBody) ([]byte, error) {
+		switch ff := req.(type) {
+		case *mocks.AMQPProto:
+			return mocks.ProtoHeader(mocks.ProtoAMQP)
+		case *frames.PerformOpen:
+			return mocks.PerformOpen("test")
+		case *frames.PerformBegin:
+			return mocks.PerformBegin(0)
+		case *frames.PerformAttach:
+			return mocks.ReceiverAttach(linkName, linkHandle, ModeSecond)
+		case *frames.PerformFlow:
+			if *ff.NextIncomingID == deliveryID {
+				// this is the first flow frame, send our payload
+				return mocks.PerformTransfer(linkHandle, deliveryID, []byte("hello"))
+			}
+			// ignore future flow frames as we have no response
+			return nil, nil
+		case *frames.PerformDisposition:
+			return mocks.PerformDisposition(deliveryID, &encoding.StateAccepted{})
+		default:
+			return nil, fmt.Errorf("unhandled frame %T", req)
+		}
 	}
-	if r.link.countUnsettled() != 0 {
-		t.Errorf("the message should be removed from unsettled map")
+	conn := mocks.NewConnection(responder)
+	client, err := New(conn)
+	assert.NoError(t, err)
+	session, err := client.NewSession()
+	assert.NoError(t, err)
+	r, err := session.NewReceiver(LinkName(linkName), LinkReceiverSettle(ModeSecond))
+	assert.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	msg, err := r.Receive(ctx)
+	cancel()
+	assert.NoError(t, err)
+	if c := r.link.countUnsettled(); c != 1 {
+		t.Fatalf("unexpected unsettled count %d", c)
 	}
+	// wait for the link to pause as we've consumed all available credit
+	assert.NoError(t, waitForLink(r.link, true))
+	// link credit must be zero since we only started with 1
+	if c := r.link.linkCredit; c != 0 {
+		t.Fatalf("unexpected link credit %d", c)
+	}
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	err = r.AcceptMessage(ctx, msg)
+	cancel()
+	assert.NoError(t, err)
+	if c := r.link.countUnsettled(); c != 0 {
+		t.Fatalf("unexpected unsettled count %d", c)
+	}
+	// perform a dummy receive with short timeout to trigger flow
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+	_, _ = r.Receive(ctx)
+	cancel()
+	// wait for the link to unpause as credit should now be available
+	assert.NoError(t, waitForLink(r.link, false))
+	// link credit should be back to 1
+	if c := r.link.linkCredit; c != 1 {
+		t.Fatalf("unexpected link credit %d", c)
+	}
+	// subsequent dispositions should have no effect
+	// TODO: https://github.com/Azure/go-amqp/issues/76
+	/*ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	err = r.AcceptMessage(ctx, msg)
+	cancel()
+	assert.NoError(t, err)*/
+	assert.NoError(t, client.Close())
 }

@@ -227,7 +227,11 @@ func attachLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 		l.Messages = make(chan Message, l.receiver.maxCredit)
 		l.unsettledMessages = map[string]struct{}{}
 		// copy the received filter values
-		l.Source.Filter = resp.Source.Filter
+		if l.Source == nil {
+			l.Source = resp.Source
+		} else {
+			l.Source.Filter = resp.Source.Filter
+		}
 	} else {
 		// if dynamic address requested, copy assigned name to address
 		if l.dynamicAddr && resp.Target != nil {

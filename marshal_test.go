@@ -54,7 +54,7 @@ func TestFrameMarshalUnmarshal(t *testing.T) {
 				t.Fatalf("%+v", err)
 			}
 
-			header, err := parseFrameHeader(&buf)
+			header, err := frames.ParseHeader(&buf)
 			if err != nil {
 				t.Fatalf("%+v", err)
 			}
@@ -67,7 +67,7 @@ func TestFrameMarshalUnmarshal(t *testing.T) {
 				t.Errorf("Expected channel to be %d, but it is %d", want.Type, header.FrameType)
 			}
 
-			payload, err := parseFrameBody(&buf)
+			payload, err := frames.ParseBody(&buf)
 			if err != nil {
 				t.Fatalf("%+v", err)
 			}
@@ -112,12 +112,12 @@ func BenchmarkFrameUnmarshal(b *testing.B) {
 
 			for i := 0; i < b.N; i++ {
 				buf := buffer.New(data)
-				_, err := parseFrameHeader(buf)
+				_, err := frames.ParseHeader(buf)
 				if err != nil {
 					b.Errorf("%+v", err)
 				}
 
-				_, err = parseFrameBody(buf)
+				_, err = frames.ParseBody(buf)
 				if err != nil {
 					b.Errorf("%+v", err)
 				}

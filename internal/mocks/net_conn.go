@@ -46,20 +46,20 @@ type NetConn struct {
 // Read is invoked by conn.connReader to recieve frame data.
 // It blocks until Write or Close are called, or the read
 // deadline expires which will return an error.
-func (m *NetConn) Read(b []byte) (n int, err error) {
+func (n *NetConn) Read(b []byte) (int, error) {
 	select {
-	case <-m.readClose:
+	case <-n.readClose:
 		return 0, errors.New("mock connection was closed")
 	default:
 		// not closed yet
 	}
 
 	select {
-	case <-m.readClose:
+	case <-n.readClose:
 		return 0, errors.New("mock connection was closed")
-	case <-m.readDL.C:
+	case <-n.readDL.C:
 		return 0, errors.New("mock connection read deadline exceeded")
-	case rd := <-m.readData:
+	case rd := <-n.readData:
 		return copy(b, rd), nil
 	}
 }
@@ -70,9 +70,9 @@ func (m *NetConn) Read(b []byte) (n int, err error) {
 //  1. an encoded frame and nil error
 //  2. a non-nil error to similate a write failure
 //  3. a nil slice and nil error indicating the frame should be ignored
-func (m *NetConn) Write(b []byte) (n int, err error) {
+func (n *NetConn) Write(b []byte) (int, error) {
 	select {
-	case <-m.readClose:
+	case <-n.readClose:
 		return 0, errors.New("mock connection was closed")
 	default:
 		// not closed yet
@@ -82,53 +82,53 @@ func (m *NetConn) Write(b []byte) (n int, err error) {
 	if err != nil {
 		return 0, err
 	}
-	resp, err := m.resp(frame)
+	resp, err := n.resp(frame)
 	if err != nil {
 		return 0, err
 	}
 	if resp != nil {
-		m.readData <- resp
+		n.readData <- resp
 	}
 	return len(b), nil
 }
 
 // Close is called by conn.close when conn.mux unwinds.
-func (m *NetConn) Close() error {
-	if m.closed {
+func (n *NetConn) Close() error {
+	if n.closed {
 		return errors.New("double close")
 	}
-	m.closed = true
-	close(m.readClose)
+	n.closed = true
+	close(n.readClose)
 	return nil
 }
 
-func (m *NetConn) LocalAddr() net.Addr {
+func (n *NetConn) LocalAddr() net.Addr {
 	return &net.IPAddr{
 		IP: net.IPv4(127, 0, 0, 2),
 	}
 }
 
-func (m *NetConn) RemoteAddr() net.Addr {
+func (n *NetConn) RemoteAddr() net.Addr {
 	return &net.IPAddr{
 		IP: net.IPv4(127, 0, 0, 2),
 	}
 }
 
-func (m *NetConn) SetDeadline(t time.Time) error {
+func (n *NetConn) SetDeadline(t time.Time) error {
 	return errors.New("not used")
 }
 
-func (m *NetConn) SetReadDeadline(t time.Time) error {
+func (n *NetConn) SetReadDeadline(t time.Time) error {
 	// called by conn.connReader before calling Read
 	// stop the last timer if available
-	if m.readDL != nil && !m.readDL.Stop() {
-		<-m.readDL.C
+	if n.readDL != nil && !n.readDL.Stop() {
+		<-n.readDL.C
 	}
-	m.readDL = time.NewTimer(time.Until(t))
+	n.readDL = time.NewTimer(time.Until(t))
 	return nil
 }
 
-func (m *NetConn) SetWriteDeadline(t time.Time) error {
+func (n *NetConn) SetWriteDeadline(t time.Time) error {
 	// called by conn.connWriter before calling Write
 	return nil
 }

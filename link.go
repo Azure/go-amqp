@@ -34,12 +34,12 @@ type link struct {
 	// This will be initiated if the service sends back an error or requests the link detach.
 	Detached chan struct{}
 
-	detachErrorMu sync.Mutex // protects detachError
-	detachError   *Error     // error to send to remote on detach, set by closeWithError
-	Session       *Session   // parent session
-	receiver      *Receiver  // allows link options to modify Receiver
-	Source        *frames.Source
-	Target        *frames.Target
+	detachErrorMu sync.Mutex                      // protects detachError
+	detachError   *Error                          // error to send to remote on detach, set by closeWithError
+	Session       *Session                        // parent session
+	receiver      *Receiver                       // allows link options to modify Receiver
+	Source        *frames.Source                  // used for Receiver links
+	Target        *frames.Target                  // used for Sender links
 	properties    map[encoding.Symbol]interface{} // additional properties sent upon link attach
 	// Indicates whether we should allow detaches on disposition errors or not.
 	// Some AMQP servers (like Event Hubs) benefit from keeping the link open on disposition errors
@@ -217,6 +217,9 @@ func attachLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 	}
 
 	if isReceiver {
+		if l.Source == nil {
+			l.Source = new(frames.Source)
+		}
 		// if dynamic address requested, copy assigned name to address
 		if l.dynamicAddr && resp.Source != nil {
 			l.Source.Address = resp.Source.Address
@@ -227,12 +230,11 @@ func attachLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 		l.Messages = make(chan Message, l.receiver.maxCredit)
 		l.unsettledMessages = map[string]struct{}{}
 		// copy the received filter values
-		if l.Source == nil {
-			l.Source = resp.Source
-		} else {
-			l.Source.Filter = resp.Source.Filter
-		}
+		l.Source.Filter = resp.Source.Filter
 	} else {
+		if l.Target == nil {
+			l.Target = new(frames.Target)
+		}
 		// if dynamic address requested, copy assigned name to address
 		if l.dynamicAddr && resp.Target != nil {
 			l.Target.Address = resp.Target.Address

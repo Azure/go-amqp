@@ -164,12 +164,26 @@ func ConnContainerID(id string) ConnOption {
 	}
 }
 
+// used to abstract the underlying dialer for testing purposes
+type dialer interface {
+	NetDialerDial(c *conn, host, port string) error
+	TLSDialWithDialer(c *conn, host, port string) error
+}
+
+func connDialer(d dialer) ConnOption {
+	return func(c *conn) error {
+		c.dialer = d
+		return nil
+	}
+}
+
 // conn is an AMQP connection.
 // only exported fields and methods are part of public surface area,
 // all others are considered to be internal implementation details.
 type conn struct {
 	net            net.Conn      // underlying connection
 	connectTimeout time.Duration // time to wait for reads/writes during conn establishment
+	dialer         dialer        // used for testing purposes, it allows faking dialing TCP/TLS endpoints
 
 	// TLS
 	tlsNegotiation bool        // negotiate TLS
@@ -221,11 +235,20 @@ type newSessionResp struct {
 	err     error
 }
 
-// test hooks to fake dialing
-var (
-	tcpDialer func(network, address string) (net.Conn, error)
-	tlsDialer func(dialer *net.Dialer, network, addr string, config *tls.Config) (*tls.Conn, error) = tls.DialWithDialer
-)
+// implements the dialer interface
+type defaultDialer struct{}
+
+func (defaultDialer) NetDialerDial(c *conn, host, port string) (err error) {
+	dialer := &net.Dialer{Timeout: c.connectTimeout}
+	c.net, err = dialer.Dial("tcp", net.JoinHostPort(host, port))
+	return
+}
+
+func (defaultDialer) TLSDialWithDialer(c *conn, host, port string) (err error) {
+	dialer := &net.Dialer{Timeout: c.connectTimeout}
+	c.net, err = tls.DialWithDialer(dialer, "tcp", net.JoinHostPort(host, port), c.tlsConfig)
+	return
+}
 
 func dialConn(addr string, opts ...ConnOption) (*conn, error) {
 	u, err := url.Parse(addr)
@@ -250,6 +273,7 @@ func dialConn(addr string, opts ...ConnOption) (*conn, error) {
 
 	// append default options so user specified can overwrite
 	opts = append([]ConnOption{
+		connDialer(defaultDialer{}),
 		ConnServerHostname(host),
 	}, opts...)
 
@@ -258,20 +282,17 @@ func dialConn(addr string, opts ...ConnOption) (*conn, error) {
 		return nil, err
 	}
 
-	dialer := &net.Dialer{Timeout: c.connectTimeout}
-	if tcpDialer == nil {
-		tcpDialer = dialer.Dial
-	}
 	switch u.Scheme {
 	case "amqp", "":
-		c.net, err = tcpDialer("tcp", net.JoinHostPort(host, port))
+		err = c.dialer.NetDialerDial(c, host, port)
 	case "amqps":
 		c.initTLSConfig()
 		c.tlsNegotiation = false
-		c.net, err = tlsDialer(dialer, "tcp", net.JoinHostPort(host, port), c.tlsConfig)
+		err = c.dialer.TLSDialWithDialer(c, host, port)
 	default:
-		return nil, fmt.Errorf("unsupported scheme %q", u.Scheme)
+		err = fmt.Errorf("unsupported scheme %q", u.Scheme)
 	}
+
 	if err != nil {
 		return nil, err
 	}

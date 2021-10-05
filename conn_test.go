@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"net"
 	"testing"
 	"time"
 
@@ -179,33 +178,43 @@ func TestConnOptions(t *testing.T) {
 	}
 }
 
+type fakeDialer struct {
+	fail bool
+}
+
+func (f fakeDialer) NetDialerDial(c *conn, host, port string) (err error) {
+	err = f.error()
+	return
+}
+
+func (f fakeDialer) TLSDialWithDialer(c *conn, host, port string) (err error) {
+	err = f.error()
+	return
+}
+
+func (f fakeDialer) error() error {
+	if f.fail {
+		return errors.New("failed")
+	}
+	return nil
+}
+
 func TestDialConn(t *testing.T) {
-	tcpDialer = func(network, address string) (net.Conn, error) {
-		return nil, nil
-	}
-	tlsDialer = func(dialer *net.Dialer, network, addr string, config *tls.Config) (*tls.Conn, error) {
-		return nil, nil
-	}
-	defer func() {
-		// reset
-		tcpDialer = nil
-		tlsDialer = tls.DialWithDialer
-	}()
-	c, err := dialConn(":bad url/ value")
+	c, err := dialConn(":bad url/ value", connDialer(fakeDialer{}))
 	if err == nil {
 		t.Fatal("unexpected nil error")
 	}
 	if c != nil {
 		t.Fatal("expected nil conn")
 	}
-	c, err = dialConn("http://localhost")
+	c, err = dialConn("http://localhost", connDialer(fakeDialer{}))
 	if err == nil {
 		t.Fatal("unexpected nil error")
 	}
 	if c != nil {
 		t.Fatal("expected nil conn")
 	}
-	c, err = dialConn("amqp://localhost")
+	c, err = dialConn("amqp://localhost", connDialer(fakeDialer{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +224,7 @@ func TestDialConn(t *testing.T) {
 	if c.tlsConfig != nil {
 		t.Fatal("expected no TLS config")
 	}
-	c, err = dialConn("amqps://localhost")
+	c, err = dialConn("amqps://localhost", connDialer(fakeDialer{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,14 +234,14 @@ func TestDialConn(t *testing.T) {
 	if c.tlsConfig == nil {
 		t.Fatal("unexpected nil TLS config")
 	}
-	c, err = dialConn("amqp://localhost:12345")
+	c, err = dialConn("amqp://localhost:12345", connDialer(fakeDialer{}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if c == nil {
 		t.Fatal("unexpected nil conn")
 	}
-	c, err = dialConn("amqp://username:password@localhost")
+	c, err = dialConn("amqp://username:password@localhost", connDialer(fakeDialer{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,10 +251,7 @@ func TestDialConn(t *testing.T) {
 	if _, ok := c.saslHandlers[saslMechanismPLAIN]; !ok {
 		t.Fatal("missing SASL plain handler")
 	}
-	tcpDialer = func(network, address string) (net.Conn, error) {
-		return nil, errors.New("failed")
-	}
-	c, err = dialConn("amqp://localhost")
+	c, err = dialConn("amqp://localhost", connDialer(fakeDialer{fail: true}))
 	if err == nil {
 		t.Fatal("unexpected nil error")
 	}

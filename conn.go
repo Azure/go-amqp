@@ -221,6 +221,12 @@ type newSessionResp struct {
 	err     error
 }
 
+// test hooks to fake dialing
+var (
+	tcpDialer func(network, address string) (net.Conn, error)
+	tlsDialer func(dialer *net.Dialer, network, addr string, config *tls.Config) (*tls.Conn, error) = tls.DialWithDialer
+)
+
 func dialConn(addr string, opts ...ConnOption) (*conn, error) {
 	u, err := url.Parse(addr)
 	if err != nil {
@@ -253,13 +259,16 @@ func dialConn(addr string, opts ...ConnOption) (*conn, error) {
 	}
 
 	dialer := &net.Dialer{Timeout: c.connectTimeout}
+	if tcpDialer == nil {
+		tcpDialer = dialer.Dial
+	}
 	switch u.Scheme {
 	case "amqp", "":
-		c.net, err = dialer.Dial("tcp", net.JoinHostPort(host, port))
+		c.net, err = tcpDialer("tcp", net.JoinHostPort(host, port))
 	case "amqps":
 		c.initTLSConfig()
 		c.tlsNegotiation = false
-		c.net, err = tls.DialWithDialer(dialer, "tcp", net.JoinHostPort(host, port), c.tlsConfig)
+		c.net, err = tlsDialer(dialer, "tcp", net.JoinHostPort(host, port), c.tlsConfig)
 	default:
 		return nil, fmt.Errorf("unsupported scheme %q", u.Scheme)
 	}
@@ -312,6 +321,7 @@ func (c *conn) initTLSConfig() {
 }
 
 // Start establishes the connection and begins multiplexing network IO.
+// It is an error to call Start() on a connection that's been closed.
 func (c *conn) Start() error {
 	// start reader
 	go c.connReader()

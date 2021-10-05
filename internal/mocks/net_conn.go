@@ -30,11 +30,27 @@ func NewNetConn(resp func(frames.FrameBody) ([]byte, error)) *NetConn {
 
 // NetConn is a mock network connection that satisfies the net.Conn interface.
 type NetConn struct {
+	// OnClose is called from Close() before it returns.
+	// The value returned from OnClose is returned from Close().
+	OnClose func() error
+
 	resp      func(frames.FrameBody) ([]byte, error)
 	readDL    *time.Timer
 	readData  chan []byte
 	readClose chan struct{}
 	closed    bool
+}
+
+// SendFrame sends the encoded frame to the client.
+// Use this to send a frame at an arbitrary time.
+func (n *NetConn) SendFrame(f []byte) {
+	n.readData <- f
+}
+
+// SendKeepAlive sends a keep-alive frame to the client.
+func (n *NetConn) SendKeepAlive() {
+	// empty frame
+	n.readData <- []uint8{0, 0, 0, 8, 2, 0, 0, 0}
 }
 
 ///////////////////////////////////////////////////////
@@ -99,6 +115,9 @@ func (n *NetConn) Close() error {
 	}
 	n.closed = true
 	close(n.readClose)
+	if n.OnClose != nil {
+		return n.OnClose()
+	}
 	return nil
 }
 
@@ -153,8 +172,8 @@ func ProtoHeader(id ProtoID) ([]byte, error) {
 
 // PerformOpen appends a PerformOpen frame with the specified container ID.
 // This frame, and ProtoHeader, are needed when calling amqp.New() to create a client.
-func PerformOpen(containerID string) ([]byte, error) {
-	return encodeFrame(frameAMQP, &frames.PerformOpen{ContainerID: "test"})
+func PerformOpen(containerID string, idleTimeout time.Duration) ([]byte, error) {
+	return encodeFrame(frameAMQP, &frames.PerformOpen{ContainerID: "test", IdleTimeout: idleTimeout})
 }
 
 // PerformBegin appends a PerformBegin frame with the specified remote channel ID.
@@ -214,6 +233,11 @@ func PerformDisposition(deliveryID uint32, state encoding.DeliveryState) ([]byte
 		Settled: true,
 		State:   state,
 	})
+}
+
+// PerformClose encodes a PerformClose frame with an optional error.
+func PerformClose(e *encoding.Error) ([]byte, error) {
+	return encodeFrame(frameAMQP, &frames.PerformClose{Error: e})
 }
 
 // AMQPProto is the frame type passed to FrameCallback() for the initial protocal handshake.

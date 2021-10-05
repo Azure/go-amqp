@@ -58,6 +58,10 @@ func ParseHeader(r *buffer.Buffer) (Header, error) {
 		return fh, fmt.Errorf("received frame header with invalid size %d", fh.Size)
 	}
 
+	if fh.DataOffset < 2 {
+		return fh, fmt.Errorf("received frame header with invalid data offset %d", fh.DataOffset)
+	}
+
 	return fh, nil
 }
 

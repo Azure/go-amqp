@@ -42,7 +42,7 @@ func TestReceive_ModeFirst(t *testing.T) {
 		case *mocks.AMQPProto:
 			return mocks.ProtoHeader(mocks.ProtoAMQP)
 		case *frames.PerformOpen:
-			return mocks.PerformOpen("test", 0)
+			return mocks.PerformOpen("test")
 		case *frames.PerformBegin:
 			return mocks.PerformBegin(0)
 		case *frames.PerformAttach:
@@ -97,7 +97,7 @@ func TestReceive_ModeSecond(t *testing.T) {
 		case *mocks.AMQPProto:
 			return mocks.ProtoHeader(mocks.ProtoAMQP)
 		case *frames.PerformOpen:
-			return mocks.PerformOpen("test", 0)
+			return mocks.PerformOpen("test")
 		case *frames.PerformBegin:
 			return mocks.PerformBegin(0)
 		case *frames.PerformAttach:

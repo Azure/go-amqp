@@ -319,7 +319,7 @@ func TestStart(t *testing.T) {
 				case *mocks.AMQPProto:
 					return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 				case *frames.PerformOpen:
-					return mocks.PerformOpen("container", 0)
+					return mocks.PerformOpen("container")
 				default:
 					return nil, fmt.Errorf("unhandled frame %T", req)
 				}
@@ -350,7 +350,7 @@ func TestClose(t *testing.T) {
 		case *mocks.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
-			return mocks.PerformOpen("container", 0)
+			return mocks.PerformOpen("container")
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -392,7 +392,7 @@ func TestServerSideClose(t *testing.T) {
 		case *mocks.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
-			return mocks.PerformOpen("container", 0)
+			return mocks.PerformOpen("container")
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -453,7 +453,7 @@ func TestKeepAlives(t *testing.T) {
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			// specify small idle timeout so we receive a lot of keep-alives
-			return mocks.PerformOpen("container", 1*time.Millisecond)
+			return mocks.EncodeFrame(mocks.FrameAMQP, &frames.PerformOpen{ContainerID: "container", IdleTimeout: 1 * time.Millisecond})
 		case *mocks.KeepAlive:
 			keepAlives++
 			return nil, nil

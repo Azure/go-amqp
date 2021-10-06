@@ -462,6 +462,9 @@ func (c *conn) mux() {
 			// RemoteChannel should be used when frame is Begin
 			case *frames.PerformBegin:
 				if body.RemoteChannel == nil {
+					// since we only support remotely-initiated sessions, this is an error
+					// TODO: it would be ideal to not have this kill the connection
+					c.err = fmt.Errorf("%T: nil RemoteChannel", fr.Body)
 					break
 				}
 				session, ok = sessionsByChannel[*body.RemoteChannel]

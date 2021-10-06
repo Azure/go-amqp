@@ -376,7 +376,7 @@ func TestClientNewSessionMissingRemoteChannel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	session, err := client.NewSession(SessionMaxLinks(0))
+	session, err := client.NewSession(SessionMaxLinks(1))
 	if err == nil {
 		t.Fatal("unexpected nil error")
 	}
@@ -384,8 +384,8 @@ func TestClientNewSessionMissingRemoteChannel(t *testing.T) {
 		t.Fatal("expected nil session")
 	}
 	time.Sleep(100 * time.Millisecond)
-	if err = client.Close(); err != nil {
-		t.Fatal(err)
+	if err = client.Close(); err == nil {
+		t.Fatal("unexpected nil error")
 	}
 }
 

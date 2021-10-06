@@ -216,7 +216,7 @@ func (s saslXOAUTH2Handler) step() stateFunc {
 			return nil
 		}
 	default:
-		s.conn.err = fmt.Errorf("unexpected frame type %T", fr.Body)
+		s.conn.err = fmt.Errorf("sasl: unexpected frame type %T", fr.Body)
 		return nil
 	}
 }

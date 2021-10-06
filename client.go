@@ -1,7 +1,6 @@
 package amqp
 
 import (
-	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -46,7 +45,10 @@ func Dial(addr string, opts ...ConnOption) (*Client, error) {
 		return nil, err
 	}
 	err = c.Start()
-	return &Client{conn: c}, err
+	if err != nil {
+		return nil, err
+	}
+	return &Client{conn: c}, nil
 }
 
 // New establishes an AMQP client connection over conn.
@@ -65,6 +67,7 @@ func (c *Client) Close() error {
 }
 
 // NewSession opens a new AMQP session to the server.
+// Returns ErrConnClosed if the underlying connection has been closed.
 func (c *Client) NewSession(opts ...SessionOption) (*Session, error) {
 	// get a session allocated by Client.mux
 	var sResp newSessionResp
@@ -82,7 +85,9 @@ func (c *Client) NewSession(opts ...SessionOption) (*Session, error) {
 	for _, opt := range opts {
 		err := opt(s)
 		if err != nil {
-			_ = s.Close(context.Background()) // deallocate session on error
+			// deallocate session on error.  we can't call
+			// s.Close() as the session mux hasn't started yet.
+			c.conn.DelSession <- s
 			return nil, err
 		}
 	}
@@ -108,7 +113,13 @@ func (c *Client) NewSession(opts ...SessionOption) (*Session, error) {
 
 	begin, ok := fr.Body.(*frames.PerformBegin)
 	if !ok {
-		_ = s.Close(context.Background()) // deallocate session on error
+		// this codepath is hard to hit (impossible?) due to how channel number allocation works in conn.mux
+		// and the session mux eating unexpected frames.  in practical terms, if the wrong frame is received
+		// for the first channel (0) then this call will error out.  however, for channels greater than 0,
+		// depending on the incorrect frame, the call might hang.
+		// deallocate session on error.  we can't call
+		// s.Close() as the session mux hasn't started yet.
+		c.conn.DelSession <- s
 		return nil, fmt.Errorf("unexpected begin response: %+v", fr.Body)
 	}
 
@@ -189,24 +200,6 @@ func randString(n int) string {
 	_, _ = pkgRand.Read(b)
 	return base64.RawURLEncoding.EncodeToString(b)
 }
-
-// DetachError is returned by a link (Receiver/Sender) when a detach frame is received.
-//
-// RemoteError will be nil if the link was detached gracefully.
-type DetachError struct {
-	RemoteError *Error
-}
-
-func (e *DetachError) Error() string {
-	return fmt.Sprintf("link detached, reason: %+v", e.RemoteError)
-}
-
-// Default link options
-const (
-	DefaultLinkCredit      = 1
-	DefaultLinkBatching    = false
-	DefaultLinkBatchMaxAge = 5 * time.Second
-)
 
 // linkKey uniquely identifies a link on a connection by name and direction.
 //

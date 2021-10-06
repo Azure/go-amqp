@@ -173,7 +173,13 @@ func ProtoHeader(id ProtoID) ([]byte, error) {
 // PerformOpen appends a PerformOpen frame with the specified container ID.
 // This frame, and ProtoHeader, are needed when calling amqp.New() to create a client.
 func PerformOpen(containerID string) ([]byte, error) {
-	return EncodeFrame(FrameAMQP, &frames.PerformOpen{ContainerID: containerID})
+	// send the default valus for max channels and frame size
+	return EncodeFrame(FrameAMQP, &frames.PerformOpen{
+		ChannelMax:   65535,
+		ContainerID:  containerID,
+		IdleTimeout:  time.Minute,
+		MaxFrameSize: 4294967295,
+	})
 }
 
 // PerformBegin appends a PerformBegin frame with the specified remote channel ID.
@@ -233,6 +239,11 @@ func PerformDisposition(deliveryID uint32, state encoding.DeliveryState) ([]byte
 		Settled: true,
 		State:   state,
 	})
+}
+
+// PerformEnd encodes a PerformEnd frame with an optional error.
+func PerformEnd(e *encoding.Error) ([]byte, error) {
+	return EncodeFrame(FrameAMQP, &frames.PerformEnd{Error: e})
 }
 
 // PerformClose encodes a PerformClose frame with an optional error.

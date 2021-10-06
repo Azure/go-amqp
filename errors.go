@@ -1,6 +1,11 @@
 package amqp
 
-import "github.com/Azure/go-amqp/internal/encoding"
+import (
+	"fmt"
+	"time"
+
+	"github.com/Azure/go-amqp/internal/encoding"
+)
 
 // Error Conditions
 const (
@@ -41,3 +46,21 @@ const (
 type Error = encoding.Error
 
 type ErrorCondition = encoding.ErrorCondition
+
+// DetachError is returned by a link (Receiver/Sender) when a detach frame is received.
+//
+// RemoteError will be nil if the link was detached gracefully.
+type DetachError struct {
+	RemoteError *Error
+}
+
+func (e *DetachError) Error() string {
+	return fmt.Sprintf("link detached, reason: %+v", e.RemoteError)
+}
+
+// Default link options
+const (
+	DefaultLinkCredit      = 1
+	DefaultLinkBatching    = false
+	DefaultLinkBatchMaxAge = 5 * time.Second
+)

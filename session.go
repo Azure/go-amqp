@@ -394,7 +394,8 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				return
 
 			default:
-				fmt.Printf("Unexpected frame: %s\n", body)
+				// TODO: evaluate
+				debug(1, "session mux: unexpected frame: %s\n", body)
 			}
 
 		case fr := <-txTransfer:

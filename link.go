@@ -742,8 +742,8 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 		_ = l.Session.txFrame(resp, nil)
 
 	default:
-		debug(1, "RX: %s", fr)
-		fmt.Printf("Unexpected frame: %s\n", fr)
+		// TODO: evaluate
+		debug(1, "muxHandleFrame: unexpected frame: %s\n", fr)
 	}
 
 	return nil

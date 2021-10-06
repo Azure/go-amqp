@@ -91,6 +91,11 @@ func TestClientClose(t *testing.T) {
 }
 
 func TestSessionOptions(t *testing.T) {
+	const (
+		// MaxInt added in Go 1.17, this is copied from there
+		intSize = 32 << (^uint(0) >> 63) // 32 or 64
+		MaxInt  = 1<<(intSize-1) - 1
+	)
 	tests := []struct {
 		label  string
 		opt    SessionOption
@@ -122,7 +127,7 @@ func TestSessionOptions(t *testing.T) {
 		},
 		{
 			label: "SessionMaxLinksTooLarge",
-			opt:   SessionMaxLinks(math.MaxInt),
+			opt:   SessionMaxLinks(MaxInt),
 			fails: true,
 		},
 		{

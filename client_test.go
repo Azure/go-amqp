@@ -9,6 +9,7 @@ import (
 
 	"github.com/Azure/go-amqp/internal/frames"
 	"github.com/Azure/go-amqp/internal/mocks"
+	"github.com/stretchr/testify/require"
 )
 
 type mockDialer struct {
@@ -36,12 +37,8 @@ func TestClientDial(t *testing.T) {
 		}
 	}
 	client, err := Dial("amqp://localhost", connDialer(mockDialer{resp: responder}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if client == nil {
-		t.Fatal("unexpected nil client")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, client)
 	// error case
 	responder = func(req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
@@ -54,12 +51,8 @@ func TestClientDial(t *testing.T) {
 		}
 	}
 	client, err = Dial("amqp://localhost", connDialer(mockDialer{resp: responder}))
-	if err == nil {
-		t.Fatal("unexpected nil error")
-	}
-	if client != nil {
-		t.Fatal("unexpected nil client")
-	}
+	require.Error(t, err)
+	require.Nil(t, client)
 }
 
 func TestClientClose(t *testing.T) {
@@ -74,20 +67,12 @@ func TestClientClose(t *testing.T) {
 		}
 	}
 	client, err := Dial("amqp://localhost", connDialer(mockDialer{resp: responder}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if client == nil {
-		t.Fatal("unexpected nil client")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, client)
 	time.Sleep(100 * time.Millisecond)
-	if err = client.Close(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, client.Close())
 	time.Sleep(100 * time.Millisecond)
-	if err = client.Close(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, client.Close())
 }
 
 func TestSessionOptions(t *testing.T) {
@@ -159,7 +144,6 @@ func TestClientNewSession(t *testing.T) {
 	const channelNum = 0
 	const incomingWindow = 5000
 	const outgoingWindow = 6000
-
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {
 		case *mocks.AMQPProto:
@@ -184,36 +168,21 @@ func TestClientNewSession(t *testing.T) {
 	netConn := mocks.NewNetConn(responder)
 
 	client, err := New(netConn)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	session, err := client.NewSession(SessionIncomingWindow(incomingWindow), SessionOutgoingWindow(outgoingWindow))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if session == nil {
-		t.Fatal("unexpected nil session")
-	}
-	if sc := session.channel; sc != channelNum {
-		t.Fatalf("unexpected channel number %d", sc)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, session)
+	require.Equal(t, uint16(channelNum), session.channel)
 	time.Sleep(100 * time.Millisecond)
-	if err = client.Close(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, client.Close())
 	// creating a session after the connection has been closed returns nothing
 	session, err = client.NewSession()
-	if !errors.Is(err, ErrConnClosed) {
-		t.Fatalf("unexpected error %v", err)
-	}
-	if session != nil {
-		t.Fatal("expected nil session")
-	}
+	require.Equal(t, ErrConnClosed, err)
+	require.Nil(t, session)
 }
 
 func TestClientMultipleSessions(t *testing.T) {
 	channelNum := uint16(0)
-
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *mocks.AMQPProto:
@@ -231,41 +200,24 @@ func TestClientMultipleSessions(t *testing.T) {
 	netConn := mocks.NewNetConn(responder)
 
 	client, err := New(netConn)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	// first session
 	session1, err := client.NewSession()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if session1 == nil {
-		t.Fatal("unexpected nil session")
-	}
-	if sc := session1.channel; sc != channelNum-1 {
-		t.Fatalf("unexpected channel number %d", sc)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, session1)
+	require.Equal(t, channelNum-1, session1.channel)
 	// second session
 	time.Sleep(100 * time.Millisecond)
 	session2, err := client.NewSession()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if session2 == nil {
-		t.Fatal("unexpected nil session")
-	}
-	if sc := session2.channel; sc != channelNum-1 {
-		t.Fatalf("unexpected channel number %d", sc)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, session2)
+	require.Equal(t, channelNum-1, session2.channel)
 	time.Sleep(100 * time.Millisecond)
-	if err = client.Close(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, client.Close())
 }
 
 func TestClientTooManySessions(t *testing.T) {
 	channelNum := uint16(0)
-
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *mocks.AMQPProto:
@@ -289,32 +241,20 @@ func TestClientTooManySessions(t *testing.T) {
 	netConn := mocks.NewNetConn(responder)
 
 	client, err := New(netConn)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for i := uint16(0); i < 3; i++ {
 		session, err := client.NewSession()
 		if i < 2 {
-			if err != nil {
-				t.Fatal(err)
-			}
-			if session == nil {
-				t.Fatal("unexpected nil session")
-			}
+			require.NoError(t, err)
+			require.NotNil(t, session)
 		} else {
 			// third channel should fail
-			if err == nil {
-				t.Fatal("unexpected nil error")
-			}
-			if session != nil {
-				t.Fatal("expected nil session")
-			}
+			require.Error(t, err)
+			require.Nil(t, session)
 		}
 	}
 	time.Sleep(100 * time.Millisecond)
-	if err = client.Close(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, client.Close())
 }
 
 func TestClientNewSessionInvalidOption(t *testing.T) {
@@ -333,20 +273,12 @@ func TestClientNewSessionInvalidOption(t *testing.T) {
 	netConn := mocks.NewNetConn(responder)
 
 	client, err := New(netConn)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	session, err := client.NewSession(SessionMaxLinks(0))
-	if err == nil {
-		t.Fatal("unexpected nil error")
-	}
-	if session != nil {
-		t.Fatal("expected nil session")
-	}
+	require.Error(t, err)
+	require.Nil(t, session)
 	time.Sleep(100 * time.Millisecond)
-	if err = client.Close(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, client.Close())
 }
 
 func TestClientNewSessionMissingRemoteChannel(t *testing.T) {
@@ -373,20 +305,12 @@ func TestClientNewSessionMissingRemoteChannel(t *testing.T) {
 	netConn := mocks.NewNetConn(responder)
 
 	client, err := New(netConn)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	session, err := client.NewSession(SessionMaxLinks(1))
-	if err == nil {
-		t.Fatal("unexpected nil error")
-	}
-	if session != nil {
-		t.Fatal("expected nil session")
-	}
+	require.Error(t, err)
+	require.Nil(t, session)
 	time.Sleep(100 * time.Millisecond)
-	if err = client.Close(); err == nil {
-		t.Fatal("unexpected nil error")
-	}
+	require.Error(t, client.Close())
 }
 
 func TestClientNewSessionInvalidInitialResponse(t *testing.T) {
@@ -408,17 +332,10 @@ func TestClientNewSessionInvalidInitialResponse(t *testing.T) {
 	netConn := mocks.NewNetConn(responder)
 
 	client, err := New(netConn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// fisrt session succeeds
+	require.NoError(t, err)
 	session, err := client.NewSession()
-	if err == nil {
-		t.Fatal("unexpected nil error")
-	}
-	if session != nil {
-		t.Fatal("expected nil session")
-	}
+	require.Error(t, err)
+	require.Nil(t, session)
 }
 
 func TestClientNewSessionInvalidSecondResponse(t *testing.T) {
@@ -446,29 +363,15 @@ func TestClientNewSessionInvalidSecondResponse(t *testing.T) {
 	netConn := mocks.NewNetConn(responder)
 
 	client, err := New(netConn)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	// fisrt session succeeds
 	session, err := client.NewSession()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if session == nil {
-		t.Fatal("unexpected nil session")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, session)
 	// second session fails
 	session, err = client.NewSession()
-	if err == nil {
-		t.Fatal("unexpected nil error")
-	}
-	if session != nil {
-		t.Fatal("expected nil session")
-	}
+	require.Error(t, err)
+	require.Nil(t, session)
 	time.Sleep(100 * time.Millisecond)
-	if err = client.Close(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, client.Close())
 }
-
-// TODO: failure cases including link number greater than max links (another possible weird error message)

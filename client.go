@@ -113,10 +113,10 @@ func (c *Client) NewSession(opts ...SessionOption) (*Session, error) {
 
 	begin, ok := fr.Body.(*frames.PerformBegin)
 	if !ok {
-		// this codepath is hard to hit (impossible?) due to how channel number allocation works in conn.mux
-		// and the session mux eating unexpected frames.  in practical terms, if the wrong frame is received
-		// for the first channel (0) then this call will error out.  however, for channels greater than 0,
-		// depending on the incorrect frame, the call might hang.
+		// this codepath is hard to hit (impossible?).  if the response isn't a PerformBegin and we've not
+		// yet seen the remote channel number, the default clause in conn.mux will protect us from that.
+		// if we have seen the remote channel number then it's likely the session.mux for that channel will
+		// either swallow the frame or blow up in some other way, both causing this call to hang.
 		// deallocate session on error.  we can't call
 		// s.Close() as the session mux hasn't started yet.
 		c.conn.DelSession <- s

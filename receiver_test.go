@@ -46,16 +46,16 @@ func TestReceive_ModeFirst(t *testing.T) {
 		case *frames.PerformBegin:
 			return mocks.PerformBegin(0)
 		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(linkName, linkHandle, ModeFirst)
+			return mocks.ReceiverAttach(0, linkName, linkHandle, ModeFirst)
 		case *frames.PerformFlow:
 			if *ff.NextIncomingID == deliveryID {
 				// this is the first flow frame, send our payload
-				return mocks.PerformTransfer(linkHandle, deliveryID, []byte("hello"))
+				return mocks.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
 			}
 			// ignore future flow frames as we have no response
 			return nil, nil
 		case *frames.PerformDisposition:
-			return mocks.PerformDisposition(deliveryID, &encoding.StateAccepted{})
+			return mocks.PerformDisposition(0, deliveryID, &encoding.StateAccepted{})
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -101,16 +101,16 @@ func TestReceive_ModeSecond(t *testing.T) {
 		case *frames.PerformBegin:
 			return mocks.PerformBegin(0)
 		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(linkName, linkHandle, ModeSecond)
+			return mocks.ReceiverAttach(0, linkName, linkHandle, ModeSecond)
 		case *frames.PerformFlow:
 			if *ff.NextIncomingID == deliveryID {
 				// this is the first flow frame, send our payload
-				return mocks.PerformTransfer(linkHandle, deliveryID, []byte("hello"))
+				return mocks.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
 			}
 			// ignore future flow frames as we have no response
 			return nil, nil
 		case *frames.PerformDisposition:
-			return mocks.PerformDisposition(deliveryID, &encoding.StateAccepted{})
+			return mocks.PerformDisposition(0, deliveryID, &encoding.StateAccepted{})
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}

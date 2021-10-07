@@ -173,7 +173,7 @@ func ProtoHeader(id ProtoID) ([]byte, error) {
 // PerformOpen appends a PerformOpen frame with the specified container ID.
 // This frame, and ProtoHeader, are needed when calling amqp.New() to create a client.
 func PerformOpen(containerID string) ([]byte, error) {
-	// send the default valus for max channels and frame size
+	// send the default values for max channels and frame size
 	return EncodeFrame(FrameAMQP, 0, &frames.PerformOpen{
 		ChannelMax:   65535,
 		ContainerID:  containerID,

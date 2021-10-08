@@ -441,7 +441,7 @@ func TestIntegrationSessionHandleMax(t *testing.T) {
 		{
 			maxLinks: 4,
 			links:    5,
-			error:    regexp.MustCompile(`handle max \(3\)`),
+			error:    regexp.MustCompile(`handle max \(4\)`),
 		},
 		{
 			maxLinks: 5,
@@ -466,7 +466,7 @@ func TestIntegrationSessionHandleMax(t *testing.T) {
 			maxLinks: 62,
 			links:    64,
 			close:    1,
-			error:    regexp.MustCompile(`handle max \(61\)`),
+			error:    regexp.MustCompile(`handle max \(62\)`),
 		},
 	}
 

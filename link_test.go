@@ -10,6 +10,7 @@ import (
 
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/frames"
+	"github.com/Azure/go-amqp/internal/mocks"
 	"github.com/stretchr/testify/require"
 )
 
@@ -315,4 +316,51 @@ func TestSourceName(t *testing.T) {
 	if got.Key.name != expectedSourceName {
 		t.Errorf("Link Source Name does not match expected: %v got: %v", expectedSourceName, got.Key.name)
 	}
+}
+
+func TestSessionFlowDisablesTransfer(t *testing.T) {
+	t.Skip("TODO: finish for link testing")
+	nextIncomingID := uint32(0)
+	responder := func(req frames.FrameBody) ([]byte, error) {
+		switch req.(type) {
+		case *mocks.AMQPProto:
+			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
+		case *frames.PerformOpen:
+			return mocks.PerformOpen("container")
+		case *frames.PerformBegin:
+			return mocks.PerformBegin(0)
+		case *frames.PerformFlow:
+			return nil, nil
+		case *frames.PerformEnd:
+			return mocks.PerformEnd(0, nil)
+		default:
+			return nil, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+	netConn := mocks.NewNetConn(responder)
+
+	client, err := New(netConn)
+	require.NoError(t, err)
+
+	session, err := client.NewSession()
+	require.NoError(t, err)
+
+	time.Sleep(100 * time.Millisecond)
+	b, err := mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformFlow{
+		NextIncomingID: &nextIncomingID,
+		IncomingWindow: 0,
+		OutgoingWindow: 100,
+		NextOutgoingID: 1,
+	})
+	require.NoError(t, err)
+	netConn.SendFrame(b)
+
+	time.Sleep(100 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	err = session.Close(ctx)
+	cancel()
+	require.NoError(t, err)
+
+	time.Sleep(100 * time.Millisecond)
+	require.NoError(t, client.Close())
 }

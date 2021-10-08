@@ -271,14 +271,14 @@ func (r *Receiver) sendDisposition(first uint32, last *uint32, state encoding.De
 		State:   state,
 	}
 
-	debug(1, "TX: %s", fr)
+	debug(1, "TX (sendDisposition): %s", fr)
 	return r.link.Session.txFrame(fr, nil)
 }
 
 func (r *Receiver) messageDisposition(ctx context.Context, msg *Message, state encoding.DeliveryState) error {
 	var wait chan error
 	if r.link.ReceiverSettleMode != nil && *r.link.ReceiverSettleMode == ModeSecond {
-		debug(3, "RX: add %d to inflight", msg.deliveryID)
+		debug(3, "RX (messageDisposition): add %d to inflight", msg.deliveryID)
 		wait = r.inFlight.add(msg.deliveryID)
 	}
 

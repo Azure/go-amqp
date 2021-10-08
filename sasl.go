@@ -40,7 +40,7 @@ func ConnSASLPlain(username, password string) ConnOption {
 				InitialResponse: []byte("\x00" + username + "\x00" + password),
 				Hostname:        "",
 			}
-			debug(1, "TX: %s", init)
+			debug(1, "TX (ConnSASLPlain): %s", init)
 			c.err = c.writeFrame(frames.Frame{
 				Type: frameTypeSASL,
 				Body: init,
@@ -70,7 +70,7 @@ func ConnSASLAnonymous() ConnOption {
 				Mechanism:       saslMechanismANONYMOUS,
 				InitialResponse: []byte("anonymous"),
 			}
-			debug(1, "TX: %s", init)
+			debug(1, "TX (ConnSASLAnonymous): %s", init)
 			c.err = c.writeFrame(frames.Frame{
 				Type: frameTypeSASL,
 				Body: init,
@@ -102,7 +102,7 @@ func ConnSASLExternal(resp string) ConnOption {
 				Mechanism:       saslMechanismEXTERNAL,
 				InitialResponse: []byte(resp),
 			}
-			debug(1, "TX: %s", init)
+			debug(1, "TX (ConnSASLExternal): %s", init)
 			c.err = c.writeFrame(frames.Frame{
 				Type: frameTypeSASL,
 				Body: init,

@@ -177,7 +177,9 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 		case <-s.close:
 			_ = s.txFrame(&frames.PerformEnd{}, nil)
 
-			// discard frames until End is received or conn closed
+			// wait for the ack that the session is closed.
+			// we can't exit the mux, which deletes the session,
+			// until we receive it.
 		EndLoop:
 			for {
 				select {
@@ -204,7 +206,8 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 			next, ok := handles.Next()
 			if !ok {
-				l.err = fmt.Errorf("reached session handle max (%d)", s.handleMax)
+				// handle numbers are zero-based, report the actual count
+				l.err = fmt.Errorf("reached session handle max (%d)", s.handleMax+1)
 				l.RX <- nil
 				continue
 			}
@@ -320,7 +323,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 						NextOutgoingID: nextOutgoingID,
 						OutgoingWindow: s.outgoingWindow,
 					}
-					debug(1, "TX: %s", resp)
+					debug(1, "TX (session.mux): %s", resp)
 					_ = s.txFrame(resp, nil)
 				}
 
@@ -332,7 +335,8 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				// Note body.Role is the remote peer's role, we reverse for the local key.
 				link, linkOk := linksByKey[linkKey{name: body.Name, role: !body.Role}]
 				if !linkOk {
-					break
+					s.err = fmt.Errorf("protocol error: received mismatched attach frame %+v", body)
+					return
 				}
 
 				link.RemoteHandle = body.Handle

@@ -160,7 +160,7 @@ func attachLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 	}
 
 	// send Attach frame
-	debug(1, "TX: %s", attach)
+	debug(1, "TX (attachLink): %s", attach)
 	_ = s.txFrame(attach, nil)
 
 	// wait for response
@@ -170,7 +170,7 @@ func attachLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 		return nil, s.err
 	case fr = <-l.RX:
 	}
-	debug(3, "RX: %s", fr)
+	debug(3, "RX (attachLink): %s", fr)
 	resp, ok := fr.(*frames.PerformAttach)
 	if !ok {
 		return nil, fmt.Errorf("unexpected attach response: %#v", fr)
@@ -203,7 +203,7 @@ func attachLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 			Handle: l.Handle,
 			Closed: true,
 		}
-		debug(1, "TX: %s", fr)
+		debug(1, "TX (attachLink): %s", fr)
 		_ = s.txFrame(fr, nil)
 
 		if detach.Error == nil {
@@ -430,7 +430,7 @@ func (l *link) muxFlow(linkCredit uint32, drain bool) error {
 		LinkCredit:    &linkCredit, // max number of messages,
 		Drain:         drain,
 	}
-	debug(3, "TX: %s", fr)
+	debug(3, "TX (muxFlow): %s", fr)
 
 	// Update credit. This must happen before entering loop below
 	// because incoming messages handled while waiting to transmit
@@ -639,7 +639,7 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 	switch fr := fr.(type) {
 	// message frame
 	case *frames.PerformTransfer:
-		debug(3, "RX: %s", fr)
+		debug(3, "RX (muxHandleFrame): %s", fr)
 		if isSender {
 			// Senders should never receive transfer frames, but handle it just in case.
 			l.closeWithError(&Error{
@@ -653,7 +653,7 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 
 	// flow control frame
 	case *frames.PerformFlow:
-		debug(3, "RX: %s", fr)
+		debug(3, "RX (muxHandleFrame): %s", fr)
 		if isSender {
 			linkCredit := *fr.LinkCredit - l.deliveryCount
 			if fr.DeliveryCount != nil {
@@ -687,12 +687,12 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 			DeliveryCount: &deliveryCount,
 			LinkCredit:    &linkCredit, // max number of messages
 		}
-		debug(1, "TX: %s", resp)
+		debug(1, "TX (muxHandleFrame): %s", resp)
 		_ = l.Session.txFrame(resp, nil)
 
 	// remote side is closing links
 	case *frames.PerformDetach:
-		debug(1, "RX: %s", fr)
+		debug(1, "RX (muxHandleFrame): %s", fr)
 		// don't currently support link detach and reattach
 		if !fr.Closed {
 			return fmt.Errorf("non-closing detach not supported: %+v", fr)
@@ -704,7 +704,7 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 		return fmt.Errorf("received detach frame %v", &DetachError{fr.Error})
 
 	case *frames.PerformDisposition:
-		debug(3, "RX: %s", fr)
+		debug(3, "RX (muxHandleFrame): %s", fr)
 
 		// Unblock receivers waiting for message disposition
 		if l.receiver != nil {
@@ -738,7 +738,7 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 			Last:    fr.Last,
 			Settled: true,
 		}
-		debug(1, "TX: %s", resp)
+		debug(1, "TX (muxHandleFrame): %s", resp)
 		_ = l.Session.txFrame(resp, nil)
 
 	default:

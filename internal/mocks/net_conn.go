@@ -194,6 +194,23 @@ func PerformBegin(remoteChannel uint16) ([]byte, error) {
 	})
 }
 
+// SenderAttach encodes a PerformAttach frame with the specified values.
+// This frame is needed when making a call to Session.NewSender().
+func SenderAttach(remoteChannel uint16, linkName string, linkHandle uint32, mode encoding.SenderSettleMode) ([]byte, error) {
+	return EncodeFrame(FrameAMQP, remoteChannel, &frames.PerformAttach{
+		Name:   linkName,
+		Handle: linkHandle,
+		Role:   encoding.RoleReceiver,
+		Target: &frames.Target{
+			Address:      "test",
+			Durable:      encoding.DurabilityNone,
+			ExpiryPolicy: encoding.ExpirySessionEnd,
+		},
+		SenderSettleMode: &mode,
+		MaxMessageSize:   math.MaxUint32,
+	})
+}
+
 // ReceiverAttach appends a PerformAttach frame with the specified values.
 // This frame is needed when making a call to Session.NewReceiver().
 func ReceiverAttach(remoteChannel uint16, linkName string, linkHandle uint32, mode encoding.ReceiverSettleMode) ([]byte, error) {
@@ -276,6 +293,7 @@ type FrameType uint8
 
 const (
 	FrameAMQP FrameType = 0x0
+	FrameSASL FrameType = 0x1
 )
 
 // EncodeFrame encodes the specified frame to be sent over the wire.

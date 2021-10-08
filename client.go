@@ -99,7 +99,7 @@ func (c *Client) NewSession(opts ...SessionOption) (*Session, error) {
 		OutgoingWindow: s.outgoingWindow,
 		HandleMax:      s.handleMax,
 	}
-	debug(1, "TX: %s", begin)
+	debug(1, "TX (NewSession): %s", begin)
 	_ = s.txFrame(begin, nil)
 
 	// wait for response
@@ -109,7 +109,7 @@ func (c *Client) NewSession(opts ...SessionOption) (*Session, error) {
 		return nil, c.conn.Err()
 	case fr = <-s.rx:
 	}
-	debug(1, "RX: %s", fr.Body)
+	debug(1, "RX (NewSession): %s", fr.Body)
 
 	begin, ok := fr.Body.(*frames.PerformBegin)
 	if !ok {

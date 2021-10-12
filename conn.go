@@ -480,6 +480,7 @@ func (c *conn) mux() {
 				session, ok = sessionsByRemoteChannel[fr.Channel]
 				if !ok {
 					c.err = fmt.Errorf("%T: didn't find channel %d in sessionsByRemoteChannel", fr.Body, fr.Channel)
+					break
 				}
 				// we MUST remove the remote channel from our map as soon as we receive
 				// the ack (i.e. before passing it on to the session mux) on the session
@@ -487,6 +488,7 @@ func (c *conn) mux() {
 				delete(sessionsByRemoteChannel, fr.Channel)
 
 			default:
+				// pass on performative to the correct session
 				session, ok = sessionsByRemoteChannel[fr.Channel]
 				if !ok {
 					c.err = fmt.Errorf("%T: didn't find channel %d in sessionsByRemoteChannel", fr.Body, fr.Channel)

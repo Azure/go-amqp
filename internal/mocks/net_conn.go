@@ -17,7 +17,8 @@ import (
 // Return a non-nil error to simulate a write error.
 func NewNetConn(resp func(frames.FrameBody) ([]byte, error)) *NetConn {
 	return &NetConn{
-		resp: resp,
+		ReadErr: make(chan error),
+		resp:    resp,
 		// during shutdown, connReader can close before connWriter as they both
 		// both return on c.Done being closed, so there is some non-determinism
 		// here.  this means that sometimes writes can still happen but there's
@@ -33,6 +34,11 @@ type NetConn struct {
 	// OnClose is called from Close() before it returns.
 	// The value returned from OnClose is returned from Close().
 	OnClose func() error
+
+	// ReadErr is used to simulate a connReader error.
+	// The error written to this channel is returned
+	// from the call to NetConn.Read.
+	ReadErr chan error
 
 	resp      func(frames.FrameBody) ([]byte, error)
 	readDL    *time.Timer
@@ -77,6 +83,8 @@ func (n *NetConn) Read(b []byte) (int, error) {
 		return 0, errors.New("mock connection read deadline exceeded")
 	case rd := <-n.readData:
 		return copy(b, rd), nil
+	case err := <-n.ReadErr:
+		return 0, err
 	}
 }
 

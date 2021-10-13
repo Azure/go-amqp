@@ -383,6 +383,16 @@ func (c *conn) close() {
 	// wait for writing to stop, allows it to send the final close frame
 	<-c.txDone
 
+	// reading from connErr in mux can race with closeMux, causing
+	// a pending conn read/write error to be lost.  now that the
+	// mux has exited, drain any pending error.
+	select {
+	case err := <-c.connErr:
+		c.err = err
+	default:
+		// no pending read/write error
+	}
+
 	err := c.net.Close()
 	switch {
 	// conn.err already set

@@ -436,6 +436,7 @@ func TestConnReaderError(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	// trigger some kind of error
 	netConn.ReadErr <- errors.New("failed")
+	time.Sleep(100 * time.Millisecond)
 	require.Error(t, conn.Close())
 }
 
@@ -461,5 +462,6 @@ func TestConnWriterError(t *testing.T) {
 		Type: frameTypeAMQP,
 		Body: &frames.PerformFlow{},
 	}))
+	time.Sleep(100 * time.Millisecond)
 	require.Error(t, conn.Close())
 }

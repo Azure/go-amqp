@@ -364,3 +364,35 @@ func TestSessionFlowDisablesTransfer(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }
+
+func TestExactlyOnceDoesntWork(t *testing.T) {
+	responder := func(req frames.FrameBody) ([]byte, error) {
+		switch req.(type) {
+		case *mocks.AMQPProto:
+			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
+		case *frames.PerformOpen:
+			return mocks.PerformOpen("container")
+		case *frames.PerformBegin:
+			return mocks.PerformBegin(0)
+		case *frames.PerformEnd:
+			return mocks.PerformEnd(0, nil)
+		default:
+			return nil, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+	netConn := mocks.NewNetConn(responder)
+
+	client, err := New(netConn)
+	require.NoError(t, err)
+
+	session, err := client.NewSession()
+	require.NoError(t, err)
+
+	snd, err := session.NewSender(LinkSenderSettle(ModeMixed),
+		LinkReceiverSettle(ModeSecond),
+		LinkTargetAddress("doesntwork"))
+	require.Error(t, err)
+	require.Nil(t, snd)
+	time.Sleep(100 * time.Millisecond)
+	require.NoError(t, client.Close())
+}

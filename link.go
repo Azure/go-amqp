@@ -91,6 +91,11 @@ func newLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 		}
 	}
 
+	// sending unsettled messages when the receiver is in mode-second is currently
+	// broken and causes a hang after sending, so just disallow it for now.
+	if r == nil && senderSettleModeValue(l.SenderSettleMode) != ModeSettled && receiverSettleModeValue(l.ReceiverSettleMode) == ModeSecond {
+		return nil, errors.New("sender does not support exactly-once guarantee")
+	}
 	return l, nil
 }
 

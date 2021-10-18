@@ -60,7 +60,7 @@ func (s *Sender) Send(ctx context.Context, msg *Message) error {
 	case <-s.link.Detached:
 		return s.link.err
 	case <-ctx.Done():
-		return fmt.Errorf("awaiting send: %w", ctx.Err())
+		return ctx.Err()
 	}
 }
 
@@ -130,7 +130,7 @@ func (s *Sender) send(ctx context.Context, msg *Message) (chan encoding.Delivery
 		case <-s.link.Detached:
 			return nil, s.link.err
 		case <-ctx.Done():
-			return nil, fmt.Errorf("awaiting send: %w", ctx.Err())
+			return nil, ctx.Err()
 		}
 
 		// clear values that are only required on first message

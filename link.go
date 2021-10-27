@@ -582,7 +582,15 @@ func (l *link) muxReceive(fr frames.PerformTransfer) error {
 	if receiverSettleModeValue(l.ReceiverSettleMode) == ModeSecond {
 		l.addUnsettled(&l.msg)
 	}
-	l.Messages <- l.msg
+
+	select {
+	case l.Messages <- l.msg:
+		// successfully sent message
+	case <-l.close:
+		return l.err
+	case <-l.Detached:
+		return l.detachError
+	}
 
 	debug(1, "deliveryID %d after push to receiver - deliveryCount : %d - linkCredit: %d, len(messages): %d, len(inflight): %d", l.msg.deliveryID, l.deliveryCount, l.linkCredit, len(l.Messages), l.receiver.inFlight.len())
 
@@ -611,7 +619,7 @@ func (l *link) DrainCredit(ctx context.Context) error {
 	default:
 	}
 
-	return l.receiver.manualCreditor.Drain(ctx)
+	return l.receiver.manualCreditor.Drain(ctx, l)
 }
 
 // IssueCredit requests additional credits be issued for this link.
@@ -621,7 +629,7 @@ func (l *link) IssueCredit(credit uint32) error {
 		return errors.New("issueCredit can only be used with receiver links using manual credit management")
 	}
 
-	if err := l.receiver.manualCreditor.IssueCredit(credit); err != nil {
+	if err := l.receiver.manualCreditor.IssueCredit(credit, l); err != nil {
 		return err
 	}
 
@@ -815,6 +823,11 @@ func (l *link) muxDetach() {
 		// unblock any in flight message dispositions
 		if l.receiver != nil {
 			l.receiver.inFlight.clear(l.err)
+		}
+
+		// unblock any pending drain requests
+		if l.receiver != nil && l.receiver.manualCreditor != nil {
+			l.receiver.manualCreditor.EndDrain()
 		}
 	}()
 

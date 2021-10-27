@@ -25,7 +25,6 @@ var errAlreadyDraining = errors.New("drain already in process")
 func (mc *manualCreditor) EndDrain() {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
-
 	if mc.drained != nil {
 		close(mc.drained)
 		mc.drained = nil
@@ -48,7 +47,7 @@ func (mc *manualCreditor) FlowBits() (bool, uint32) {
 }
 
 // Drain initiates a drain and blocks until EndDrain is called.
-func (mc *manualCreditor) Drain(ctx context.Context) error {
+func (mc *manualCreditor) Drain(ctx context.Context, l *link) error {
 	mc.mu.Lock()
 
 	if mc.drained != nil {
@@ -66,6 +65,10 @@ func (mc *manualCreditor) Drain(ctx context.Context) error {
 	select {
 	case <-drained:
 		return nil
+	case <-l.close:
+		return l.err
+	case <-l.Detached:
+		return l.detachError
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -73,12 +76,18 @@ func (mc *manualCreditor) Drain(ctx context.Context) error {
 
 // IssueCredit queues up additional credits to be requested at the next
 // call of FlowBits()
-func (mc *manualCreditor) IssueCredit(credits uint32) error {
+func (mc *manualCreditor) IssueCredit(credits uint32, l *link) error {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
 
 	if mc.drained != nil {
 		return errLinkDraining
+	}
+
+	// don't continue to issue credit if we have exhausted our buffer
+	// as it will just lead to a hard-to-diagnose hang in link.muxReceive
+	if len(l.Messages) == cap(l.Messages) {
+		return errors.New("link credit exceeded, too many unsettled messages")
 	}
 
 	mc.creditsToAdd += credits

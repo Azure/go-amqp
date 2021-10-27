@@ -211,6 +211,9 @@ func newTestLink(t *testing.T) *link {
 		},
 		RX:            make(chan frames.FrameBody, 100),
 		ReceiverReady: make(chan struct{}, 1),
+		Messages:      make(chan Message, 1),
+		Detached:      make(chan struct{}),
+		close:         make(chan struct{}),
 	}
 
 	return l

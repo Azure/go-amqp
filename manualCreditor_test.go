@@ -2,6 +2,7 @@ package amqp
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -11,7 +12,7 @@ import (
 
 func TestManualCreditorIssueCredits(t *testing.T) {
 	mc := manualCreditor{}
-	require.NoError(t, mc.IssueCredit(3))
+	require.NoError(t, mc.IssueCredit(3, newTestLink(t)))
 
 	drain, credits := mc.FlowBits()
 	require.False(t, drain)
@@ -23,27 +24,35 @@ func TestManualCreditorIssueCredits(t *testing.T) {
 	require.EqualValues(t, 0, credits)
 }
 
+func TestManualCreditorIssueCreditsCapacityExceeded(t *testing.T) {
+	mc := manualCreditor{}
+	l := newTestLink(t)
+	l.Messages <- Message{}
+	require.Error(t, mc.IssueCredit(3, l))
+}
+
 func TestManualCreditorDrain(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*2)
 	defer cancel()
 
 	mc := manualCreditor{}
-	require.NoError(t, mc.IssueCredit(3))
+	require.NoError(t, mc.IssueCredit(3, newTestLink(t)))
 
 	// only one drain allowed at a time.
 	drainRoutines := sync.WaitGroup{}
 	drainRoutines.Add(2)
 
+	l := newTestLink(t)
 	var err1, err2 error
 
 	go func() {
 		defer drainRoutines.Done()
-		err1 = mc.Drain(ctx)
+		err1 = mc.Drain(ctx, l)
 	}()
 
 	go func() {
 		defer drainRoutines.Done()
-		err2 = mc.Drain(ctx)
+		err2 = mc.Drain(ctx, l)
 	}()
 
 	// one of the drain calls will have succeeded, the other one should still be blocking.
@@ -77,7 +86,7 @@ func TestManualCreditorIssueCreditsWhileDrainingFails(t *testing.T) {
 	defer cancel()
 
 	mc := manualCreditor{}
-	require.NoError(t, mc.IssueCredit(3))
+	require.NoError(t, mc.IssueCredit(3, newTestLink(t)))
 
 	// only one drain allowed at a time.
 	drainRoutines := sync.WaitGroup{}
@@ -88,14 +97,14 @@ func TestManualCreditorIssueCreditsWhileDrainingFails(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-		err := mc.Drain(ctx)
+		err := mc.Drain(ctx, newTestLink(t))
 		require.NoError(t, err)
 	}()
 
 	time.Sleep(time.Second * 2)
 
 	// drain is still active, so...
-	require.Error(t, mc.IssueCredit(1), errLinkDraining.Error())
+	require.Error(t, mc.IssueCredit(1, newTestLink(t)), errLinkDraining.Error())
 
 	mc.EndDrain()
 	wg.Wait()
@@ -109,5 +118,43 @@ func TestManualCreditorDrainRespectsContext(t *testing.T) {
 
 	cancel()
 
-	require.Error(t, mc.Drain(ctx), context.Canceled.Error())
+	require.Error(t, mc.Drain(ctx, newTestLink(t)), context.Canceled.Error())
+}
+
+func TestManualCreditorDrainRespectsLinkDetach(t *testing.T) {
+	l := newTestLink(t)
+	mc := manualCreditor{}
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+		err := mc.Drain(context.Background(), l)
+		require.Error(t, err)
+	}()
+
+	l.detachError = &Error{Condition: "link detached"}
+	close(l.Detached)
+
+	wg.Wait()
+}
+
+func TestManualCreditorDrainRespectsLinkClose(t *testing.T) {
+	l := newTestLink(t)
+	mc := manualCreditor{}
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+		err := mc.Drain(context.Background(), l)
+		require.Error(t, err)
+	}()
+
+	l.err = errors.New("link closed")
+	close(l.close)
+
+	wg.Wait()
 }

@@ -18,8 +18,16 @@ type manualCreditor struct {
 	drained chan struct{}
 }
 
-var errLinkDraining = errors.New("link is currently draining, no credits can be added")
-var errAlreadyDraining = errors.New("drain already in process")
+var (
+	errLinkDraining    = errors.New("link is currently draining, no credits can be added")
+	errAlreadyDraining = errors.New("drain already in process")
+)
+
+// ErrCreditLimitExceeded is returned from Receiver.IssueCredit when manual credit
+// management is enabled.  It indicates that the incoming rate of messages is greater
+// than the rate which messages are received, and no more credit should be issued
+// until the messages have been processed (call Receiver.Receive).
+var ErrCreditLimitExceeded = errors.New("link credit exceeded, too many outstanding messages")
 
 // EndDrain ends the current drain, unblocking any active Drain calls.
 func (mc *manualCreditor) EndDrain() {
@@ -84,10 +92,10 @@ func (mc *manualCreditor) IssueCredit(credits uint32, l *link) error {
 		return errLinkDraining
 	}
 
-	// don't continue to issue credit if we have exhausted our buffer
-	// as it will just lead to a hard-to-diagnose hang in link.muxReceive
-	if len(l.Messages) == cap(l.Messages) {
-		return errors.New("link credit exceeded, too many unsettled messages")
+	// don't continue to issue credit if it will exhauste our buffer as
+	// that will just lead to a hard-to-diagnose hang in link.muxReceive
+	if len(l.Messages)+int(l.linkCredit)+int(credits) > cap(l.Messages) {
+		return ErrCreditLimitExceeded
 	}
 
 	mc.creditsToAdd += credits

@@ -10,6 +10,7 @@ import (
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/frames"
 	"github.com/Azure/go-amqp/internal/mocks"
+	"github.com/stretchr/testify/require"
 )
 
 func TestConnOptions(t *testing.T) {
@@ -201,63 +202,31 @@ func (f fakeDialer) error() error {
 
 func TestDialConn(t *testing.T) {
 	c, err := dialConn(":bad url/ value", connDialer(fakeDialer{}))
-	if err == nil {
-		t.Fatal("unexpected nil error")
-	}
-	if c != nil {
-		t.Fatal("expected nil conn")
-	}
+	require.Error(t, err)
+	require.Nil(t, c)
 	c, err = dialConn("http://localhost", connDialer(fakeDialer{}))
-	if err == nil {
-		t.Fatal("unexpected nil error")
-	}
-	if c != nil {
-		t.Fatal("expected nil conn")
-	}
+	require.Error(t, err)
+	require.Nil(t, c)
 	c, err = dialConn("amqp://localhost", connDialer(fakeDialer{}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if c == nil {
-		t.Fatal("unexpected nil conn")
-	}
-	if c.tlsConfig != nil {
-		t.Fatal("expected no TLS config")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, c)
+	require.Nil(t, c.tlsConfig)
 	c, err = dialConn("amqps://localhost", connDialer(fakeDialer{}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if c == nil {
-		t.Fatal("unexpected nil conn")
-	}
-	if c.tlsConfig == nil {
-		t.Fatal("unexpected nil TLS config")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, c)
+	require.NotNil(t, c.tlsConfig)
 	c, err = dialConn("amqp://localhost:12345", connDialer(fakeDialer{}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if c == nil {
-		t.Fatal("unexpected nil conn")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, c)
 	c, err = dialConn("amqp://username:password@localhost", connDialer(fakeDialer{}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if c == nil {
-		t.Fatal("unexpected nil conn")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, c)
 	if _, ok := c.saslHandlers[saslMechanismPLAIN]; !ok {
 		t.Fatal("missing SASL plain handler")
 	}
 	c, err = dialConn("amqp://localhost", connDialer(fakeDialer{fail: true}))
-	if err == nil {
-		t.Fatal("unexpected nil error")
-	}
-	if c != nil {
-		t.Fatal("expected nil conn")
-	}
+	require.Error(t, err)
+	require.Nil(t, c)
 }
 
 func TestStart(t *testing.T) {
@@ -337,9 +306,7 @@ func TestStart(t *testing.T) {
 		t.Run(tt.label, func(t *testing.T) {
 			netConn := mocks.NewNetConn(tt.responder)
 			conn, err := newConn(netConn)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			err = conn.Start()
 			if tt.fails && err == nil {
 				t.Error("unexpected nil error")
@@ -364,32 +331,20 @@ func TestClose(t *testing.T) {
 
 	netConn := mocks.NewNetConn(responder)
 	conn, err := newConn(netConn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = conn.Start(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, conn.Start())
 	time.Sleep(100 * time.Millisecond)
-	if err = conn.Close(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, conn.Close())
 	// with Close error
 	netConn = mocks.NewNetConn(responder)
 	conn, err = newConn(netConn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = conn.Start(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, conn.Start())
 	time.Sleep(100 * time.Millisecond)
 	netConn.OnClose = func() error {
 		return errors.New("mock close failed")
 	}
-	if err = conn.Close(); err == nil {
-		t.Fatal("unexpected nil error")
-	}
+	require.Error(t, conn.Close())
 }
 
 func TestServerSideClose(t *testing.T) {
@@ -406,39 +361,23 @@ func TestServerSideClose(t *testing.T) {
 
 	netConn := mocks.NewNetConn(responder)
 	conn, err := newConn(netConn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = conn.Start()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, conn.Start())
 	time.Sleep(100 * time.Millisecond)
 	fr, err := mocks.PerformClose(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	netConn.SendFrame(fr)
 	time.Sleep(100 * time.Millisecond)
 	err = conn.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	// with error
 	netConn = mocks.NewNetConn(responder)
 	conn, err = newConn(netConn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = conn.Start()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, conn.Start())
 	time.Sleep(100 * time.Millisecond)
 	fr, err = mocks.PerformClose(&Error{Condition: "Close", Description: "mock server error"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	netConn.SendFrame(fr)
 	time.Sleep(100 * time.Millisecond)
 	err = conn.Close()
@@ -446,9 +385,7 @@ func TestServerSideClose(t *testing.T) {
 	if !errors.As(err, &ee) {
 		t.Fatalf("unexpected error type %T", err)
 	}
-	if ee.Condition != "Close" {
-		t.Fatalf("unexpected error value %+v", *ee)
-	}
+	require.Equal(t, encoding.ErrorCondition("Close"), ee.Condition)
 }
 
 func TestKeepAlives(t *testing.T) {
@@ -470,22 +407,61 @@ func TestKeepAlives(t *testing.T) {
 
 	netConn := mocks.NewNetConn(responder)
 	conn, err := newConn(netConn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = conn.Start()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, conn.Start())
 	time.Sleep(100 * time.Millisecond)
 	// send keepalive
 	netConn.SendKeepAlive()
 	time.Sleep(100 * time.Millisecond)
-	err = conn.Close()
-	if err != nil {
-		t.Fatal(err)
+	require.NoError(t, conn.Close())
+	require.NotEqual(t, 0, keepAlives, "didn't receive any keepalive frames")
+}
+
+func TestConnReaderError(t *testing.T) {
+	responder := func(req frames.FrameBody) ([]byte, error) {
+		switch req.(type) {
+		case *mocks.AMQPProto:
+			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
+		case *frames.PerformOpen:
+			return mocks.PerformOpen("container")
+		default:
+			return nil, fmt.Errorf("unhandled frame %T", req)
+		}
 	}
-	if keepAlives == 0 {
-		t.Fatal("didn't receive any keepalive frames")
+
+	netConn := mocks.NewNetConn(responder)
+	conn, err := newConn(netConn)
+	require.NoError(t, err)
+	require.NoError(t, conn.Start())
+	time.Sleep(100 * time.Millisecond)
+	// trigger some kind of error
+	netConn.ReadErr <- errors.New("failed")
+	time.Sleep(100 * time.Millisecond)
+	require.Error(t, conn.Close())
+}
+
+func TestConnWriterError(t *testing.T) {
+	responder := func(req frames.FrameBody) ([]byte, error) {
+		switch req.(type) {
+		case *mocks.AMQPProto:
+			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
+		case *frames.PerformOpen:
+			return mocks.PerformOpen("container")
+		default:
+			return nil, fmt.Errorf("unhandled frame %T", req)
+		}
 	}
+
+	netConn := mocks.NewNetConn(responder)
+	conn, err := newConn(netConn)
+	require.NoError(t, err)
+	require.NoError(t, conn.Start())
+	time.Sleep(100 * time.Millisecond)
+	// send a frame that our responder doesn't handle to simulate a conn.connWriter error
+	require.NoError(t, conn.SendFrame(frames.Frame{
+		Type: frameTypeAMQP,
+		Body: &frames.PerformFlow{},
+	}))
+	time.Sleep(100 * time.Millisecond)
+	require.Error(t, conn.Close())
 }

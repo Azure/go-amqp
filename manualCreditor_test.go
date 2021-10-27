@@ -13,14 +13,14 @@ func TestManualCreditorIssueCredits(t *testing.T) {
 	mc := manualCreditor{}
 	require.NoError(t, mc.IssueCredit(3))
 
-	drain, credits := mc.FlowBits()
+	drain, credits := mc.FlowBits(1)
 	require.False(t, drain)
-	require.EqualValues(t, 3, credits)
+	require.EqualValues(t, 3+1, credits, "flow frame includes the pending credits and  our current credits")
 
 	// flow clears the previous data once it's been called.
-	drain, credits = mc.FlowBits()
+	drain, credits = mc.FlowBits(4)
 	require.False(t, drain)
-	require.EqualValues(t, 0, credits)
+	require.EqualValues(t, 0, credits, "drain flow frame always sets link-credit to 0")
 }
 
 func TestManualCreditorDrain(t *testing.T) {
@@ -28,6 +28,7 @@ func TestManualCreditorDrain(t *testing.T) {
 	defer cancel()
 
 	mc := manualCreditor{}
+
 	require.NoError(t, mc.IssueCredit(3))
 
 	// only one drain allowed at a time.
@@ -49,11 +50,10 @@ func TestManualCreditorDrain(t *testing.T) {
 	// one of the drain calls will have succeeded, the other one should still be blocking.
 	time.Sleep(time.Second * 2)
 
-	// the next time someone requests a flow frame it'll drain and take
-	// any accumulated credits (this doesn't affect the blocked Drain() calls)
-	drain, credits := mc.FlowBits()
+	// the next time someone requests a flow frame it'll drain (this doesn't affect the blocked Drain() calls)
+	drain, credits := mc.FlowBits(101)
 	require.True(t, drain)
-	require.EqualValues(t, 3, credits)
+	require.EqualValues(t, 0, credits, "Drain always drains with 0 credit")
 
 	// unblock the last of the drainers
 	mc.EndDrain()

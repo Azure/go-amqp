@@ -322,15 +322,14 @@ func (l *link) doFlow() (ok bool, enableOutgoingTransfers bool) {
 		return true, true
 
 	case isReceiver && l.receiver.manualCreditor != nil:
-		drain, credits := l.receiver.manualCreditor.FlowBits()
+		drain, credits := l.receiver.manualCreditor.FlowBits(l.linkCredit)
 
 		if drain || credits > 0 {
 			debug(1, "FLOW Link Mux (manual): source: %s, inflight: %d, credit: %d, creditsToAdd: %d, drain: %v, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s",
 				l.Source.Address, l.receiver.inFlight.len(), l.linkCredit, credits, drain, l.deliveryCount, len(l.Messages), l.countUnsettled(), l.receiver.maxCredit, l.ReceiverSettleMode.String())
 
-			newCredits := credits + l.linkCredit
 			// send a flow frame.
-			l.err = l.muxFlow(newCredits, drain)
+			l.err = l.muxFlow(credits, drain)
 		}
 
 	// if receiver && half maxCredits have been processed, send more credits
@@ -441,7 +440,12 @@ func (l *link) muxFlow(linkCredit uint32, drain bool) error {
 	// because incoming messages handled while waiting to transmit
 	// flow increment deliveryCount. This causes the credit to become
 	// out of sync with the server.
-	l.linkCredit = linkCredit
+
+	if !drain {
+		// if we're draining we don't want to touch our internal credit - we're not changing it so any issued credits
+		// are still valid until drain completes, at which point they will be naturally zeroed.
+		l.linkCredit = linkCredit
+	}
 
 	// Ensure the session mux is not blocked
 	for {
@@ -674,8 +678,8 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 			// if the 'drain' flag has been set in the frame sent to the _receiver_ then
 			// we signal whomever is waiting (the service has seen and acknowledged our drain)
 			if fr.Drain && l.receiver.manualCreditor != nil {
-				l.receiver.manualCreditor.EndDrain()
 				l.linkCredit = 0 // we have no active credits at this point.
+				l.receiver.manualCreditor.EndDrain()
 			}
 			return nil
 		}

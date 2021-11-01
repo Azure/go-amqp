@@ -173,7 +173,7 @@ func Test_ReceiveNonBlocking(t *testing.T) {
 	}
 
 	// if there are no cached messages we just return immediately - no error, no message.
-	msg, err := receiver.ReceiveCached(context.Background())
+	msg, err := receiver.GetCached(context.Background())
 	require.Nil(t, msg)
 	require.Nil(t, err)
 
@@ -185,7 +185,7 @@ func Test_ReceiveNonBlocking(t *testing.T) {
 	}
 
 	require.NotEmpty(t, messagesCh)
-	msg, err = receiver.ReceiveCached(context.Background())
+	msg, err = receiver.GetCached(context.Background())
 
 	require.EqualValues(t, "hello", msg.ApplicationProperties["prop"].(string))
 	require.Nil(t, err)

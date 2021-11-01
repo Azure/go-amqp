@@ -38,13 +38,13 @@ func (r *Receiver) DrainCredit(ctx context.Context) error {
 	return r.link.DrainCredit(ctx)
 }
 
-// GetCached returns the next message that is stored in the Receiver's
+// Prefetched returns the next message that is stored in the Receiver's
 // prefetch cache. It does NOT wait for the remote sender to send messages
 // and returns immediately if the prefetch cache is empty.
 //
 // NOTE: Most callers will want to use `Receive`, which checks both the prefetch
 // cache and also waits for messages to arrive from the remote Sender.
-func (r *Receiver) GetCached(ctx context.Context) (*Message, error) {
+func (r *Receiver) Prefetched(ctx context.Context) (*Message, error) {
 	if atomic.LoadUint32(&r.link.Paused) == 1 {
 		select {
 		case r.link.ReceiverReady <- struct{}{}:
@@ -74,7 +74,7 @@ func (r *Receiver) GetCached(ctx context.Context) (*Message, error) {
 // one of the following: AcceptMessage, RejectMessage, ReleaseMessage, ModifyMessage.
 // When using ModeFirst, the message is spontaneously Accepted at reception.
 func (r *Receiver) Receive(ctx context.Context) (*Message, error) {
-	msg, err := r.GetCached(ctx)
+	msg, err := r.Prefetched(ctx)
 
 	if err != nil || msg != nil {
 		return msg, err

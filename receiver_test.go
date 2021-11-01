@@ -12,6 +12,7 @@ import (
 	"github.com/Azure/go-amqp/internal/frames"
 	"github.com/Azure/go-amqp/internal/mocks"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // helper to wait for a link to pause/resume
@@ -159,4 +160,34 @@ func TestReceive_ModeSecond(t *testing.T) {
 	cancel()
 	assert.NoError(t, err)*/
 	assert.NoError(t, client.Close())
+}
+
+func Test_ReceiveNonBlocking(t *testing.T) {
+	messagesCh := make(chan Message, 1)
+
+	receiver := &Receiver{
+		link: &link{
+			Messages:      messagesCh,
+			ReceiverReady: make(chan struct{}),
+		},
+	}
+
+	// if there are no cached messages we just return immediately - no error, no message.
+	msg, err := receiver.ReceiveCached(context.Background())
+	require.Nil(t, msg)
+	require.Nil(t, err)
+
+	messagesCh <- Message{
+		ApplicationProperties: map[string]interface{}{
+			"prop": "hello",
+		},
+		settled: true,
+	}
+
+	require.NotEmpty(t, messagesCh)
+	msg, err = receiver.ReceiveCached(context.Background())
+
+	require.EqualValues(t, "hello", msg.ApplicationProperties["prop"].(string))
+	require.Nil(t, err)
+	require.Empty(t, messagesCh)
 }

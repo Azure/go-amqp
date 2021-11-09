@@ -362,13 +362,13 @@ type MessageProperties struct {
 
 	// The to field identifies the node that is the intended destination of the message.
 	// On any given transfer this might not be the node at the receiving end of the link.
-	To string
+	To *string
 
 	// A common field for summary information about the message content and purpose.
-	Subject string
+	Subject *string
 
 	// The address of the node to send replies to.
-	ReplyTo string
+	ReplyTo *string
 
 	// This is a client-specific id that can be used to mark or identify messages
 	// between clients.
@@ -385,7 +385,7 @@ type MessageProperties struct {
 	//
 	// When using an application-data section with a section code other than data,
 	// content-type SHOULD NOT be set.
-	ContentType string
+	ContentType *string
 
 	// The content-encoding property is used as a modifier to the content-type.
 	// When present, its value indicates what additional content encodings have been
@@ -410,7 +410,7 @@ type MessageProperties struct {
 	//
 	// Implementations SHOULD NOT specify multiple content-encoding values except as to
 	// be compatible with messages originally sent with other protocols, e.g. HTTP or SMTP.
-	ContentEncoding string
+	ContentEncoding *string
 
 	// An absolute time when this message is considered to be expired.
 	AbsoluteExpiryTime time.Time
@@ -419,31 +419,31 @@ type MessageProperties struct {
 	CreationTime time.Time
 
 	// Identifies the group the message belongs to.
-	GroupID string
+	GroupID *string
 
 	// The relative position of this message within its group.
 	GroupSequence uint32 // RFC-1982 sequence number
 
 	// This is a client-specific id that is used so that client can send replies to this
 	// message to a specific group.
-	ReplyToGroupID string
+	ReplyToGroupID *string
 }
 
 func (p *MessageProperties) Marshal(wr *buffer.Buffer) error {
 	return encoding.MarshalComposite(wr, encoding.TypeCodeMessageProperties, []encoding.MarshalField{
 		{Value: p.MessageID, Omit: p.MessageID == nil},
 		{Value: &p.UserID, Omit: len(p.UserID) == 0},
-		{Value: &p.To, Omit: p.To == ""},
-		{Value: &p.Subject, Omit: p.Subject == ""},
-		{Value: &p.ReplyTo, Omit: p.ReplyTo == ""},
+		{Value: p.To, Omit: p.To == nil},
+		{Value: p.Subject, Omit: p.Subject == nil},
+		{Value: p.ReplyTo, Omit: p.ReplyTo == nil},
 		{Value: p.CorrelationID, Omit: p.CorrelationID == nil},
-		{Value: (*encoding.Symbol)(&p.ContentType), Omit: p.ContentType == ""},
-		{Value: (*encoding.Symbol)(&p.ContentEncoding), Omit: p.ContentEncoding == ""},
+		{Value: (*encoding.Symbol)(p.ContentType), Omit: p.ContentType == nil},
+		{Value: (*encoding.Symbol)(p.ContentEncoding), Omit: p.ContentEncoding == nil},
 		{Value: &p.AbsoluteExpiryTime, Omit: p.AbsoluteExpiryTime.IsZero()},
 		{Value: &p.CreationTime, Omit: p.CreationTime.IsZero()},
-		{Value: &p.GroupID, Omit: p.GroupID == ""},
+		{Value: p.GroupID, Omit: p.GroupID == nil},
 		{Value: &p.GroupSequence},
-		{Value: &p.ReplyToGroupID, Omit: p.ReplyToGroupID == ""},
+		{Value: p.ReplyToGroupID, Omit: p.ReplyToGroupID == nil},
 	})
 }
 

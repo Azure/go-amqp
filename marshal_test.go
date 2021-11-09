@@ -481,17 +481,17 @@ var (
 			Properties: &MessageProperties{
 				MessageID:          "yo",
 				UserID:             []byte("baz"),
-				To:                 "me",
-				Subject:            "sup?",
-				ReplyTo:            "you",
+				To:                 stringPtr("me"),
+				Subject:            stringPtr("sup?"),
+				ReplyTo:            stringPtr("you"),
 				CorrelationID:      uint64(34513),
-				ContentType:        "text/plain",
-				ContentEncoding:    "UTF-8",
+				ContentType:        stringPtr("text/plain"),
+				ContentEncoding:    stringPtr("UTF-8"),
 				AbsoluteExpiryTime: time.Date(2018, 01, 13, 14, 24, 07, 0, time.UTC),
 				CreationTime:       time.Date(2018, 01, 13, 14, 14, 07, 0, time.UTC),
-				GroupID:            "fooGroup",
+				GroupID:            stringPtr("fooGroup"),
 				GroupSequence:      89324,
-				ReplyToGroupID:     "barGroup",
+				ReplyToGroupID:     stringPtr("barGroup"),
 			},
 			ApplicationProperties: map[string]interface{}{
 				"baz": "foo",
@@ -515,17 +515,17 @@ var (
 		&MessageProperties{
 			MessageID:          "yo",
 			UserID:             []byte("baz"),
-			To:                 "me",
-			Subject:            "sup?",
-			ReplyTo:            "you",
+			To:                 stringPtr("me"),
+			Subject:            stringPtr("sup?"),
+			ReplyTo:            stringPtr("you"),
 			CorrelationID:      uint64(34513),
-			ContentType:        "text/plain",
-			ContentEncoding:    "UTF-8",
+			ContentType:        stringPtr("text/plain"),
+			ContentEncoding:    stringPtr("UTF-8"),
 			AbsoluteExpiryTime: time.Date(2018, 01, 13, 14, 24, 07, 0, time.UTC),
 			CreationTime:       time.Date(2018, 01, 13, 14, 14, 07, 0, time.UTC),
-			GroupID:            "fooGroup",
+			GroupID:            stringPtr("fooGroup"),
 			GroupSequence:      89324,
-			ReplyToGroupID:     "barGroup",
+			ReplyToGroupID:     stringPtr("barGroup"),
 		},
 		&encoding.StateReceived{
 			SectionNumber: 234,
@@ -650,4 +650,7 @@ func rcvSettle(m ReceiverSettleMode) *ReceiverSettleMode {
 
 func uint32Ptr(u uint32) *uint32 {
 	return &u
+}
+func stringPtr(s string) *string {
+	return &s
 }

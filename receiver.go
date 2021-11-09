@@ -88,8 +88,6 @@ func (r *Receiver) Receive(ctx context.Context) (*Message, error) {
 		debug(3, "Receive() blocking %d", msg.deliveryID)
 		msg.link = r.link
 		return acceptIfModeFirst(ctx, r, &msg)
-	case <-r.link.close:
-		return nil, r.link.err
 	case <-r.link.Detached:
 		return nil, r.link.err
 	case <-ctx.Done():

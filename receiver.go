@@ -82,6 +82,10 @@ func (r *Receiver) Receive(ctx context.Context) (*Message, error) {
 		return msg, err
 	}
 
+	if err := r.link.Check(); err != nil {
+		return nil, err
+	}
+
 	// wait for the next message
 	select {
 	case msg := <-r.link.Messages:
@@ -93,6 +97,12 @@ func (r *Receiver) Receive(ctx context.Context) (*Message, error) {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+}
+
+// IsAlive checks underlying AMQP link state, returning false if the link is closed
+// or if it is in a detached state, and returning true otherwise
+func (r *Receiver) IsAlive() bool {
+	return r.link.Check() == nil
 }
 
 // acceptIfModeFirst auto-accepts a message if we are in mode first, otherwise it no-ops.

@@ -25,11 +25,10 @@ type link struct {
 	Transfers    chan frames.PerformTransfer // sender uses to send transfer frames
 	closeOnce    sync.Once                   // closeOnce protects close from being closed multiple times
 
-	// NOTE: `close` and `detached` BOTH need to be checked to determine if the link
-	// is not in a "closed" state
-
 	// close signals the mux to shutdown. This indicates that `Close()` was called on this link.
+	// NOTE: observers outside of link.go *must* use the Detached channel to check if the link is unavailable.
 	close chan struct{}
+
 	// detached is closed by mux/muxDetach when the link is fully detached.
 	// This will be initiated if the service sends back an error or requests the link detach.
 	Detached chan struct{}
@@ -710,7 +709,7 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 		// set detach received and close link
 		l.detachReceived = true
 
-		return fmt.Errorf("received detach frame %v", &DetachError{fr.Error})
+		return &DetachError{fr.Error}
 
 	case *frames.PerformDisposition:
 		debug(3, "RX (muxHandleFrame): %s", fr)
@@ -758,19 +757,6 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 	return nil
 }
 
-// Check checks the link state, returning an error if the link is closed (ErrLinkClosed) or if
-// it is in a detached state (ErrLinkDetached)
-func (l *link) Check() error {
-	select {
-	case <-l.Detached:
-		return ErrLinkDetached
-	case <-l.close:
-		return ErrLinkClosed
-	default:
-		return nil
-	}
-}
-
 // close closes and requests deletion of the link.
 //
 // No operations on link are valid after close.
@@ -782,6 +768,7 @@ func (l *link) Close(ctx context.Context) error {
 	l.closeOnce.Do(func() { close(l.close) })
 	select {
 	case <-l.Detached:
+		// mux exited
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -813,13 +800,13 @@ func (l *link) muxDetach() {
 			}
 		}
 
-		// signal other goroutines that link is detached
-		close(l.Detached)
-
 		// unblock any in flight message dispositions
 		if l.receiver != nil {
 			l.receiver.inFlight.clear(l.err)
 		}
+
+		// signal that the link mux has exited
+		close(l.Detached)
 	}()
 
 	// "A peer closes a link by sending the detach frame with the

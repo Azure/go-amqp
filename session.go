@@ -35,7 +35,7 @@ type Session struct {
 	// used for gracefully closing link
 	close     chan struct{}
 	closeOnce sync.Once
-	done      chan struct{}
+	done      chan struct{} // part of internal public surface area
 	err       error
 }
 
@@ -127,6 +127,8 @@ func (s *Session) NewSender(opts ...LinkOption) (*Sender, error) {
 func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 	defer func() {
 		// clean up session record in conn.mux()
+		// TODO: this can deadlock with conn.mux sending a frame to the session
+		// https://github.com/Azure/go-amqp/issues/87
 		select {
 		case s.conn.DelSession <- s:
 		case <-s.conn.Done:
@@ -467,7 +469,10 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 func (s *Session) muxFrameToLink(l *link, fr frames.FrameBody) {
 	select {
 	case l.RX <- fr:
+		// frame successfully sent to link
 	case <-l.Detached:
+		// link is closed
 	case <-s.conn.Done:
+		// conn is closed
 	}
 }

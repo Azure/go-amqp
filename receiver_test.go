@@ -56,7 +56,7 @@ func TestReceive_ModeFirst(t *testing.T) {
 			// ignore future flow frames as we have no response
 			return nil, nil
 		case *frames.PerformDisposition:
-			return mocks.PerformDisposition(0, deliveryID, &encoding.StateAccepted{})
+			return mocks.PerformDisposition(encoding.RoleSender, 0, deliveryID, &encoding.StateAccepted{})
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -111,7 +111,7 @@ func TestReceive_ModeSecond(t *testing.T) {
 			// ignore future flow frames as we have no response
 			return nil, nil
 		case *frames.PerformDisposition:
-			return mocks.PerformDisposition(0, deliveryID, &encoding.StateAccepted{})
+			return mocks.PerformDisposition(encoding.RoleSender, 0, deliveryID, &encoding.StateAccepted{})
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}

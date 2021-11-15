@@ -257,13 +257,18 @@ func PerformTransfer(remoteChannel uint16, linkHandle, deliveryID uint32, payloa
 
 // PerformDisposition appends a PerformDisposition frame with the specified values.
 // The deliveryID MUST match the deliveryID value specified in PerformTransfer.
-func PerformDisposition(remoteChannel uint16, deliveryID uint32, state encoding.DeliveryState) ([]byte, error) {
+func PerformDisposition(role encoding.Role, remoteChannel uint16, deliveryID uint32, state encoding.DeliveryState) ([]byte, error) {
 	return EncodeFrame(FrameAMQP, remoteChannel, &frames.PerformDisposition{
-		Role:    encoding.RoleSender,
+		Role:    role,
 		First:   deliveryID,
 		Settled: true,
 		State:   state,
 	})
+}
+
+// PerformDetach encodes a PerformDetach frame with an optional error.
+func PerformDetach(remoteChannel uint16, linkHandle uint32, e *encoding.Error) ([]byte, error) {
+	return EncodeFrame(FrameAMQP, remoteChannel, &frames.PerformDetach{Handle: linkHandle, Closed: true, Error: e})
 }
 
 // PerformEnd encodes a PerformEnd frame with an optional error.

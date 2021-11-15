@@ -2,9 +2,13 @@ package amqp
 
 import (
 	"reflect"
+	"testing"
 
+	"github.com/Azure/go-amqp/internal/frames"
+	"github.com/Azure/go-amqp/internal/mocks"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/stretchr/testify/require"
 )
 
 func testEqual(x, y interface{}) bool {
@@ -62,4 +66,22 @@ func structTypes(v reflect.Value, m map[reflect.Type]struct{}) {
 			structTypes(v.Field(i), m)
 		}
 	}
+}
+
+func sendInitialFlowFrame(t *testing.T, netConn *mocks.NetConn, handle uint32, credit uint32) {
+	nextIncoming := uint32(0)
+	count := uint32(0)
+	available := uint32(0)
+	b, err := mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformFlow{
+		NextIncomingID: &nextIncoming,
+		IncomingWindow: 1000,
+		OutgoingWindow: 1000,
+		NextOutgoingID: nextIncoming + 1,
+		Handle:         &handle,
+		DeliveryCount:  &count,
+		LinkCredit:     &credit,
+		Available:      &available,
+	})
+	require.NoError(t, err)
+	netConn.SendFrame(b)
 }

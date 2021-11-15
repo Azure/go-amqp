@@ -41,10 +41,6 @@ func (s *Sender) MaxMessageSize() uint64 {
 // additional messages can be sent while the current goroutine is waiting
 // for the confirmation.
 func (s *Sender) Send(ctx context.Context, msg *Message) error {
-	if err := s.link.Check(); err != nil {
-		return err
-	}
-
 	done, err := s.send(ctx, msg)
 	if err != nil {
 		return err

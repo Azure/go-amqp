@@ -509,6 +509,8 @@ func (c *conn) mux() {
 				continue
 			}
 
+			// TODO: this can deadlock with session mux unwind
+			// https://github.com/Azure/go-amqp/issues/87
 			select {
 			case session.rx <- fr:
 			case <-c.closeMux:

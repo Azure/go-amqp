@@ -365,6 +365,9 @@ func TestSenderSendSuccess(t *testing.T) {
 			if tt.Settled {
 				return nil, errors.New("didn't expect message to be settled")
 			}
+			if tt.MessageFormat == nil {
+				return nil, errors.New("unexpected nil MessageFormat")
+			}
 			if !reflect.DeepEqual([]byte{0, 83, 117, 160, 4, 116, 101, 115, 116}, tt.Payload) {
 				return nil, fmt.Errorf("unexpected payload %v", tt.Payload)
 			}
@@ -415,7 +418,7 @@ func TestSenderSendSettled(t *testing.T) {
 				return nil, errors.New("didn't expect more to be true")
 			}
 			if !tt.Settled {
-				return nil, errors.New("didn't expect message to be settled")
+				return nil, errors.New("expected message to be settled")
 			}
 			if !reflect.DeepEqual([]byte{0, 83, 117, 160, 4, 116, 101, 115, 116}, tt.Payload) {
 				return nil, fmt.Errorf("unexpected payload %v", tt.Payload)
@@ -715,7 +718,16 @@ func TestSenderSendMultiTransfer(t *testing.T) {
 		case *frames.PerformTransfer:
 			if tt.DeliveryID != nil {
 				// deliveryID is only sent on the first transfer frame for multi-frame transfers
+				if transferCount != 0 {
+					return nil, fmt.Errorf("unexpected DeliveryID for frame number %d", transferCount)
+				}
 				deliveryID = *tt.DeliveryID
+			}
+			if tt.MessageFormat != nil && transferCount != 0 {
+				// MessageFormat is only sent on the first transfer frame for multi-frame transfers
+				return nil, fmt.Errorf("unexpected MessageFormat for frame number %d", transferCount)
+			} else if tt.MessageFormat == nil && transferCount == 0 {
+				return nil, errors.New("unexpected nil MessageFormat")
 			}
 			if tt.More {
 				transferCount++

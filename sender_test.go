@@ -46,7 +46,7 @@ func TestSenderMethodsNoSend(t *testing.T) {
 		linkName   = "test1"
 		maxMsgSize = uint64(4096)
 	)
-	snd, err := session.NewSender(LinkAddress(linkAddr), LinkName(linkName), LinkMaxMessageSize(maxMsgSize))
+	snd, err := session.NewSender(LinkTargetAddress(linkAddr), LinkName(linkName), LinkMaxMessageSize(maxMsgSize))
 	require.NoError(t, err)
 	require.NotNil(t, snd)
 	time.Sleep(100 * time.Millisecond)

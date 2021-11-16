@@ -14,21 +14,6 @@ import (
 // A link may be a Sender or a Receiver.
 type LinkOption func(*link) error
 
-// LinkAddress sets the link address.
-//
-// For a Receiver this configures the source address.
-// For a Sender this configures the target address.
-//
-// Deprecated: use LinkSourceAddress or LinkTargetAddress instead.
-func LinkAddress(source string) LinkOption {
-	return func(l *link) error {
-		if l.receiver != nil {
-			return LinkSourceAddress(source)(l)
-		}
-		return LinkTargetAddress(source)(l)
-	}
-}
-
 // LinkProperty sets an entry in the link properties map sent to the server.
 //
 // This option can be used multiple times.

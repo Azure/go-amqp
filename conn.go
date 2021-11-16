@@ -26,16 +26,6 @@ const (
 	DefaultMaxSessions  = 65536
 )
 
-// Errors
-var (
-	ErrTimeout = errors.New("amqp: timeout waiting for response")
-
-	// ErrConnClosed is propagated to Session and Senders/Receivers
-	// when Client.Close() is called or the server closes the connection
-	// without specifying an error.
-	ErrConnClosed = errors.New("amqp: connection closed")
-)
-
 // ConnOption is a function for configuring an AMQP connection.
 type ConnOption func(*conn) error
 

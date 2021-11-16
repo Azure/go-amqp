@@ -1,6 +1,7 @@
 package amqp
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -57,6 +58,24 @@ type DetachError struct {
 func (e *DetachError) Error() string {
 	return fmt.Sprintf("link detached, reason: %+v", e.RemoteError)
 }
+
+// Errors
+var (
+	ErrTimeout = errors.New("amqp: timeout waiting for response")
+
+	// ErrConnClosed is propagated to Session and Senders/Receivers
+	// when Client.Close() is called or the server closes the connection
+	// without specifying an error.
+	ErrConnClosed = errors.New("amqp: connection closed")
+
+	// ErrSessionClosed is propagated to Sender/Receivers
+	// when Session.Close() is called.
+	ErrSessionClosed = errors.New("amqp: session closed")
+
+	// ErrLinkClosed is returned by send and receive operations when
+	// Sender.Close() or Receiver.Close() are called.
+	ErrLinkClosed = errors.New("amqp: link closed")
+)
 
 // Default link options
 const (

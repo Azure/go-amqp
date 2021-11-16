@@ -13,16 +13,6 @@ import (
 	"github.com/Azure/go-amqp/internal/frames"
 )
 
-var (
-	// ErrSessionClosed is propagated to Sender/Receivers
-	// when Session.Close() is called.
-	ErrSessionClosed = errors.New("amqp: session closed")
-
-	// ErrLinkClosed is returned by send and receive operations when
-	// Sender.Close() or Receiver.Close() are called.
-	ErrLinkClosed = errors.New("amqp: link closed")
-)
-
 // Client is an AMQP client connection.
 type Client struct {
 	conn *conn

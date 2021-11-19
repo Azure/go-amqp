@@ -615,8 +615,6 @@ func TestSessionFlowFrameWithEcho(t *testing.T) {
 }
 
 func TestSessionInvalidAttachDeadlock(t *testing.T) {
-	// https://github.com/Azure/go-amqp/issues/87
-	t.Skip("TODO: deadlock fix for conn and session")
 	var enqueueFrames func(string)
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {

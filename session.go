@@ -127,10 +127,11 @@ func (s *Session) NewSender(opts ...LinkOption) (*Sender, error) {
 func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 	defer func() {
 		// clean up session record in conn.mux()
-		// TODO: this can deadlock with conn.mux sending a frame to the session
-		// https://github.com/Azure/go-amqp/issues/87
 		select {
+		case <-s.rx:
+			// discard any incoming frames to keep conn mux unblocked
 		case s.conn.DelSession <- s:
+			// successfully deleted session
 		case <-s.conn.Done:
 			s.err = s.conn.Err()
 		}

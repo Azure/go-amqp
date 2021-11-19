@@ -317,6 +317,7 @@ func TestSenderSendMismatchedModes(t *testing.T) {
 	require.NoError(t, err)
 	snd, err := session.NewSender(LinkSenderSettle(encoding.ModeSettled))
 	require.Error(t, err)
+	require.Equal(t, "amqp: sender settlement mode \"settled\" requested, received \"unsettled\" from server", err.Error())
 	require.Nil(t, snd)
 	require.NoError(t, client.Close())
 }

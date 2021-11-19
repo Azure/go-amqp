@@ -1,6 +1,7 @@
 package amqp
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -333,17 +334,17 @@ func TestClose(t *testing.T) {
 	conn, err := newConn(netConn)
 	require.NoError(t, err)
 	require.NoError(t, conn.Start())
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, conn.Close())
 	// with Close error
 	netConn = mocks.NewNetConn(responder)
 	conn, err = newConn(netConn)
 	require.NoError(t, err)
 	require.NoError(t, conn.Start())
-	time.Sleep(100 * time.Millisecond)
 	netConn.OnClose = func() error {
 		return errors.New("mock close failed")
 	}
+	// wait a bit for connReader to read from the mock
+	time.Sleep(100 * time.Millisecond)
 	require.Error(t, conn.Close())
 }
 
@@ -363,11 +364,9 @@ func TestServerSideClose(t *testing.T) {
 	conn, err := newConn(netConn)
 	require.NoError(t, err)
 	require.NoError(t, conn.Start())
-	time.Sleep(100 * time.Millisecond)
 	fr, err := mocks.PerformClose(nil)
 	require.NoError(t, err)
 	netConn.SendFrame(fr)
-	time.Sleep(100 * time.Millisecond)
 	err = conn.Close()
 	require.NoError(t, err)
 	// with error
@@ -375,10 +374,10 @@ func TestServerSideClose(t *testing.T) {
 	conn, err = newConn(netConn)
 	require.NoError(t, err)
 	require.NoError(t, conn.Start())
-	time.Sleep(100 * time.Millisecond)
 	fr, err = mocks.PerformClose(&Error{Condition: "Close", Description: "mock server error"})
 	require.NoError(t, err)
 	netConn.SendFrame(fr)
+	// wait a bit for connReader to read from the mock
 	time.Sleep(100 * time.Millisecond)
 	err = conn.Close()
 	var ee *Error
@@ -389,7 +388,7 @@ func TestServerSideClose(t *testing.T) {
 }
 
 func TestKeepAlives(t *testing.T) {
-	keepAlives := 0
+	keepAlives := make(chan struct{})
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *mocks.AMQPProto:
@@ -398,7 +397,7 @@ func TestKeepAlives(t *testing.T) {
 			// specify small idle timeout so we receive a lot of keep-alives
 			return mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformOpen{ContainerID: "container", IdleTimeout: 1 * time.Millisecond})
 		case *mocks.KeepAlive:
-			keepAlives++
+			close(keepAlives)
 			return nil, nil
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
@@ -409,12 +408,17 @@ func TestKeepAlives(t *testing.T) {
 	conn, err := newConn(netConn)
 	require.NoError(t, err)
 	require.NoError(t, conn.Start())
-	time.Sleep(100 * time.Millisecond)
 	// send keepalive
 	netConn.SendKeepAlive()
-	time.Sleep(100 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	select {
+	case <-keepAlives:
+		// got keep-alive
+	case <-ctx.Done():
+		t.Fatal("didn't receive any keepalive frames")
+	}
 	require.NoError(t, conn.Close())
-	require.NotEqual(t, 0, keepAlives, "didn't receive any keepalive frames")
 }
 
 func TestConnReaderError(t *testing.T) {
@@ -433,9 +437,9 @@ func TestConnReaderError(t *testing.T) {
 	conn, err := newConn(netConn)
 	require.NoError(t, err)
 	require.NoError(t, conn.Start())
-	time.Sleep(100 * time.Millisecond)
 	// trigger some kind of error
 	netConn.ReadErr <- errors.New("failed")
+	// wait a bit for the connReader goroutine to read from the mock
 	time.Sleep(100 * time.Millisecond)
 	require.Error(t, conn.Close())
 }
@@ -456,12 +460,12 @@ func TestConnWriterError(t *testing.T) {
 	conn, err := newConn(netConn)
 	require.NoError(t, err)
 	require.NoError(t, conn.Start())
-	time.Sleep(100 * time.Millisecond)
 	// send a frame that our responder doesn't handle to simulate a conn.connWriter error
 	require.NoError(t, conn.SendFrame(frames.Frame{
 		Type: frameTypeAMQP,
 		Body: &frames.PerformFlow{},
 	}))
+	// wait a bit for connReader to read from the mock
 	time.Sleep(100 * time.Millisecond)
 	require.Error(t, conn.Close())
 }

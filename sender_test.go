@@ -40,7 +40,6 @@ func TestSenderMethodsNoSend(t *testing.T) {
 
 	session, err := client.NewSession()
 	require.NoError(t, err)
-	time.Sleep(100 * time.Millisecond)
 	const (
 		linkAddr   = "addr1"
 		linkName   = "test1"
@@ -49,14 +48,12 @@ func TestSenderMethodsNoSend(t *testing.T) {
 	snd, err := session.NewSender(LinkTargetAddress(linkAddr), LinkName(linkName), LinkMaxMessageSize(maxMsgSize))
 	require.NoError(t, err)
 	require.NotNil(t, snd)
-	time.Sleep(100 * time.Millisecond)
 	require.Equal(t, linkAddr, snd.Address())
 	require.Equal(t, linkName, snd.LinkName())
 	require.Equal(t, maxMsgSize, snd.MaxMessageSize())
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	require.NoError(t, snd.Close(ctx))
 	cancel()
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }
 
@@ -86,21 +83,17 @@ func TestSenderSendOnClosed(t *testing.T) {
 
 	session, err := client.NewSession()
 	require.NoError(t, err)
-	time.Sleep(100 * time.Millisecond)
 	snd, err := session.NewSender()
 	require.NoError(t, err)
 	require.NotNil(t, snd)
-	time.Sleep(100 * time.Millisecond)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	require.NoError(t, snd.Close(ctx))
 	cancel()
-	time.Sleep(100 * time.Millisecond)
 	// sending on a closed sender returns ErrLinkClosed
 	if err = snd.Send(context.Background(), NewMessage([]byte("failed"))); !errors.Is(err, ErrLinkClosed) {
 		t.Fatalf("unexpected error %T", err)
 	}
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }
 
@@ -130,21 +123,17 @@ func TestSenderSendOnSessionClosed(t *testing.T) {
 
 	session, err := client.NewSession()
 	require.NoError(t, err)
-	time.Sleep(100 * time.Millisecond)
 	snd, err := session.NewSender()
 	require.NoError(t, err)
 	require.NotNil(t, snd)
-	time.Sleep(100 * time.Millisecond)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	require.NoError(t, session.Close(ctx))
 	cancel()
-	time.Sleep(100 * time.Millisecond)
 	// sending on a closed sender returns ErrLinkClosed
 	if err = snd.Send(context.Background(), NewMessage([]byte("failed"))); !errors.Is(err, ErrSessionClosed) {
 		t.Fatalf("unexpected error %T", err)
 	}
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }
 
@@ -174,19 +163,15 @@ func TestSenderSendOnConnClosed(t *testing.T) {
 
 	session, err := client.NewSession()
 	require.NoError(t, err)
-	time.Sleep(100 * time.Millisecond)
 	snd, err := session.NewSender()
 	require.NoError(t, err)
 	require.NotNil(t, snd)
-	time.Sleep(100 * time.Millisecond)
 
 	require.NoError(t, client.Close())
-	time.Sleep(100 * time.Millisecond)
 	// sending on a closed sender returns ErrLinkClosed
 	if err = snd.Send(context.Background(), NewMessage([]byte("failed"))); !errors.Is(err, ErrConnClosed) {
 		t.Fatalf("unexpected error %T", err)
 	}
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }
 
@@ -216,11 +201,9 @@ func TestSenderSendOnDetached(t *testing.T) {
 
 	session, err := client.NewSession()
 	require.NoError(t, err)
-	time.Sleep(100 * time.Millisecond)
 	snd, err := session.NewSender()
 	require.NoError(t, err)
 	require.NotNil(t, snd)
-	time.Sleep(100 * time.Millisecond)
 	// initiate a server-side detach
 	const (
 		errcon  = "detaching"
@@ -229,7 +212,6 @@ func TestSenderSendOnDetached(t *testing.T) {
 	b, err := mocks.PerformDetach(0, 0, &Error{Condition: errcon, Description: errdesc})
 	require.NoError(t, err)
 	netConn.SendFrame(b)
-	time.Sleep(100 * time.Millisecond)
 	// sending on a detached link returns a DetachError
 	err = snd.Send(context.Background(), NewMessage([]byte("failed")))
 	var de *DetachError
@@ -238,12 +220,11 @@ func TestSenderSendOnDetached(t *testing.T) {
 	}
 	require.Equal(t, encoding.ErrorCondition(errcon), de.RemoteError.Condition)
 	require.Equal(t, errdesc, de.RemoteError.Description)
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }
 
 func TestSenderAttachError(t *testing.T) {
-	var detachAck bool
+	detachAck := make(chan bool)
 	var enqueueFrames func(string)
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {
@@ -260,7 +241,7 @@ func TestSenderAttachError(t *testing.T) {
 			return nil, nil
 		case *frames.PerformDetach:
 			// we don't need to respond to the ack
-			detachAck = true
+			detachAck <- true
 			return nil, nil
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
@@ -272,7 +253,6 @@ func TestSenderAttachError(t *testing.T) {
 
 	session, err := client.NewSession()
 	require.NoError(t, err)
-	time.Sleep(100 * time.Millisecond)
 
 	const (
 		errcon  = "cantattach"
@@ -298,7 +278,6 @@ func TestSenderAttachError(t *testing.T) {
 		netConn.SendFrame(b)
 	}
 	snd, err := session.NewSender()
-	time.Sleep(100 * time.Millisecond)
 	var de *Error
 	if !errors.As(err, &de) {
 		t.Fatalf("unexpected error type %T", err)
@@ -306,8 +285,7 @@ func TestSenderAttachError(t *testing.T) {
 	require.Equal(t, encoding.ErrorCondition(errcon), de.Condition)
 	require.Equal(t, errdesc, de.Description)
 	require.Nil(t, snd)
-	require.Equal(t, true, detachAck)
-	time.Sleep(100 * time.Millisecond)
+	require.Equal(t, true, <-detachAck)
 	require.NoError(t, client.Close())
 }
 
@@ -337,11 +315,9 @@ func TestSenderSendMismatchedModes(t *testing.T) {
 
 	session, err := client.NewSession()
 	require.NoError(t, err)
-	time.Sleep(100 * time.Millisecond)
 	snd, err := session.NewSender(LinkSenderSettle(encoding.ModeSettled))
 	require.Error(t, err)
 	require.Nil(t, snd)
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }
 
@@ -385,18 +361,15 @@ func TestSenderSendSuccess(t *testing.T) {
 
 	session, err := client.NewSession()
 	require.NoError(t, err)
-	time.Sleep(100 * time.Millisecond)
 	snd, err := session.NewSender()
 	require.NoError(t, err)
 
 	sendInitialFlowFrame(t, netConn, 0, 100)
-	time.Sleep(100 * time.Millisecond)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	require.NoError(t, snd.Send(ctx, NewMessage([]byte("test"))))
 	cancel()
 
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }
 
@@ -437,18 +410,15 @@ func TestSenderSendSettled(t *testing.T) {
 
 	session, err := client.NewSession()
 	require.NoError(t, err)
-	time.Sleep(100 * time.Millisecond)
 	snd, err := session.NewSender(LinkSenderSettle(ModeSettled))
 	require.NoError(t, err)
 
 	sendInitialFlowFrame(t, netConn, 0, 100)
-	time.Sleep(100 * time.Millisecond)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	require.NoError(t, snd.Send(ctx, NewMessage([]byte("test"))))
 	cancel()
 
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }
 
@@ -485,12 +455,10 @@ func TestSenderSendRejected(t *testing.T) {
 
 	session, err := client.NewSession()
 	require.NoError(t, err)
-	time.Sleep(100 * time.Millisecond)
 	snd, err := session.NewSender()
 	require.NoError(t, err)
 
 	sendInitialFlowFrame(t, netConn, 0, 100)
-	time.Sleep(100 * time.Millisecond)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	err = snd.Send(ctx, NewMessage([]byte("test")))
@@ -501,7 +469,6 @@ func TestSenderSendRejected(t *testing.T) {
 	}
 	require.Equal(t, encoding.ErrorCondition("rejected"), asErr.Condition)
 
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }
 
@@ -536,12 +503,10 @@ func TestSenderSendDetached(t *testing.T) {
 
 	session, err := client.NewSession()
 	require.NoError(t, err)
-	time.Sleep(100 * time.Millisecond)
 	snd, err := session.NewSender()
 	require.NoError(t, err)
 
 	sendInitialFlowFrame(t, netConn, 0, 100)
-	time.Sleep(100 * time.Millisecond)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	err = snd.Send(ctx, NewMessage([]byte("test")))
@@ -552,7 +517,6 @@ func TestSenderSendDetached(t *testing.T) {
 	}
 	require.Equal(t, encoding.ErrorCondition("detached"), asErr.RemoteError.Condition)
 
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }
 
@@ -582,7 +546,6 @@ func TestSenderSendTimeout(t *testing.T) {
 
 	session, err := client.NewSession()
 	require.NoError(t, err)
-	time.Sleep(100 * time.Millisecond)
 	snd, err := session.NewSender()
 	require.NoError(t, err)
 
@@ -591,7 +554,6 @@ func TestSenderSendTimeout(t *testing.T) {
 	require.Error(t, snd.Send(ctx, NewMessage([]byte("test"))))
 	cancel()
 
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }
 
@@ -635,18 +597,15 @@ func TestSenderSendMsgTooBig(t *testing.T) {
 
 	session, err := client.NewSession()
 	require.NoError(t, err)
-	time.Sleep(100 * time.Millisecond)
 	snd, err := session.NewSender()
 	require.NoError(t, err)
 
 	sendInitialFlowFrame(t, netConn, 0, 100)
-	time.Sleep(100 * time.Millisecond)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	require.Error(t, snd.Send(ctx, NewMessage([]byte("test message that's too big"))))
 	cancel()
 
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }
 
@@ -678,12 +637,10 @@ func TestSenderSendTagTooBig(t *testing.T) {
 
 	session, err := client.NewSession()
 	require.NoError(t, err)
-	time.Sleep(100 * time.Millisecond)
 	snd, err := session.NewSender()
 	require.NoError(t, err)
 
 	sendInitialFlowFrame(t, netConn, 0, 100)
-	time.Sleep(100 * time.Millisecond)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	msg := NewMessage([]byte("test"))
@@ -692,7 +649,6 @@ func TestSenderSendTagTooBig(t *testing.T) {
 	require.Error(t, snd.Send(ctx, msg))
 	cancel()
 
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }
 
@@ -749,12 +705,10 @@ func TestSenderSendMultiTransfer(t *testing.T) {
 
 	session, err := client.NewSession()
 	require.NoError(t, err)
-	time.Sleep(100 * time.Millisecond)
 	snd, err := session.NewSender()
 	require.NoError(t, err)
 
 	sendInitialFlowFrame(t, netConn, 0, 100)
-	time.Sleep(100 * time.Millisecond)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100000*time.Millisecond)
 	payload := make([]byte, maxReceiverFrameSize*4)
@@ -767,6 +721,5 @@ func TestSenderSendMultiTransfer(t *testing.T) {
 	// split up into 8 transfers due to transfer frame header size
 	require.Equal(t, 8, transferCount)
 
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }

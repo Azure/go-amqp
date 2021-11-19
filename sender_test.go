@@ -687,6 +687,7 @@ func TestSenderSendTagTooBig(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	msg := NewMessage([]byte("test"))
+	// make the tag larger than max allowed of 32
 	msg.DeliveryTag = make([]byte, 33)
 	require.Error(t, snd.Send(ctx, msg))
 	cancel()
@@ -698,6 +699,7 @@ func TestSenderSendTagTooBig(t *testing.T) {
 func TestSenderSendMultiTransfer(t *testing.T) {
 	var deliveryID uint32
 	transferCount := 0
+	const maxReceiverFrameSize = 128
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {
 		case *mocks.AMQPProto:
@@ -707,7 +709,7 @@ func TestSenderSendMultiTransfer(t *testing.T) {
 				ChannelMax:   65535,
 				ContainerID:  "container",
 				IdleTimeout:  time.Minute,
-				MaxFrameSize: 128, // really small max frame size
+				MaxFrameSize: maxReceiverFrameSize, // really small max frame size
 			})
 		case *frames.PerformBegin:
 			return mocks.PerformBegin(0)
@@ -755,8 +757,8 @@ func TestSenderSendMultiTransfer(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100000*time.Millisecond)
-	payload := make([]byte, 512)
-	for i := 0; i < 512; i++ {
+	payload := make([]byte, maxReceiverFrameSize*4)
+	for i := 0; i < maxReceiverFrameSize*4; i++ {
 		payload[i] = byte(i % 256)
 	}
 	require.NoError(t, snd.Send(ctx, NewMessage(payload)))

@@ -26,7 +26,8 @@ type link struct {
 	closeOnce    sync.Once                   // closeOnce protects close from being closed multiple times
 
 	// close signals the mux to shutdown. This indicates that `Close()` was called on this link.
-	// NOTE: observers outside of link.go *must* use the Detached channel to check if the link is unavailable.
+	// NOTE: observers outside of link.go *must only* use the Detached channel to check if the link is unavailable.
+	// including the close channel will lead to a race condition.
 	close chan struct{}
 
 	// detached is closed by mux/muxDetach when the link is fully detached.

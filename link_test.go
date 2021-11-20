@@ -339,23 +339,7 @@ func TestSourceName(t *testing.T) {
 func TestSessionFlowDisablesTransfer(t *testing.T) {
 	t.Skip("TODO: finish for link testing")
 	nextIncomingID := uint32(0)
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		switch req.(type) {
-		case *mocks.AMQPProto:
-			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("container")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformFlow:
-			return nil, nil
-		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
-		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
-		}
-	}
-	netConn := mocks.NewNetConn(responder)
+	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
 
 	client, err := New(netConn)
 	require.NoError(t, err)
@@ -384,21 +368,7 @@ func TestSessionFlowDisablesTransfer(t *testing.T) {
 }
 
 func TestExactlyOnceDoesntWork(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		switch req.(type) {
-		case *mocks.AMQPProto:
-			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("container")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
-		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
-		}
-	}
-	netConn := mocks.NewNetConn(responder)
+	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
 
 	client, err := New(netConn)
 	require.NoError(t, err)

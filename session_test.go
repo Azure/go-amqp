@@ -134,21 +134,7 @@ func TestSessionCloseTimeout(t *testing.T) {
 }
 
 func TestConnCloseSessionClose(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		switch req.(type) {
-		case *mocks.AMQPProto:
-			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("container")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
-		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
-		}
-	}
-	netConn := mocks.NewNetConn(responder)
+	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
 
 	client, err := New(netConn)
 	require.NoError(t, err)
@@ -168,21 +154,7 @@ func TestConnCloseSessionClose(t *testing.T) {
 }
 
 func TestSessionNewReceiverBadOptionFails(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		switch req.(type) {
-		case *mocks.AMQPProto:
-			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("container")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
-		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
-		}
-	}
-	netConn := mocks.NewNetConn(responder)
+	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
 
 	client, err := New(netConn)
 	require.NoError(t, err)
@@ -320,21 +292,7 @@ func TestSessionNewReceiverMismatchedLinkName(t *testing.T) {
 }
 
 func TestSessionNewSenderBadOptionFails(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		switch req.(type) {
-		case *mocks.AMQPProto:
-			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("container")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
-		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
-		}
-	}
-	netConn := mocks.NewNetConn(responder)
+	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
 
 	client, err := New(netConn)
 	require.NoError(t, err)
@@ -392,23 +350,7 @@ func TestSessionNewSenderMismatchedLinkName(t *testing.T) {
 }
 
 func TestSessionNewSenderDuplicateLinks(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		switch tt := req.(type) {
-		case *mocks.AMQPProto:
-			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("container")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
-		case *frames.PerformAttach:
-			return mocks.SenderAttach(0, tt.Name, 0, encoding.ModeUnsettled)
-		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
-		}
-	}
-	netConn := mocks.NewNetConn(responder)
+	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
 
 	client, err := New(netConn)
 	require.NoError(t, err)
@@ -434,23 +376,7 @@ func TestSessionNewSenderDuplicateLinks(t *testing.T) {
 }
 
 func TestSessionNewSenderMaxHandles(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		switch tt := req.(type) {
-		case *mocks.AMQPProto:
-			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("container")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
-		case *frames.PerformAttach:
-			return mocks.SenderAttach(0, tt.Name, 0, encoding.ModeUnsettled)
-		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
-		}
-	}
-	netConn := mocks.NewNetConn(responder)
+	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
 
 	client, err := New(netConn)
 	require.NoError(t, err)
@@ -476,21 +402,7 @@ func TestSessionNewSenderMaxHandles(t *testing.T) {
 }
 
 func TestSessionUnexpectedFrame(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		switch req.(type) {
-		case *mocks.AMQPProto:
-			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("container")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
-		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
-		}
-	}
-	netConn := mocks.NewNetConn(responder)
+	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
 
 	client, err := New(netConn)
 	require.NoError(t, err)
@@ -515,21 +427,7 @@ func TestSessionUnexpectedFrame(t *testing.T) {
 }
 
 func TestSessionInvalidFlowFrame(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		switch req.(type) {
-		case *mocks.AMQPProto:
-			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("container")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
-		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
-		}
-	}
-	netConn := mocks.NewNetConn(responder)
+	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
 
 	client, err := New(netConn)
 	require.NoError(t, err)

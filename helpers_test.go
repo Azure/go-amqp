@@ -1,9 +1,11 @@
 package amqp
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
+	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/frames"
 	"github.com/Azure/go-amqp/internal/mocks"
 	"github.com/google/go-cmp/cmp"
@@ -84,4 +86,36 @@ func sendInitialFlowFrame(t *testing.T, netConn *mocks.NetConn, handle uint32, c
 	})
 	require.NoError(t, err)
 	netConn.SendFrame(b)
+}
+
+// standard frame handler for connecting/disconnecting etc.
+// returns nil, nil for unhandled frames.
+func standardFrameHandler(req frames.FrameBody) ([]byte, error) {
+	switch tt := req.(type) {
+	case *mocks.AMQPProto:
+		return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
+	case *frames.PerformOpen:
+		return mocks.PerformOpen("container")
+	case *frames.PerformClose:
+		return mocks.PerformClose(nil)
+	case *frames.PerformBegin:
+		return mocks.PerformBegin(0)
+	case *frames.PerformEnd:
+		return mocks.PerformEnd(0, nil)
+	case *frames.PerformAttach:
+		return mocks.SenderAttach(0, tt.Name, 0, encoding.ModeUnsettled)
+	case *frames.PerformDetach:
+		return mocks.PerformDetach(0, 0, nil)
+	default:
+		return nil, nil
+	}
+}
+
+// similar to standardFrameHandler but returns an error on unhandled frames
+func standardFrameHandlerNoUnhandled(req frames.FrameBody) ([]byte, error) {
+	b, err := standardFrameHandler(req)
+	if b == nil && err == nil {
+		return nil, fmt.Errorf("unhandled frame %T", req)
+	}
+	return b, err
 }

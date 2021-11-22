@@ -53,7 +53,7 @@ func TestReceiverInvalidOptions(t *testing.T) {
 func TestReceiverMethodsNoReceive(t *testing.T) {
 	const linkName = "test"
 	responder := func(req frames.FrameBody) ([]byte, error) {
-		switch req.(type) {
+		switch ff := req.(type) {
 		case *mocks.AMQPProto:
 			return mocks.ProtoHeader(mocks.ProtoAMQP)
 		case *frames.PerformOpen:
@@ -61,6 +61,9 @@ func TestReceiverMethodsNoReceive(t *testing.T) {
 		case *frames.PerformBegin:
 			return mocks.PerformBegin(0)
 		case *frames.PerformAttach:
+			assert.Equal(t, DurabilityUnsettledState, ff.Target.Durable)
+			assert.Equal(t, ExpiryNever, ff.Target.ExpiryPolicy)
+			assert.Equal(t, uint32(300), ff.Target.Timeout)
 			return mocks.ReceiverAttach(0, linkName, 0, ModeFirst, nil)
 		case *frames.PerformFlow:
 			return nil, nil
@@ -74,7 +77,12 @@ func TestReceiverMethodsNoReceive(t *testing.T) {
 	session, err := client.NewSession()
 	assert.NoError(t, err)
 	const sourceAddr = "thesource"
-	r, err := session.NewReceiver(LinkName(linkName), LinkSourceAddress(sourceAddr))
+	r, err := session.NewReceiver(
+		LinkName(linkName),
+		LinkSourceAddress(sourceAddr),
+		LinkTargetDurability(DurabilityUnsettledState),
+		LinkTargetExpiryPolicy(ExpiryNever),
+		LinkTargetTimeout(300))
 	assert.NoError(t, err)
 	require.Equal(t, sourceAddr, r.Address())
 	require.Equal(t, linkName, r.LinkName())

@@ -15,6 +15,41 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestReceiverInvalidOptions(t *testing.T) {
+	responder := func(req frames.FrameBody) ([]byte, error) {
+		switch req.(type) {
+		case *mocks.AMQPProto:
+			return mocks.ProtoHeader(mocks.ProtoAMQP)
+		case *frames.PerformOpen:
+			return mocks.PerformOpen("test")
+		case *frames.PerformBegin:
+			return mocks.PerformBegin(0)
+		case *frames.PerformAttach:
+			return mocks.ReceiverAttach(0, "test", 0, ModeFirst, nil)
+		case *frames.PerformFlow:
+			return nil, nil
+		default:
+			return nil, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+	conn := mocks.NewNetConn(responder)
+	client, err := New(conn)
+	assert.NoError(t, err)
+	session, err := client.NewSession()
+	assert.NoError(t, err)
+	r, err := session.NewReceiver(LinkReceiverSettle(3))
+	assert.Error(t, err)
+	assert.Nil(t, r)
+
+	r, err = session.NewReceiver(LinkTargetDurability(3))
+	assert.Error(t, err)
+	assert.Nil(t, r)
+
+	r, err = session.NewReceiver(LinkTargetExpiryPolicy("not-a-real-policy"))
+	assert.Error(t, err)
+	assert.Nil(t, r)
+}
+
 func TestReceiverMethodsNoReceive(t *testing.T) {
 	const linkName = "test"
 	responder := func(req frames.FrameBody) ([]byte, error) {

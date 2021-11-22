@@ -367,7 +367,7 @@ func TestClientNewSessionInvalidSecondResponseDifferentChannel(t *testing.T) {
 			}
 			// respond with the wrong frame type
 			// note that it has to be for the next channel
-			return mocks.PerformDisposition(encoding.RoleSender, 1, 0, nil)
+			return mocks.PerformDisposition(encoding.RoleSender, 1, 0, nil, nil)
 		case *frames.PerformEnd:
 			return mocks.PerformEnd(0, nil)
 		default:

@@ -316,6 +316,7 @@ func (r *Receiver) messageDisposition(ctx context.Context, msg *Message, state e
 	case err := <-wait:
 		// we've received confirmation of disposition
 		r.link.DeleteUnsettled(msg)
+		msg.settled = true
 		return err
 	case <-ctx.Done():
 		return ctx.Err()

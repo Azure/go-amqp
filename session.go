@@ -248,6 +248,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 					handle, ok := handles[deliveryID]
 					if !ok {
+						debug(2, "role %s: didn't find deliveryID %d in handles map", body.Role, deliveryID)
 						continue
 					}
 					delete(handles, deliveryID)

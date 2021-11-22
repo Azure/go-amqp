@@ -1,9 +1,13 @@
 package amqp
 
 import (
+	"context"
 	"fmt"
 	"reflect"
+	"runtime"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/frames"
@@ -118,4 +122,23 @@ func standardFrameHandlerNoUnhandled(req frames.FrameBody) ([]byte, error) {
 		return nil, fmt.Errorf("unhandled frame %T", req)
 	}
 	return b, err
+}
+
+// helper to wait for a link to pause/resume
+// returns an error if it times out waiting
+func waitForLink(l *link, paused bool) error {
+	state := uint32(0) // unpaused
+	if paused {
+		state = 1
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	for {
+		if atomic.LoadUint32(&l.Paused) == state {
+			return nil
+		} else if err := ctx.Err(); err != nil {
+			return err
+		}
+		runtime.Gosched()
+	}
 }

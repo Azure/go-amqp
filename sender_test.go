@@ -282,7 +282,9 @@ func TestSenderSendSuccess(t *testing.T) {
 			if !reflect.DeepEqual([]byte{0, 83, 117, 160, 4, 116, 101, 115, 116}, tt.Payload) {
 				return nil, fmt.Errorf("unexpected payload %v", tt.Payload)
 			}
-			return mocks.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, &encoding.StateAccepted{})
+			return mocks.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, nil, &encoding.StateAccepted{})
+		case *frames.PerformDetach:
+			return mocks.PerformDetach(0, 0, nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -363,7 +365,7 @@ func TestSenderSendRejected(t *testing.T) {
 		}
 		switch tt := req.(type) {
 		case *frames.PerformTransfer:
-			return mocks.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, &encoding.StateRejected{
+			return mocks.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, nil, &encoding.StateRejected{
 				Error: &Error{
 					Condition:   "rejected",
 					Description: "didn't like it",
@@ -548,7 +550,7 @@ func TestSenderSendMsgTooBig(t *testing.T) {
 				MaxMessageSize:   16, // really small messages only
 			})
 		case *frames.PerformTransfer:
-			return mocks.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, &encoding.StateAccepted{})
+			return mocks.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, nil, &encoding.StateAccepted{})
 		case *frames.PerformDetach:
 			return mocks.PerformDetach(0, 0, nil)
 		default:
@@ -582,7 +584,9 @@ func TestSenderSendTagTooBig(t *testing.T) {
 		}
 		switch tt := req.(type) {
 		case *frames.PerformTransfer:
-			return mocks.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, &encoding.StateAccepted{})
+			return mocks.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, nil, &encoding.StateAccepted{})
+		case *frames.PerformDetach:
+			return mocks.PerformDetach(0, 0, nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -648,7 +652,7 @@ func TestSenderSendMultiTransfer(t *testing.T) {
 				transferCount++
 				return nil, nil
 			}
-			return mocks.PerformDisposition(encoding.RoleReceiver, 0, deliveryID, &encoding.StateAccepted{})
+			return mocks.PerformDisposition(encoding.RoleReceiver, 0, deliveryID, nil, &encoding.StateAccepted{})
 		case *frames.PerformDetach:
 			return mocks.PerformDetach(0, 0, nil)
 		default:

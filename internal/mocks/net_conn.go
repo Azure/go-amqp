@@ -59,6 +59,19 @@ func (n *NetConn) SendKeepAlive() {
 	n.readData <- []uint8{0, 0, 0, 8, 2, 0, 0, 0}
 }
 
+// SendMultiFrameTransfer splits payload into 32-byte chunks, encodes, and sends to the client.
+// Payload must be big enough for at least two chunks.
+func (n *NetConn) SendMultiFrameTransfer(remoteChannel uint16, linkHandle, deliveryID uint32, payload []byte, edit func(int, *frames.PerformTransfer)) error {
+	bb, err := encodeMultiFrameTransfer(remoteChannel, linkHandle, deliveryID, payload, edit)
+	if err != nil {
+		return err
+	}
+	for _, b := range bb {
+		n.readData <- b
+	}
+	return nil
+}
+
 ///////////////////////////////////////////////////////
 // following methods are for the net.Conn interface
 ///////////////////////////////////////////////////////
@@ -221,7 +234,7 @@ func SenderAttach(remoteChannel uint16, linkName string, linkHandle uint32, mode
 
 // ReceiverAttach appends a PerformAttach frame with the specified values.
 // This frame is needed when making a call to Session.NewReceiver().
-func ReceiverAttach(remoteChannel uint16, linkName string, linkHandle uint32, mode encoding.ReceiverSettleMode) ([]byte, error) {
+func ReceiverAttach(remoteChannel uint16, linkName string, linkHandle uint32, mode encoding.ReceiverSettleMode, filter encoding.Filter) ([]byte, error) {
 	return EncodeFrame(FrameAMQP, remoteChannel, &frames.PerformAttach{
 		Name:   linkName,
 		Handle: linkHandle,
@@ -230,6 +243,7 @@ func ReceiverAttach(remoteChannel uint16, linkName string, linkHandle uint32, mo
 			Address:      "test",
 			Durable:      encoding.DurabilityNone,
 			ExpiryPolicy: encoding.ExpirySessionEnd,
+			Filter:       filter,
 		},
 		ReceiverSettleMode: &mode,
 		MaxMessageSize:     math.MaxUint32,
@@ -256,11 +270,12 @@ func PerformTransfer(remoteChannel uint16, linkHandle, deliveryID uint32, payloa
 }
 
 // PerformDisposition appends a PerformDisposition frame with the specified values.
-// The deliveryID MUST match the deliveryID value specified in PerformTransfer.
-func PerformDisposition(role encoding.Role, remoteChannel uint16, deliveryID uint32, state encoding.DeliveryState) ([]byte, error) {
+// The firstID MUST match the deliveryID value specified in PerformTransfer.
+func PerformDisposition(role encoding.Role, remoteChannel uint16, firstID uint32, lastID *uint32, state encoding.DeliveryState) ([]byte, error) {
 	return EncodeFrame(FrameAMQP, remoteChannel, &frames.PerformDisposition{
 		Role:    role,
-		First:   deliveryID,
+		First:   firstID,
+		Last:    lastID,
 		Settled: true,
 		State:   state,
 	})
@@ -352,4 +367,60 @@ func decodeFrame(b []byte) (frames.FrameBody, error) {
 		return nil, err
 	}
 	return frames.ParseBody(buffer.New(b))
+}
+
+func encodeMultiFrameTransfer(remoteChannel uint16, linkHandle, deliveryID uint32, payload []byte, edit func(int, *frames.PerformTransfer)) ([][]byte, error) {
+	frameData := [][]byte{}
+	format := uint32(0)
+	payloadBuf := &buffer.Buffer{}
+	// determine the number of frames to create
+	chunks := len(payload) / 32
+	if r := len(payload) % 32; r > 0 {
+		chunks++
+	}
+	if chunks < 2 {
+		return nil, errors.New("payload is too small for multi-frame transfer")
+	}
+	more := true
+	for chunk := 0; chunk < chunks; chunk++ {
+		encoding.WriteDescriptor(payloadBuf, encoding.TypeCodeApplicationData)
+		var err error
+		if chunk+1 < chunks {
+			err = encoding.WriteBinary(payloadBuf, payload[chunk*32:chunk*32+32])
+		} else {
+			// final frame
+			err = encoding.WriteBinary(payloadBuf, payload[chunk*32:])
+			more = false
+		}
+		if err != nil {
+			return nil, err
+		}
+		var fr *frames.PerformTransfer
+		if chunk == 0 {
+			// first frame requires extra data
+			fr = &frames.PerformTransfer{
+				Handle:        linkHandle,
+				DeliveryID:    &deliveryID,
+				DeliveryTag:   []byte("tag"),
+				MessageFormat: &format,
+				More:          true,
+				Payload:       payloadBuf.Detach(),
+			}
+		} else {
+			fr = &frames.PerformTransfer{
+				Handle:  linkHandle,
+				More:    more,
+				Payload: payloadBuf.Detach(),
+			}
+		}
+		if edit != nil {
+			edit(chunk, fr)
+		}
+		b, err := EncodeFrame(FrameAMQP, remoteChannel, fr)
+		if err != nil {
+			return nil, err
+		}
+		frameData = append(frameData, b)
+	}
+	return frameData, nil
 }

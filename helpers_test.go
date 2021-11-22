@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -139,6 +138,6 @@ func waitForLink(l *link, paused bool) error {
 		} else if err := ctx.Err(); err != nil {
 			return err
 		}
-		runtime.Gosched()
+		time.Sleep(50 * time.Millisecond)
 	}
 }

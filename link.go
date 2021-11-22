@@ -734,7 +734,7 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 		//
 		// This isn't ideal, but there isn't a clear better way to handle it.
 		if fr, ok := fr.State.(*encoding.StateRejected); ok && errOnRejectDisposition {
-			return fr.Error
+			return &DetachError{fr.Error}
 		}
 
 		if fr.Settled {

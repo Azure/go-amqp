@@ -14,8 +14,50 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestSenderInvalidOptions(t *testing.T) {
+	netConn := mocks.NewNetConn(standardFrameHandler)
+
+	client, err := New(netConn)
+	require.NoError(t, err)
+
+	session, err := client.NewSession()
+	require.NoError(t, err)
+	snd, err := session.NewSender(LinkCredit(3))
+	require.Error(t, err)
+	require.Nil(t, snd)
+
+	snd, err = session.NewSender(LinkWithManualCredits())
+	require.Error(t, err)
+	require.Nil(t, snd)
+
+	snd, err = session.NewSender(LinkSenderSettle(3))
+	require.Error(t, err)
+	require.Nil(t, snd)
+}
+
 func TestSenderMethodsNoSend(t *testing.T) {
-	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
+	responder := func(req frames.FrameBody) ([]byte, error) {
+		switch tt := req.(type) {
+		case *mocks.AMQPProto:
+			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
+		case *frames.PerformOpen:
+			return mocks.PerformOpen("container")
+		case *frames.PerformBegin:
+			return mocks.PerformBegin(0)
+		case *frames.PerformEnd:
+			return mocks.PerformEnd(0, nil)
+		case *frames.PerformAttach:
+			require.Equal(t, DurabilityUnsettledState, tt.Source.Durable)
+			require.Equal(t, ExpiryNever, tt.Source.ExpiryPolicy)
+			require.Equal(t, uint32(300), tt.Source.Timeout)
+			return mocks.SenderAttach(0, tt.Name, 0, encoding.ModeUnsettled)
+		case *frames.PerformDetach:
+			return mocks.PerformDetach(0, 0, nil)
+		default:
+			return nil, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+	netConn := mocks.NewNetConn(responder)
 
 	client, err := New(netConn)
 	require.NoError(t, err)
@@ -27,7 +69,13 @@ func TestSenderMethodsNoSend(t *testing.T) {
 		linkName   = "test1"
 		maxMsgSize = uint64(4096)
 	)
-	snd, err := session.NewSender(LinkTargetAddress(linkAddr), LinkName(linkName), LinkMaxMessageSize(maxMsgSize))
+	snd, err := session.NewSender(
+		LinkTargetAddress(linkAddr),
+		LinkName(linkName),
+		LinkMaxMessageSize(maxMsgSize),
+		LinkSourceDurability(DurabilityUnsettledState),
+		LinkSourceExpiryPolicy(ExpiryNever),
+		LinkSourceTimeout(300))
 	require.NoError(t, err)
 	require.NotNil(t, snd)
 	require.Equal(t, linkAddr, snd.Address())
@@ -346,6 +394,73 @@ func TestSenderSendRejected(t *testing.T) {
 	}
 	require.Equal(t, encoding.ErrorCondition("rejected"), asErr.Condition)
 
+	// link should now be detached
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+	err = snd.Send(ctx, NewMessage([]byte("test")))
+	cancel()
+	var deErr *DetachError
+	if !errors.As(err, &deErr) {
+		t.Fatalf("unexpected error type %T", err)
+	}
+	require.NoError(t, client.Close())
+}
+
+func TestSenderSendRejectedNoDetach(t *testing.T) {
+	responder := func(req frames.FrameBody) ([]byte, error) {
+		switch tt := req.(type) {
+		case *mocks.AMQPProto:
+			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
+		case *frames.PerformOpen:
+			return mocks.PerformOpen("container")
+		case *frames.PerformBegin:
+			return mocks.PerformBegin(0)
+		case *frames.PerformEnd:
+			return mocks.PerformEnd(0, nil)
+		case *frames.PerformAttach:
+			return mocks.SenderAttach(0, tt.Name, 0, encoding.ModeUnsettled)
+		case *frames.PerformTransfer:
+			// reject first delivery
+			if *tt.DeliveryID == 1 {
+				return mocks.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, &encoding.StateRejected{
+					Error: &Error{
+						Condition:   "rejected",
+						Description: "didn't like it",
+					},
+				})
+			}
+			return mocks.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, &encoding.StateAccepted{})
+		case *frames.PerformDetach:
+			return mocks.PerformDetach(0, 0, nil)
+		default:
+			return nil, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+	netConn := mocks.NewNetConn(responder)
+
+	client, err := New(netConn)
+	require.NoError(t, err)
+
+	session, err := client.NewSession()
+	require.NoError(t, err)
+	snd, err := session.NewSender(LinkDetachOnDispositionError(false))
+	require.NoError(t, err)
+
+	sendInitialFlowFrame(t, netConn, 0, 100)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	err = snd.Send(ctx, NewMessage([]byte("test")))
+	cancel()
+	var asErr *Error
+	if !errors.As(err, &asErr) {
+		t.Fatalf("unexpected error type %T", err)
+	}
+	require.Equal(t, encoding.ErrorCondition("rejected"), asErr.Condition)
+
+	// link should *not* be detached
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+	err = snd.Send(ctx, NewMessage([]byte("test")))
+	cancel()
+	require.NoError(t, err)
 	require.NoError(t, client.Close())
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -1184,7 +1185,7 @@ func TestReceiverDispositionBatcherFull(t *testing.T) {
 			if _, ok := ff.State.(*encoding.StateAccepted); !ok {
 				return nil, fmt.Errorf("unexpected State %T", ff.State)
 			}
-			if ff.Last == nil {
+			if ff.Last == nil || *ff.Last == ff.First {
 				acceptCount++
 			} else {
 				acceptCount += int(*ff.Last)
@@ -1204,6 +1205,8 @@ func TestReceiverDispositionBatcherFull(t *testing.T) {
 	assert.NoError(t, err)
 	r, err := session.NewReceiver(LinkReceiverSettle(ModeSecond), LinkCredit(credit), LinkBatchMaxAge(time.Second), LinkBatching(true))
 	assert.NoError(t, err)
+	wg := &sync.WaitGroup{}
+	wg.Add(credit)
 	for i := 0; i < credit; i++ {
 		b, err := mocks.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
 		assert.NoError(t, err)
@@ -1216,6 +1219,7 @@ func TestReceiverDispositionBatcherFull(t *testing.T) {
 		go func() {
 			assert.NoError(t, r.AcceptMessage(context.Background(), msg))
 			assert.Equal(t, true, msg.settled)
+			wg.Done()
 		}()
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -1226,6 +1230,7 @@ func TestReceiverDispositionBatcherFull(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatalf("not all messages were settled within the allotted time: %d", acceptCount)
 	}
+	wg.Wait()
 	assert.Equal(t, 0, r.inFlight.len())
 	assert.NoError(t, client.Close())
 }
@@ -1269,6 +1274,8 @@ func TestReceiverDispositionBatcherRelease(t *testing.T) {
 	assert.NoError(t, err)
 	r, err := session.NewReceiver(LinkReceiverSettle(ModeSecond), LinkCredit(credit), LinkBatchMaxAge(time.Second), LinkBatching(true))
 	assert.NoError(t, err)
+	wg := &sync.WaitGroup{}
+	wg.Add(credit)
 	for i := 0; i < credit; i++ {
 		b, err := mocks.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
 		assert.NoError(t, err)
@@ -1285,6 +1292,7 @@ func TestReceiverDispositionBatcherRelease(t *testing.T) {
 				assert.NoError(t, r.ReleaseMessage(context.Background(), msg))
 			}
 			assert.Equal(t, true, msg.settled)
+			wg.Done()
 		}(i)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -1295,6 +1303,7 @@ func TestReceiverDispositionBatcherRelease(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatalf("not all messages were settled within the allotted time: %d", acceptCount)
 	}
+	wg.Wait()
 	assert.Equal(t, 0, r.inFlight.len())
 	assert.NoError(t, client.Close())
 }

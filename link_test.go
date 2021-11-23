@@ -347,7 +347,6 @@ func TestSessionFlowDisablesTransfer(t *testing.T) {
 	session, err := client.NewSession()
 	require.NoError(t, err)
 
-	time.Sleep(100 * time.Millisecond)
 	b, err := mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformFlow{
 		NextIncomingID: &nextIncomingID,
 		IncomingWindow: 0,
@@ -357,13 +356,11 @@ func TestSessionFlowDisablesTransfer(t *testing.T) {
 	require.NoError(t, err)
 	netConn.SendFrame(b)
 
-	time.Sleep(100 * time.Millisecond)
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	err = session.Close(ctx)
 	cancel()
 	require.NoError(t, err)
 
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }
 
@@ -381,6 +378,5 @@ func TestExactlyOnceDoesntWork(t *testing.T) {
 		LinkTargetAddress("doesntwork"))
 	require.Error(t, err)
 	require.Nil(t, snd)
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }

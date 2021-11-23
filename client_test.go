@@ -70,9 +70,7 @@ func TestClientClose(t *testing.T) {
 	client, err := Dial("amqp://localhost", connDialer(mockDialer{resp: responder}))
 	require.NoError(t, err)
 	require.NotNil(t, client)
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }
 
@@ -174,7 +172,6 @@ func TestClientNewSession(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, session)
 	require.Equal(t, uint16(channelNum), session.channel)
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 	// creating a session after the connection has been closed returns nothing
 	session, err = client.NewSession()
@@ -208,12 +205,10 @@ func TestClientMultipleSessions(t *testing.T) {
 	require.NotNil(t, session1)
 	require.Equal(t, channelNum-1, session1.channel)
 	// second session
-	time.Sleep(100 * time.Millisecond)
 	session2, err := client.NewSession()
 	require.NoError(t, err)
 	require.NotNil(t, session2)
 	require.Equal(t, channelNum-1, session2.channel)
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }
 
@@ -254,7 +249,6 @@ func TestClientTooManySessions(t *testing.T) {
 			require.Nil(t, session)
 		}
 	}
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }
 
@@ -266,7 +260,6 @@ func TestClientNewSessionInvalidOption(t *testing.T) {
 	session, err := client.NewSession(SessionMaxLinks(0))
 	require.Error(t, err)
 	require.Nil(t, session)
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }
 
@@ -296,7 +289,6 @@ func TestClientNewSessionMissingRemoteChannel(t *testing.T) {
 	session, err := client.NewSession(SessionMaxLinks(1))
 	require.Error(t, err)
 	require.Nil(t, session)
-	time.Sleep(100 * time.Millisecond)
 	require.Error(t, client.Close())
 }
 
@@ -357,7 +349,6 @@ func TestClientNewSessionInvalidSecondResponseSameChannel(t *testing.T) {
 	session, err = client.NewSession()
 	require.Error(t, err)
 	require.Nil(t, session)
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }
 
@@ -395,6 +386,5 @@ func TestClientNewSessionInvalidSecondResponseDifferentChannel(t *testing.T) {
 	session, err = client.NewSession()
 	require.Error(t, err)
 	require.Nil(t, session)
-	time.Sleep(100 * time.Millisecond)
 	require.Error(t, client.Close())
 }

@@ -388,17 +388,16 @@ func TestSenderSendRejected(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	err = snd.Send(ctx, NewMessage([]byte("test")))
 	cancel()
-	var asErr *Error
-	if !errors.As(err, &asErr) {
+	var deErr *DetachError
+	if !errors.As(err, &deErr) {
 		t.Fatalf("unexpected error type %T", err)
 	}
-	require.Equal(t, encoding.ErrorCondition("rejected"), asErr.Condition)
+	require.Equal(t, encoding.ErrorCondition("rejected"), deErr.RemoteError.Condition)
 
 	// link should now be detached
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	err = snd.Send(ctx, NewMessage([]byte("test")))
 	cancel()
-	var deErr *DetachError
 	if !errors.As(err, &deErr) {
 		t.Fatalf("unexpected error type %T", err)
 	}

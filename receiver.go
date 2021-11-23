@@ -38,29 +38,20 @@ func (r *Receiver) DrainCredit(ctx context.Context) error {
 	return r.link.DrainCredit(ctx)
 }
 
-// Receive returns the next message from the sender.
+// Prefetched returns the next message that is stored in the Receiver's
+// prefetch cache. It does NOT wait for the remote sender to send messages
+// and returns immediately if the prefetch cache is empty. To receive from the
+// prefetch and wait for messages from the remote Sender use `Receive`.
 //
-// Blocks until a message is received, ctx completes, or an error occurs.
 // When using ModeSecond, you *must* take an action on the message by calling
 // one of the following: AcceptMessage, RejectMessage, ReleaseMessage, ModifyMessage.
 // When using ModeFirst, the message is spontaneously Accepted at reception.
-func (r *Receiver) Receive(ctx context.Context) (*Message, error) {
+func (r *Receiver) Prefetched(ctx context.Context) (*Message, error) {
 	if atomic.LoadUint32(&r.link.Paused) == 1 {
 		select {
 		case r.link.ReceiverReady <- struct{}{}:
 		default:
 		}
-	}
-
-	// for ModeFirst, auto-accept the message
-	modeFirstAccept := func(ctx context.Context, msg *Message) (*Message, error) {
-		if receiverSettleModeValue(r.link.ReceiverSettleMode) == ModeSecond {
-			return msg, nil
-		}
-		if err := r.AcceptMessage(ctx, msg); err != nil {
-			return nil, err
-		}
-		return msg, nil
 	}
 
 	// non-blocking receive to ensure buffered messages are
@@ -69,11 +60,26 @@ func (r *Receiver) Receive(ctx context.Context) (*Message, error) {
 	case msg := <-r.link.Messages:
 		debug(3, "Receive() non blocking %d", msg.deliveryID)
 		msg.link = r.link
-		return modeFirstAccept(ctx, &msg)
+		return acceptIfModeFirst(ctx, r, &msg)
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	default:
 		// done draining messages
+		return nil, nil
+	}
+}
+
+// Receive returns the next message from the sender.
+//
+// Blocks until a message is received, ctx completes, or an error occurs.
+// When using ModeSecond, you *must* take an action on the message by calling
+// one of the following: AcceptMessage, RejectMessage, ReleaseMessage, ModifyMessage.
+// When using ModeFirst, the message is spontaneously Accepted at reception.
+func (r *Receiver) Receive(ctx context.Context) (*Message, error) {
+	msg, err := r.Prefetched(ctx)
+
+	if err != nil || msg != nil {
+		return msg, err
 	}
 
 	// wait for the next message
@@ -81,14 +87,25 @@ func (r *Receiver) Receive(ctx context.Context) (*Message, error) {
 	case msg := <-r.link.Messages:
 		debug(3, "Receive() blocking %d", msg.deliveryID)
 		msg.link = r.link
-		return modeFirstAccept(ctx, &msg)
-	case <-r.link.close:
-		return nil, r.link.err
+		return acceptIfModeFirst(ctx, r, &msg)
 	case <-r.link.Detached:
 		return nil, r.link.err
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+}
+
+// acceptIfModeFirst auto-accepts a message if we are in mode first, otherwise it no-ops.
+func acceptIfModeFirst(ctx context.Context, r *Receiver, msg *Message) (*Message, error) {
+	// for ModeFirst, auto-accept the message
+	if receiverSettleModeValue(r.link.ReceiverSettleMode) == ModeSecond {
+		return msg, nil
+	}
+	if err := r.AcceptMessage(ctx, msg); err != nil {
+		return nil, err
+	}
+	return msg, nil
+
 }
 
 // Accept notifies the server that the message has been

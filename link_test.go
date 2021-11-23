@@ -161,7 +161,9 @@ func TestLinkFlowWithDrain(t *testing.T) {
 		switch frame := txFrame.(type) {
 		case *frames.PerformFlow:
 			require.True(t, frame.Drain)
-			require.EqualValues(t, 1, *frame.LinkCredit)
+			// When we're draining we just automatically set the flow link credit to 0.
+			// This should allow any outstanding messages to get flushed.
+			require.EqualValues(t, 0, *frame.LinkCredit)
 		default:
 			require.Fail(t, fmt.Sprintf("Unexpected frame was transferred: %+v", txFrame))
 		}
@@ -195,6 +197,22 @@ func TestLinkFlowWithManualCreditorAndNoFlowNeeded(t *testing.T) {
 	case <-time.After(time.Second * 2):
 		// this is the expected case since no frame will be sent.
 	}
+}
+
+func TestMuxFlowHandlesDrainProperly(t *testing.T) {
+	l := newTestLink(t)
+	require.NoError(t, LinkWithManualCredits()(l))
+
+	l.linkCredit = 101
+
+	// simulate what our 'drain' call to muxFlow would look like
+	// when draining
+	require.NoError(t, l.muxFlow(0, true))
+	require.EqualValues(t, 101, l.linkCredit, "credits are untouched when draining")
+
+	// when doing a non-drain flow we update the linkCredit to our new link credit total.
+	require.NoError(t, l.muxFlow(501, false))
+	require.EqualValues(t, 501, l.linkCredit, "credits are untouched when draining")
 }
 
 func newTestLink(t *testing.T) *link {
@@ -321,23 +339,7 @@ func TestSourceName(t *testing.T) {
 func TestSessionFlowDisablesTransfer(t *testing.T) {
 	t.Skip("TODO: finish for link testing")
 	nextIncomingID := uint32(0)
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		switch req.(type) {
-		case *mocks.AMQPProto:
-			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("container")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformFlow:
-			return nil, nil
-		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
-		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
-		}
-	}
-	netConn := mocks.NewNetConn(responder)
+	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
 
 	client, err := New(netConn)
 	require.NoError(t, err)
@@ -345,7 +347,6 @@ func TestSessionFlowDisablesTransfer(t *testing.T) {
 	session, err := client.NewSession()
 	require.NoError(t, err)
 
-	time.Sleep(100 * time.Millisecond)
 	b, err := mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformFlow{
 		NextIncomingID: &nextIncomingID,
 		IncomingWindow: 0,
@@ -355,32 +356,16 @@ func TestSessionFlowDisablesTransfer(t *testing.T) {
 	require.NoError(t, err)
 	netConn.SendFrame(b)
 
-	time.Sleep(100 * time.Millisecond)
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	err = session.Close(ctx)
 	cancel()
 	require.NoError(t, err)
 
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }
 
 func TestExactlyOnceDoesntWork(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		switch req.(type) {
-		case *mocks.AMQPProto:
-			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("container")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
-		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
-		}
-	}
-	netConn := mocks.NewNetConn(responder)
+	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
 
 	client, err := New(netConn)
 	require.NoError(t, err)
@@ -393,6 +378,5 @@ func TestExactlyOnceDoesntWork(t *testing.T) {
 		LinkTargetAddress("doesntwork"))
 	require.Error(t, err)
 	require.Nil(t, snd)
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/frames"
 	"github.com/Azure/go-amqp/internal/mocks"
 	"github.com/stretchr/testify/require"
@@ -69,9 +70,7 @@ func TestClientClose(t *testing.T) {
 	client, err := Dial("amqp://localhost", connDialer(mockDialer{resp: responder}))
 	require.NoError(t, err)
 	require.NotNil(t, client)
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }
 
@@ -173,7 +172,6 @@ func TestClientNewSession(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, session)
 	require.Equal(t, uint16(channelNum), session.channel)
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 	// creating a session after the connection has been closed returns nothing
 	session, err = client.NewSession()
@@ -207,12 +205,10 @@ func TestClientMultipleSessions(t *testing.T) {
 	require.NotNil(t, session1)
 	require.Equal(t, channelNum-1, session1.channel)
 	// second session
-	time.Sleep(100 * time.Millisecond)
 	session2, err := client.NewSession()
 	require.NoError(t, err)
 	require.NotNil(t, session2)
 	require.Equal(t, channelNum-1, session2.channel)
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }
 
@@ -253,29 +249,17 @@ func TestClientTooManySessions(t *testing.T) {
 			require.Nil(t, session)
 		}
 	}
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }
 
 func TestClientNewSessionInvalidOption(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		switch req.(type) {
-		case *mocks.AMQPProto:
-			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("container")
-		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
-		}
-	}
-	netConn := mocks.NewNetConn(responder)
+	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
 
 	client, err := New(netConn)
 	require.NoError(t, err)
 	session, err := client.NewSession(SessionMaxLinks(0))
 	require.Error(t, err)
 	require.Nil(t, session)
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }
 
@@ -305,7 +289,6 @@ func TestClientNewSessionMissingRemoteChannel(t *testing.T) {
 	session, err := client.NewSession(SessionMaxLinks(1))
 	require.Error(t, err)
 	require.Nil(t, session)
-	time.Sleep(100 * time.Millisecond)
 	require.Error(t, client.Close())
 }
 
@@ -366,7 +349,6 @@ func TestClientNewSessionInvalidSecondResponseSameChannel(t *testing.T) {
 	session, err = client.NewSession()
 	require.Error(t, err)
 	require.Nil(t, session)
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, client.Close())
 }
 
@@ -385,7 +367,7 @@ func TestClientNewSessionInvalidSecondResponseDifferentChannel(t *testing.T) {
 			}
 			// respond with the wrong frame type
 			// note that it has to be for the next channel
-			return mocks.PerformDisposition(1, 0, nil)
+			return mocks.PerformDisposition(encoding.RoleSender, 1, 0, nil)
 		case *frames.PerformEnd:
 			return mocks.PerformEnd(0, nil)
 		default:
@@ -404,6 +386,5 @@ func TestClientNewSessionInvalidSecondResponseDifferentChannel(t *testing.T) {
 	session, err = client.NewSession()
 	require.Error(t, err)
 	require.Nil(t, session)
-	time.Sleep(100 * time.Millisecond)
 	require.Error(t, client.Close())
 }

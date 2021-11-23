@@ -17,7 +17,8 @@ import (
 // Return a non-nil error to simulate a write error.
 func NewNetConn(resp func(frames.FrameBody) ([]byte, error)) *NetConn {
 	return &NetConn{
-		resp: resp,
+		ReadErr: make(chan error),
+		resp:    resp,
 		// during shutdown, connReader can close before connWriter as they both
 		// both return on c.Done being closed, so there is some non-determinism
 		// here.  this means that sometimes writes can still happen but there's
@@ -33,6 +34,11 @@ type NetConn struct {
 	// OnClose is called from Close() before it returns.
 	// The value returned from OnClose is returned from Close().
 	OnClose func() error
+
+	// ReadErr is used to simulate a connReader error.
+	// The error written to this channel is returned
+	// from the call to NetConn.Read.
+	ReadErr chan error
 
 	resp      func(frames.FrameBody) ([]byte, error)
 	readDL    *time.Timer
@@ -77,6 +83,8 @@ func (n *NetConn) Read(b []byte) (int, error) {
 		return 0, errors.New("mock connection read deadline exceeded")
 	case rd := <-n.readData:
 		return copy(b, rd), nil
+	case err := <-n.ReadErr:
+		return 0, err
 	}
 }
 
@@ -249,13 +257,18 @@ func PerformTransfer(remoteChannel uint16, linkHandle, deliveryID uint32, payloa
 
 // PerformDisposition appends a PerformDisposition frame with the specified values.
 // The deliveryID MUST match the deliveryID value specified in PerformTransfer.
-func PerformDisposition(remoteChannel uint16, deliveryID uint32, state encoding.DeliveryState) ([]byte, error) {
+func PerformDisposition(role encoding.Role, remoteChannel uint16, deliveryID uint32, state encoding.DeliveryState) ([]byte, error) {
 	return EncodeFrame(FrameAMQP, remoteChannel, &frames.PerformDisposition{
-		Role:    encoding.RoleSender,
+		Role:    role,
 		First:   deliveryID,
 		Settled: true,
 		State:   state,
 	})
+}
+
+// PerformDetach encodes a PerformDetach frame with an optional error.
+func PerformDetach(remoteChannel uint16, linkHandle uint32, e *encoding.Error) ([]byte, error) {
+	return EncodeFrame(FrameAMQP, remoteChannel, &frames.PerformDetach{Handle: linkHandle, Closed: true, Error: e})
 }
 
 // PerformEnd encodes a PerformEnd frame with an optional error.

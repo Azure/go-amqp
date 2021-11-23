@@ -25,11 +25,11 @@ type link struct {
 	Transfers    chan frames.PerformTransfer // sender uses to send transfer frames
 	closeOnce    sync.Once                   // closeOnce protects close from being closed multiple times
 
-	// NOTE: `close` and `detached` BOTH need to be checked to determine if the link
-	// is not in a "closed" state
-
 	// close signals the mux to shutdown. This indicates that `Close()` was called on this link.
+	// NOTE: observers outside of link.go *must only* use the Detached channel to check if the link is unavailable.
+	// including the close channel will lead to a race condition.
 	close chan struct{}
+
 	// detached is closed by mux/muxDetach when the link is fully detached.
 	// This will be initiated if the service sends back an error or requests the link detach.
 	Detached chan struct{}
@@ -322,15 +322,14 @@ func (l *link) doFlow() (ok bool, enableOutgoingTransfers bool) {
 		return true, true
 
 	case isReceiver && l.receiver.manualCreditor != nil:
-		drain, credits := l.receiver.manualCreditor.FlowBits()
+		drain, credits := l.receiver.manualCreditor.FlowBits(l.linkCredit)
 
 		if drain || credits > 0 {
 			debug(1, "FLOW Link Mux (manual): source: %s, inflight: %d, credit: %d, creditsToAdd: %d, drain: %v, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s",
 				l.Source.Address, l.receiver.inFlight.len(), l.linkCredit, credits, drain, l.deliveryCount, len(l.Messages), l.countUnsettled(), l.receiver.maxCredit, l.ReceiverSettleMode.String())
 
-			newCredits := credits + l.linkCredit
 			// send a flow frame.
-			l.err = l.muxFlow(newCredits, drain)
+			l.err = l.muxFlow(credits, drain)
 		}
 
 	// if receiver && half maxCredits have been processed, send more credits
@@ -441,7 +440,12 @@ func (l *link) muxFlow(linkCredit uint32, drain bool) error {
 	// because incoming messages handled while waiting to transmit
 	// flow increment deliveryCount. This causes the credit to become
 	// out of sync with the server.
-	l.linkCredit = linkCredit
+
+	if !drain {
+		// if we're draining we don't want to touch our internal credit - we're not changing it so any issued credits
+		// are still valid until drain completes, at which point they will be naturally zeroed.
+		l.linkCredit = linkCredit
+	}
 
 	// Ensure the session mux is not blocked
 	for {
@@ -674,8 +678,8 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 			// if the 'drain' flag has been set in the frame sent to the _receiver_ then
 			// we signal whomever is waiting (the service has seen and acknowledged our drain)
 			if fr.Drain && l.receiver.manualCreditor != nil {
-				l.receiver.manualCreditor.EndDrain()
 				l.linkCredit = 0 // we have no active credits at this point.
+				l.receiver.manualCreditor.EndDrain()
 			}
 			return nil
 		}
@@ -706,7 +710,7 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 		// set detach received and close link
 		l.detachReceived = true
 
-		return fmt.Errorf("received detach frame %v", &DetachError{fr.Error})
+		return &DetachError{fr.Error}
 
 	case *frames.PerformDisposition:
 		debug(3, "RX (muxHandleFrame): %s", fr)
@@ -754,19 +758,6 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 	return nil
 }
 
-// Check checks the link state, returning an error if the link is closed (ErrLinkClosed) or if
-// it is in a detached state (ErrLinkDetached)
-func (l *link) Check() error {
-	select {
-	case <-l.Detached:
-		return ErrLinkDetached
-	case <-l.close:
-		return ErrLinkClosed
-	default:
-		return nil
-	}
-}
-
 // close closes and requests deletion of the link.
 //
 // No operations on link are valid after close.
@@ -778,6 +769,7 @@ func (l *link) Close(ctx context.Context) error {
 	l.closeOnce.Do(func() { close(l.close) })
 	select {
 	case <-l.Detached:
+		// mux exited
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -809,13 +801,13 @@ func (l *link) muxDetach() {
 			}
 		}
 
-		// signal other goroutines that link is detached
-		close(l.Detached)
-
 		// unblock any in flight message dispositions
 		if l.receiver != nil {
 			l.receiver.inFlight.clear(l.err)
 		}
+
+		// signal that the link mux has exited
+		close(l.Detached)
 	}()
 
 	// "A peer closes a link by sending the detach frame with the

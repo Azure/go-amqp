@@ -41,10 +41,14 @@ func (s *Sender) MaxMessageSize() uint64 {
 // additional messages can be sent while the current goroutine is waiting
 // for the confirmation.
 func (s *Sender) Send(ctx context.Context, msg *Message) error {
-	if err := s.link.Check(); err != nil {
-		return err
+	// check if the link is dead.  while it's safe to call s.send
+	// in this case, this will avoid some allocations etc.
+	select {
+	case <-s.link.Detached:
+		return s.link.err
+	default:
+		// link is still active
 	}
-
 	done, err := s.send(ctx, msg)
 	if err != nil {
 		return err

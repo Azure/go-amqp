@@ -176,7 +176,7 @@ func waitForLink(l *link, paused bool) error {
 	if paused {
 		state = 1
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	for {
 		if atomic.LoadUint32(&l.Paused) == state {

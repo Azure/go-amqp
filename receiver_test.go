@@ -16,23 +16,7 @@ import (
 )
 
 func TestReceiverInvalidOptions(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		switch req.(type) {
-		case *mocks.AMQPProto:
-			return mocks.ProtoHeader(mocks.ProtoAMQP)
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("test")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(0, "test", 0, ModeFirst, nil)
-		case *frames.PerformFlow:
-			return nil, nil
-		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
-		}
-	}
-	conn := mocks.NewNetConn(responder)
+	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ModeFirst))
 	client, err := New(conn)
 	assert.NoError(t, err)
 	session, err := client.NewSession()
@@ -93,24 +77,7 @@ func TestReceiverMethodsNoReceive(t *testing.T) {
 }
 
 func TestReceiverLinkSourceFilter(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		switch ff := req.(type) {
-		case *mocks.AMQPProto:
-			return mocks.ProtoHeader(mocks.ProtoAMQP)
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("test")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformAttach:
-			// propagate filter specified by caller
-			return mocks.ReceiverAttach(0, ff.Name, 0, ModeFirst, ff.Source.Filter)
-		case *frames.PerformFlow:
-			return nil, nil
-		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
-		}
-	}
-	conn := mocks.NewNetConn(responder)
+	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ModeFirst))
 	client, err := New(conn)
 	assert.NoError(t, err)
 	session, err := client.NewSession()
@@ -128,23 +95,7 @@ func TestReceiverLinkSourceFilter(t *testing.T) {
 }
 
 func TestReceiverOnClosed(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		switch ff := req.(type) {
-		case *mocks.AMQPProto:
-			return mocks.ProtoHeader(mocks.ProtoAMQP)
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("test")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(0, ff.Name, 0, ModeFirst, ff.Source.Filter)
-		case *frames.PerformFlow:
-			return nil, nil
-		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
-		}
-	}
-	conn := mocks.NewNetConn(responder)
+	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ModeFirst))
 	client, err := New(conn)
 	assert.NoError(t, err)
 	session, err := client.NewSession()
@@ -171,25 +122,7 @@ func TestReceiverOnClosed(t *testing.T) {
 }
 
 func TestReceiverOnSessionClosed(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		switch ff := req.(type) {
-		case *mocks.AMQPProto:
-			return mocks.ProtoHeader(mocks.ProtoAMQP)
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("test")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(0, ff.Name, 0, ModeFirst, ff.Source.Filter)
-		case *frames.PerformFlow:
-			return nil, nil
-		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
-		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
-		}
-	}
-	conn := mocks.NewNetConn(responder)
+	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ModeFirst))
 	client, err := New(conn)
 	assert.NoError(t, err)
 	session, err := client.NewSession()
@@ -216,25 +149,7 @@ func TestReceiverOnSessionClosed(t *testing.T) {
 }
 
 func TestReceiverOnConnClosed(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		switch ff := req.(type) {
-		case *mocks.AMQPProto:
-			return mocks.ProtoHeader(mocks.ProtoAMQP)
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("test")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(0, ff.Name, 0, ModeFirst, ff.Source.Filter)
-		case *frames.PerformFlow:
-			return nil, nil
-		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
-		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
-		}
-	}
-	conn := mocks.NewNetConn(responder)
+	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ModeFirst))
 	client, err := New(conn)
 	assert.NoError(t, err)
 	session, err := client.NewSession()
@@ -259,27 +174,7 @@ func TestReceiverOnConnClosed(t *testing.T) {
 }
 
 func TestReceiverOnDetached(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		switch ff := req.(type) {
-		case *mocks.AMQPProto:
-			return mocks.ProtoHeader(mocks.ProtoAMQP)
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("test")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(0, ff.Name, 0, ModeFirst, ff.Source.Filter)
-		case *frames.PerformFlow:
-			return nil, nil
-		case *frames.PerformDetach:
-			return mocks.PerformDetach(0, 0, nil)
-		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
-		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
-		}
-	}
-	conn := mocks.NewNetConn(responder)
+	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ModeFirst))
 	client, err := New(conn)
 	assert.NoError(t, err)
 	session, err := client.NewSession()
@@ -319,23 +214,15 @@ func TestReceiveInvalidMessage(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
-		switch ff := req.(type) {
-		case *mocks.AMQPProto:
-			return mocks.ProtoHeader(mocks.ProtoAMQP)
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("test")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(0, ff.Name, linkHandle, ModeFirst, nil)
+		b, err := receiverFrameHandler(ModeFirst)(req)
+		if b != nil || err != nil {
+			return b, err
+		}
+		switch req.(type) {
 		case *frames.PerformFlow:
 			return nil, nil
 		case *frames.PerformDisposition:
 			return mocks.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
-		case *frames.PerformDetach:
-			return mocks.PerformDetach(0, 0, nil)
-		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -436,15 +323,11 @@ func TestReceiveSuccessModeFirst(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(ModeFirst)(req)
+		if b != nil || err != nil {
+			return b, err
+		}
 		switch ff := req.(type) {
-		case *mocks.AMQPProto:
-			return mocks.ProtoHeader(mocks.ProtoAMQP)
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("test")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(0, ff.Name, linkHandle, ModeFirst, nil)
 		case *frames.PerformFlow:
 			if *ff.NextIncomingID == deliveryID {
 				// this is the first flow frame, send our payload
@@ -490,15 +373,11 @@ func TestReceiveSuccessModeSecondAccept(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(ModeSecond)(req)
+		if b != nil || err != nil {
+			return b, err
+		}
 		switch ff := req.(type) {
-		case *mocks.AMQPProto:
-			return mocks.ProtoHeader(mocks.ProtoAMQP)
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("test")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(0, ff.Name, linkHandle, ModeSecond, nil)
 		case *frames.PerformFlow:
 			if *ff.NextIncomingID == deliveryID {
 				// this is the first flow frame, send our payload
@@ -565,15 +444,11 @@ func TestReceiveSuccessModeSecondReject(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(ModeSecond)(req)
+		if b != nil || err != nil {
+			return b, err
+		}
 		switch ff := req.(type) {
-		case *mocks.AMQPProto:
-			return mocks.ProtoHeader(mocks.ProtoAMQP)
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("test")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(0, ff.Name, linkHandle, ModeSecond, nil)
 		case *frames.PerformFlow:
 			if *ff.NextIncomingID == deliveryID {
 				// this is the first flow frame, send our payload
@@ -634,15 +509,11 @@ func TestReceiveSuccessModeSecondRelease(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(ModeSecond)(req)
+		if b != nil || err != nil {
+			return b, err
+		}
 		switch ff := req.(type) {
-		case *mocks.AMQPProto:
-			return mocks.ProtoHeader(mocks.ProtoAMQP)
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("test")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(0, ff.Name, linkHandle, ModeSecond, nil)
 		case *frames.PerformFlow:
 			if *ff.NextIncomingID == deliveryID {
 				// this is the first flow frame, send our payload
@@ -703,15 +574,11 @@ func TestReceiveSuccessModeSecondModify(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(ModeSecond)(req)
+		if b != nil || err != nil {
+			return b, err
+		}
 		switch ff := req.(type) {
-		case *mocks.AMQPProto:
-			return mocks.ProtoHeader(mocks.ProtoAMQP)
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("test")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(0, ff.Name, linkHandle, ModeSecond, nil)
 		case *frames.PerformFlow:
 			if *ff.NextIncomingID == deliveryID {
 				// this is the first flow frame, send our payload
@@ -809,15 +676,11 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(ModeSecond)(req)
+		if b != nil || err != nil {
+			return b, err
+		}
 		switch ff := req.(type) {
-		case *mocks.AMQPProto:
-			return mocks.ProtoHeader(mocks.ProtoAMQP)
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("test")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(0, ff.Name, linkHandle, ModeSecond, nil)
 		case *frames.PerformFlow:
 			return nil, nil
 		case *frames.PerformDisposition:
@@ -887,21 +750,13 @@ func TestReceiveInvalidMultiFrameMessage(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
-		switch ff := req.(type) {
-		case *mocks.AMQPProto:
-			return mocks.ProtoHeader(mocks.ProtoAMQP)
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("test")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(0, ff.Name, linkHandle, ModeSecond, nil)
+		b, err := receiverFrameHandler(ModeSecond)(req)
+		if b != nil || err != nil {
+			return b, err
+		}
+		switch req.(type) {
 		case *frames.PerformFlow:
 			return nil, nil
-		case *frames.PerformDetach:
-			return mocks.PerformDetach(0, 0, nil)
-		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -992,15 +847,11 @@ func TestReceiveMultiFrameMessageAborted(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(ModeSecond)(req)
+		if b != nil || err != nil {
+			return b, err
+		}
 		switch ff := req.(type) {
-		case *mocks.AMQPProto:
-			return mocks.ProtoHeader(mocks.ProtoAMQP)
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("test")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(0, ff.Name, linkHandle, ModeSecond, nil)
 		case *frames.PerformFlow:
 			return nil, nil
 		case *frames.PerformDisposition:
@@ -1050,15 +901,11 @@ func TestReceiveMessageTooBig(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(ModeSecond)(req)
+		if b != nil || err != nil {
+			return b, err
+		}
 		switch ff := req.(type) {
-		case *mocks.AMQPProto:
-			return mocks.ProtoHeader(mocks.ProtoAMQP)
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("test")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(0, ff.Name, linkHandle, ModeSecond, nil)
 		case *frames.PerformFlow:
 			if *ff.NextIncomingID == deliveryID {
 				// this is the first flow frame, send our payload
@@ -1067,10 +914,6 @@ func TestReceiveMessageTooBig(t *testing.T) {
 			}
 			// ignore future flow frames as we have no response
 			return nil, nil
-		case *frames.PerformDetach:
-			return mocks.PerformDetach(0, 0, nil)
-		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -1098,15 +941,11 @@ func TestReceiveSuccessAcceptFails(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(ModeSecond)(req)
+		if b != nil || err != nil {
+			return b, err
+		}
 		switch ff := req.(type) {
-		case *mocks.AMQPProto:
-			return mocks.ProtoHeader(mocks.ProtoAMQP)
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("test")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(0, ff.Name, linkHandle, ModeSecond, nil)
 		case *frames.PerformFlow:
 			if *ff.NextIncomingID == deliveryID {
 				// this is the first flow frame, send our payload
@@ -1155,15 +994,11 @@ func TestReceiverDispositionBatcherTimer(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(ModeSecond)(req)
+		if b != nil || err != nil {
+			return b, err
+		}
 		switch ff := req.(type) {
-		case *mocks.AMQPProto:
-			return mocks.ProtoHeader(mocks.ProtoAMQP)
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("test")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(0, ff.Name, linkHandle, ModeSecond, nil)
 		case *frames.PerformFlow:
 			if *ff.NextIncomingID == deliveryID {
 				// this is the first flow frame, send our payload
@@ -1213,15 +1048,11 @@ func TestReceiverDispositionBatcherFull(t *testing.T) {
 	acceptCount := 0
 	allAccepted := make(chan struct{})
 	responder := func(req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(ModeSecond)(req)
+		if b != nil || err != nil {
+			return b, err
+		}
 		switch ff := req.(type) {
-		case *mocks.AMQPProto:
-			return mocks.ProtoHeader(mocks.ProtoAMQP)
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("test")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(0, ff.Name, linkHandle, ModeSecond, nil)
 		case *frames.PerformFlow:
 			return nil, nil
 		case *frames.PerformDisposition:
@@ -1285,15 +1116,11 @@ func TestReceiverDispositionBatcherRelease(t *testing.T) {
 	acceptCount := 0
 	allAccepted := make(chan struct{})
 	responder := func(req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(ModeSecond)(req)
+		if b != nil || err != nil {
+			return b, err
+		}
 		switch ff := req.(type) {
-		case *mocks.AMQPProto:
-			return mocks.ProtoHeader(mocks.ProtoAMQP)
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("test")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(0, ff.Name, linkHandle, ModeSecond, nil)
 		case *frames.PerformFlow:
 			return nil, nil
 		case *frames.PerformDisposition:

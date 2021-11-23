@@ -711,6 +711,12 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 	assert.NoError(t, conn.SendMultiFrameTransfer(0, linkHandle, deliveryID, payload, nil))
 	msg := <-msgChan
 	assert.NoError(t, <-errChan)
+	// validate message content
+	result := []byte{}
+	for i := range msg.Data {
+		result = append(result, msg.Data[i]...)
+	}
+	assert.Equal(t, payload, result)
 	if c := r.link.countUnsettled(); c != 1 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
@@ -720,11 +726,6 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 	if c := r.link.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
-	result := []byte{}
-	for i := range msg.Data {
-		result = append(result, msg.Data[i]...)
-	}
-	assert.Equal(t, payload, result)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	err = r.AcceptMessage(ctx, msg)
 	cancel()

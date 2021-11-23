@@ -339,7 +339,7 @@ func TestSourceName(t *testing.T) {
 func TestSessionFlowDisablesTransfer(t *testing.T) {
 	t.Skip("TODO: finish for link testing")
 	nextIncomingID := uint32(0)
-	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
+	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
 
 	client, err := New(netConn)
 	require.NoError(t, err)
@@ -365,7 +365,7 @@ func TestSessionFlowDisablesTransfer(t *testing.T) {
 }
 
 func TestExactlyOnceDoesntWork(t *testing.T) {
-	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
+	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
 
 	client, err := New(netConn)
 	require.NoError(t, err)

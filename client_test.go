@@ -253,7 +253,7 @@ func TestClientTooManySessions(t *testing.T) {
 }
 
 func TestClientNewSessionInvalidOption(t *testing.T) {
-	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
+	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
 
 	client, err := New(netConn)
 	require.NoError(t, err)

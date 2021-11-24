@@ -283,8 +283,6 @@ func TestSenderSendSuccess(t *testing.T) {
 				return nil, fmt.Errorf("unexpected payload %v", tt.Payload)
 			}
 			return mocks.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, nil, &encoding.StateAccepted{})
-		case *frames.PerformDetach:
-			return mocks.PerformDetach(0, 0, nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -577,8 +575,6 @@ func TestSenderSendTagTooBig(t *testing.T) {
 		switch tt := req.(type) {
 		case *frames.PerformTransfer:
 			return mocks.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, nil, &encoding.StateAccepted{})
-		case *frames.PerformDetach:
-			return mocks.PerformDetach(0, 0, nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}

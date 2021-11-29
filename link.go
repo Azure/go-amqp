@@ -639,6 +639,9 @@ func (l *link) IssueCredit(credit uint32) error {
 }
 
 func (l *link) detachOnRejectDisp() bool {
+	// only detach on rejection when no RSM was requested or in ModeFirst.
+	// if the receiver is in ModeSecond, it will send an explicit rejection disposition
+	// that we'll have to ack. so in that case, we don't treat it as a link error.
 	if l.detachOnDispositionError && (l.receiver == nil && (l.ReceiverSettleMode == nil || *l.ReceiverSettleMode == ModeFirst)) {
 		return true
 	}

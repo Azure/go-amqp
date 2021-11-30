@@ -424,7 +424,10 @@ func TestReceiveSuccessModeSecondAccept(t *testing.T) {
 	require.Equal(t, true, msg.settled)
 	// perform a dummy receive with short timeout to trigger flow
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	_, _ = r.Receive(ctx)
+	_, err = r.Receive(ctx)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal(err)
+	}
 	cancel()
 	// wait for the link to unpause as credit should now be available
 	assert.NoError(t, waitForLink(r.link, false))
@@ -494,7 +497,10 @@ func TestReceiveSuccessModeSecondReject(t *testing.T) {
 	}
 	// perform a dummy receive with short timeout to trigger flow
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	_, _ = r.Receive(ctx)
+	_, err = r.Receive(ctx)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal(err)
+	}
 	cancel()
 	// wait for the link to unpause as credit should now be available
 	assert.NoError(t, waitForLink(r.link, false))
@@ -559,7 +565,10 @@ func TestReceiveSuccessModeSecondRelease(t *testing.T) {
 	}
 	// perform a dummy receive with short timeout to trigger flow
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	_, _ = r.Receive(ctx)
+	_, err = r.Receive(ctx)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal(err)
+	}
 	cancel()
 	// wait for the link to unpause as credit should now be available
 	assert.NoError(t, waitForLink(r.link, false))
@@ -631,7 +640,10 @@ func TestReceiveSuccessModeSecondModify(t *testing.T) {
 	}
 	// perform a dummy receive with short timeout to trigger flow
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	_, _ = r.Receive(ctx)
+	_, err = r.Receive(ctx)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal(err)
+	}
 	cancel()
 	// wait for the link to unpause as credit should now be available
 	assert.NoError(t, waitForLink(r.link, false))
@@ -736,7 +748,10 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 	require.Equal(t, true, msg.settled)
 	// perform a dummy receive with short timeout to trigger flow
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	_, _ = r.Receive(ctx)
+	_, err = r.Receive(ctx)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal(err)
+	}
 	cancel()
 	// wait for the link to unpause as credit should now be available
 	assert.NoError(t, waitForLink(r.link, false))

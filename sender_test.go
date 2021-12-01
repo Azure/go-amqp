@@ -14,8 +14,50 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestSenderInvalidOptions(t *testing.T) {
+	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
+
+	client, err := New(netConn)
+	require.NoError(t, err)
+
+	session, err := client.NewSession()
+	require.NoError(t, err)
+	snd, err := session.NewSender(LinkCredit(3))
+	require.Error(t, err)
+	require.Nil(t, snd)
+
+	snd, err = session.NewSender(LinkWithManualCredits())
+	require.Error(t, err)
+	require.Nil(t, snd)
+
+	snd, err = session.NewSender(LinkSenderSettle(3))
+	require.Error(t, err)
+	require.Nil(t, snd)
+}
+
 func TestSenderMethodsNoSend(t *testing.T) {
-	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
+	responder := func(req frames.FrameBody) ([]byte, error) {
+		switch tt := req.(type) {
+		case *mocks.AMQPProto:
+			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
+		case *frames.PerformOpen:
+			return mocks.PerformOpen("container")
+		case *frames.PerformBegin:
+			return mocks.PerformBegin(0)
+		case *frames.PerformEnd:
+			return mocks.PerformEnd(0, nil)
+		case *frames.PerformAttach:
+			require.Equal(t, DurabilityUnsettledState, tt.Source.Durable)
+			require.Equal(t, ExpiryNever, tt.Source.ExpiryPolicy)
+			require.Equal(t, uint32(300), tt.Source.Timeout)
+			return mocks.SenderAttach(0, tt.Name, 0, encoding.ModeUnsettled)
+		case *frames.PerformDetach:
+			return mocks.PerformDetach(0, 0, nil)
+		default:
+			return nil, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+	netConn := mocks.NewNetConn(responder)
 
 	client, err := New(netConn)
 	require.NoError(t, err)
@@ -27,7 +69,13 @@ func TestSenderMethodsNoSend(t *testing.T) {
 		linkName   = "test1"
 		maxMsgSize = uint64(4096)
 	)
-	snd, err := session.NewSender(LinkTargetAddress(linkAddr), LinkName(linkName), LinkMaxMessageSize(maxMsgSize))
+	snd, err := session.NewSender(
+		LinkTargetAddress(linkAddr),
+		LinkName(linkName),
+		LinkMaxMessageSize(maxMsgSize),
+		LinkSourceDurability(DurabilityUnsettledState),
+		LinkSourceExpiryPolicy(ExpiryNever),
+		LinkSourceTimeout(300))
 	require.NoError(t, err)
 	require.NotNil(t, snd)
 	require.Equal(t, linkAddr, snd.Address())
@@ -40,7 +88,7 @@ func TestSenderMethodsNoSend(t *testing.T) {
 }
 
 func TestSenderSendOnClosed(t *testing.T) {
-	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
+	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
 
 	client, err := New(netConn)
 	require.NoError(t, err)
@@ -62,7 +110,7 @@ func TestSenderSendOnClosed(t *testing.T) {
 }
 
 func TestSenderSendOnSessionClosed(t *testing.T) {
-	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
+	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
 
 	client, err := New(netConn)
 	require.NoError(t, err)
@@ -84,7 +132,7 @@ func TestSenderSendOnSessionClosed(t *testing.T) {
 }
 
 func TestSenderSendOnConnClosed(t *testing.T) {
-	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
+	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
 
 	client, err := New(netConn)
 	require.NoError(t, err)
@@ -104,7 +152,7 @@ func TestSenderSendOnConnClosed(t *testing.T) {
 }
 
 func TestSenderSendOnDetached(t *testing.T) {
-	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
+	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
 
 	client, err := New(netConn)
 	require.NoError(t, err)
@@ -200,7 +248,7 @@ func TestSenderAttachError(t *testing.T) {
 }
 
 func TestSenderSendMismatchedModes(t *testing.T) {
-	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
+	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
 
 	client, err := New(netConn)
 	require.NoError(t, err)
@@ -216,7 +264,7 @@ func TestSenderSendMismatchedModes(t *testing.T) {
 
 func TestSenderSendSuccess(t *testing.T) {
 	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := standardFrameHandler(req)
+		b, err := senderFrameHandler(ModeUnsettled)(req)
 		if err != nil || b != nil {
 			return b, err
 		}
@@ -234,7 +282,7 @@ func TestSenderSendSuccess(t *testing.T) {
 			if !reflect.DeepEqual([]byte{0, 83, 117, 160, 4, 116, 101, 115, 116}, tt.Payload) {
 				return nil, fmt.Errorf("unexpected payload %v", tt.Payload)
 			}
-			return mocks.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, &encoding.StateAccepted{})
+			return mocks.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, nil, &encoding.StateAccepted{})
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -260,17 +308,11 @@ func TestSenderSendSuccess(t *testing.T) {
 
 func TestSenderSendSettled(t *testing.T) {
 	responder := func(req frames.FrameBody) ([]byte, error) {
+		b, err := senderFrameHandler(ModeSettled)(req)
+		if err != nil || b != nil {
+			return b, err
+		}
 		switch tt := req.(type) {
-		case *mocks.AMQPProto:
-			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
-		case *frames.PerformOpen:
-			return mocks.PerformOpen("container")
-		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
-		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
-		case *frames.PerformAttach:
-			return mocks.SenderAttach(0, tt.Name, 0, encoding.ModeSettled)
 		case *frames.PerformTransfer:
 			if tt.More {
 				return nil, errors.New("didn't expect more to be true")
@@ -282,8 +324,6 @@ func TestSenderSendSettled(t *testing.T) {
 				return nil, fmt.Errorf("unexpected payload %v", tt.Payload)
 			}
 			return nil, nil
-		case *frames.PerformDetach:
-			return mocks.PerformDetach(0, 0, nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -309,13 +349,13 @@ func TestSenderSendSettled(t *testing.T) {
 
 func TestSenderSendRejected(t *testing.T) {
 	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := standardFrameHandler(req)
+		b, err := senderFrameHandler(ModeUnsettled)(req)
 		if err != nil || b != nil {
 			return b, err
 		}
 		switch tt := req.(type) {
 		case *frames.PerformTransfer:
-			return mocks.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, &encoding.StateRejected{
+			return mocks.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, nil, &encoding.StateRejected{
 				Error: &Error{
 					Condition:   "rejected",
 					Description: "didn't like it",
@@ -340,18 +380,84 @@ func TestSenderSendRejected(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	err = snd.Send(ctx, NewMessage([]byte("test")))
 	cancel()
+	var deErr *DetachError
+	if !errors.As(err, &deErr) {
+		t.Fatalf("unexpected error type %T", err)
+	}
+	require.Equal(t, encoding.ErrorCondition("rejected"), deErr.RemoteError.Condition)
+
+	// link should now be detached
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+	err = snd.Send(ctx, NewMessage([]byte("test")))
+	cancel()
+	if !errors.As(err, &deErr) {
+		t.Fatalf("unexpected error type %T", err)
+	}
+	require.NoError(t, client.Close())
+}
+
+func TestSenderSendRejectedNoDetach(t *testing.T) {
+	responder := func(req frames.FrameBody) ([]byte, error) {
+		switch tt := req.(type) {
+		case *mocks.AMQPProto:
+			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
+		case *frames.PerformOpen:
+			return mocks.PerformOpen("container")
+		case *frames.PerformBegin:
+			return mocks.PerformBegin(0)
+		case *frames.PerformEnd:
+			return mocks.PerformEnd(0, nil)
+		case *frames.PerformAttach:
+			return mocks.SenderAttach(0, tt.Name, 0, encoding.ModeUnsettled)
+		case *frames.PerformTransfer:
+			// reject first delivery
+			if *tt.DeliveryID == 1 {
+				return mocks.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, nil, &encoding.StateRejected{
+					Error: &Error{
+						Condition:   "rejected",
+						Description: "didn't like it",
+					},
+				})
+			}
+			return mocks.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, nil, &encoding.StateAccepted{})
+		case *frames.PerformDetach:
+			return mocks.PerformDetach(0, 0, nil)
+		default:
+			return nil, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+	netConn := mocks.NewNetConn(responder)
+
+	client, err := New(netConn)
+	require.NoError(t, err)
+
+	session, err := client.NewSession()
+	require.NoError(t, err)
+	snd, err := session.NewSender(LinkDetachOnDispositionError(false))
+	require.NoError(t, err)
+
+	sendInitialFlowFrame(t, netConn, 0, 100)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	err = snd.Send(ctx, NewMessage([]byte("test")))
+	cancel()
 	var asErr *Error
 	if !errors.As(err, &asErr) {
 		t.Fatalf("unexpected error type %T", err)
 	}
 	require.Equal(t, encoding.ErrorCondition("rejected"), asErr.Condition)
 
+	// link should *not* be detached
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+	err = snd.Send(ctx, NewMessage([]byte("test")))
+	cancel()
+	require.NoError(t, err)
 	require.NoError(t, client.Close())
 }
 
 func TestSenderSendDetached(t *testing.T) {
 	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := standardFrameHandler(req)
+		b, err := senderFrameHandler(ModeUnsettled)(req)
 		if err != nil || b != nil {
 			return b, err
 		}
@@ -390,7 +496,7 @@ func TestSenderSendDetached(t *testing.T) {
 }
 
 func TestSenderSendTimeout(t *testing.T) {
-	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
+	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
 
 	client, err := New(netConn)
 	require.NoError(t, err)
@@ -434,7 +540,7 @@ func TestSenderSendMsgTooBig(t *testing.T) {
 				MaxMessageSize:   16, // really small messages only
 			})
 		case *frames.PerformTransfer:
-			return mocks.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, &encoding.StateAccepted{})
+			return mocks.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, nil, &encoding.StateAccepted{})
 		case *frames.PerformDetach:
 			return mocks.PerformDetach(0, 0, nil)
 		default:
@@ -462,13 +568,13 @@ func TestSenderSendMsgTooBig(t *testing.T) {
 
 func TestSenderSendTagTooBig(t *testing.T) {
 	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := standardFrameHandler(req)
+		b, err := senderFrameHandler(ModeUnsettled)(req)
 		if err != nil || b != nil {
 			return b, err
 		}
 		switch tt := req.(type) {
 		case *frames.PerformTransfer:
-			return mocks.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, &encoding.StateAccepted{})
+			return mocks.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, nil, &encoding.StateAccepted{})
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -534,7 +640,7 @@ func TestSenderSendMultiTransfer(t *testing.T) {
 				transferCount++
 				return nil, nil
 			}
-			return mocks.PerformDisposition(encoding.RoleReceiver, 0, deliveryID, &encoding.StateAccepted{})
+			return mocks.PerformDisposition(encoding.RoleReceiver, 0, deliveryID, nil, &encoding.StateAccepted{})
 		case *frames.PerformDetach:
 			return mocks.PerformDetach(0, 0, nil)
 		default:

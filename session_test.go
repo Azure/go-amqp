@@ -126,7 +126,7 @@ func TestSessionCloseTimeout(t *testing.T) {
 }
 
 func TestConnCloseSessionClose(t *testing.T) {
-	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
+	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
 
 	client, err := New(netConn)
 	require.NoError(t, err)
@@ -145,7 +145,7 @@ func TestConnCloseSessionClose(t *testing.T) {
 }
 
 func TestSessionNewReceiverBadOptionFails(t *testing.T) {
-	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
+	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
 
 	client, err := New(netConn)
 	require.NoError(t, err)
@@ -174,7 +174,7 @@ func TestSessionNewReceiverBatchingOneCredit(t *testing.T) {
 		case *frames.PerformEnd:
 			return mocks.PerformEnd(0, nil)
 		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(0, tt.Name, 0, encoding.ModeFirst)
+			return mocks.ReceiverAttach(0, tt.Name, 0, encoding.ModeFirst, nil)
 		case *frames.PerformFlow:
 			return nil, nil
 		default:
@@ -211,7 +211,7 @@ func TestSessionNewReceiverBatchingEnabled(t *testing.T) {
 		case *frames.PerformEnd:
 			return mocks.PerformEnd(0, nil)
 		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(0, tt.Name, 0, encoding.ModeFirst)
+			return mocks.ReceiverAttach(0, tt.Name, 0, encoding.ModeFirst, nil)
 		case *frames.PerformFlow:
 			return nil, nil
 		default:
@@ -248,7 +248,7 @@ func TestSessionNewReceiverMismatchedLinkName(t *testing.T) {
 		case *frames.PerformEnd:
 			return mocks.PerformEnd(0, nil)
 		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(0, "wrong_name", 0, encoding.ModeFirst)
+			return mocks.ReceiverAttach(0, "wrong_name", 0, encoding.ModeFirst, nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -271,7 +271,7 @@ func TestSessionNewReceiverMismatchedLinkName(t *testing.T) {
 }
 
 func TestSessionNewSenderBadOptionFails(t *testing.T) {
-	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
+	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
 
 	client, err := New(netConn)
 	require.NoError(t, err)
@@ -323,7 +323,7 @@ func TestSessionNewSenderMismatchedLinkName(t *testing.T) {
 }
 
 func TestSessionNewSenderDuplicateLinks(t *testing.T) {
-	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
+	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
 
 	client, err := New(netConn)
 	require.NoError(t, err)
@@ -344,7 +344,7 @@ func TestSessionNewSenderDuplicateLinks(t *testing.T) {
 }
 
 func TestSessionNewSenderMaxHandles(t *testing.T) {
-	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
+	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
 
 	client, err := New(netConn)
 	require.NoError(t, err)
@@ -365,7 +365,7 @@ func TestSessionNewSenderMaxHandles(t *testing.T) {
 }
 
 func TestSessionUnexpectedFrame(t *testing.T) {
-	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
+	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
 
 	client, err := New(netConn)
 	require.NoError(t, err)
@@ -386,7 +386,7 @@ func TestSessionUnexpectedFrame(t *testing.T) {
 }
 
 func TestSessionInvalidFlowFrame(t *testing.T) {
-	netConn := mocks.NewNetConn(standardFrameHandlerNoUnhandled)
+	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
 
 	client, err := New(netConn)
 	require.NoError(t, err)
@@ -466,8 +466,6 @@ func TestSessionFlowFrameWithEcho(t *testing.T) {
 }
 
 func TestSessionInvalidAttachDeadlock(t *testing.T) {
-	// https://github.com/Azure/go-amqp/issues/87
-	t.Skip("TODO: deadlock fix for conn and session")
 	var enqueueFrames func(string)
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {

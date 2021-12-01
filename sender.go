@@ -58,6 +58,9 @@ func (s *Sender) Send(ctx context.Context, msg *Message) error {
 	select {
 	case state := <-done:
 		if state, ok := state.(*encoding.StateRejected); ok {
+			if s.link.detachOnRejectDisp() {
+				return &DetachError{state.Error}
+			}
 			return state.Error
 		}
 		return nil

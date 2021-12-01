@@ -480,28 +480,22 @@ func (l *link) muxReceive(fr frames.PerformTransfer) error {
 
 		// these fields are required on first transfer of a message
 		if fr.DeliveryID == nil {
-			msg := "received message without a delivery-id"
-			l.closeWithError(&Error{
+			return l.closeWithError(&Error{
 				Condition:   ErrorNotAllowed,
-				Description: msg,
+				Description: "received message without a delivery-id",
 			})
-			return errors.New(msg)
 		}
 		if fr.MessageFormat == nil {
-			msg := "received message without a message-format"
-			l.closeWithError(&Error{
+			return l.closeWithError(&Error{
 				Condition:   ErrorNotAllowed,
-				Description: msg,
+				Description: "received message without a message-format",
 			})
-			return errors.New(msg)
 		}
 		if fr.DeliveryTag == nil {
-			msg := "received message without a delivery-tag"
-			l.closeWithError(&Error{
+			return l.closeWithError(&Error{
 				Condition:   ErrorNotAllowed,
-				Description: msg,
+				Description: "received message without a delivery-tag",
 			})
-			return errors.New(msg)
 		}
 	} else {
 		// this is a continuation of a multipart message
@@ -514,33 +508,30 @@ func (l *link) muxReceive(fr frames.PerformTransfer) error {
 				"received continuation transfer with inconsistent delivery-id: %d != %d",
 				*fr.DeliveryID, l.msg.deliveryID,
 			)
-			l.closeWithError(&Error{
+			return l.closeWithError(&Error{
 				Condition:   ErrorNotAllowed,
 				Description: msg,
 			})
-			return errors.New(msg)
 		}
 		if fr.MessageFormat != nil && *fr.MessageFormat != l.msg.Format {
 			msg := fmt.Sprintf(
 				"received continuation transfer with inconsistent message-format: %d != %d",
 				*fr.MessageFormat, l.msg.Format,
 			)
-			l.closeWithError(&Error{
+			return l.closeWithError(&Error{
 				Condition:   ErrorNotAllowed,
 				Description: msg,
 			})
-			return errors.New(msg)
 		}
 		if fr.DeliveryTag != nil && !bytes.Equal(fr.DeliveryTag, l.msg.DeliveryTag) {
 			msg := fmt.Sprintf(
 				"received continuation transfer with inconsistent delivery-tag: %q != %q",
 				fr.DeliveryTag, l.msg.DeliveryTag,
 			)
-			l.closeWithError(&Error{
+			return l.closeWithError(&Error{
 				Condition:   ErrorNotAllowed,
 				Description: msg,
 			})
-			return errors.New(msg)
 		}
 	}
 
@@ -554,12 +545,10 @@ func (l *link) muxReceive(fr frames.PerformTransfer) error {
 
 	// ensure maxMessageSize will not be exceeded
 	if l.MaxMessageSize != 0 && uint64(l.buf.Len())+uint64(len(fr.Payload)) > l.MaxMessageSize {
-		msg := fmt.Sprintf("received message larger than max size of %d", l.MaxMessageSize)
-		l.closeWithError(&Error{
+		return l.closeWithError(&Error{
 			Condition:   ErrorMessageSizeExceeded,
-			Description: msg,
+			Description: fmt.Sprintf("received message larger than max size of %d", l.MaxMessageSize),
 		})
-		return errors.New(msg)
 	}
 
 	// add the payload the the buffer
@@ -615,7 +604,7 @@ func (l *link) DrainCredit(ctx context.Context) error {
 	default:
 	}
 
-	return l.receiver.manualCreditor.Drain(ctx)
+	return l.receiver.manualCreditor.Drain(ctx, l)
 }
 
 // IssueCredit requests additional credits be issued for this link.
@@ -638,11 +627,20 @@ func (l *link) IssueCredit(credit uint32) error {
 	return nil
 }
 
+func (l *link) detachOnRejectDisp() bool {
+	// only detach on rejection when no RSM was requested or in ModeFirst.
+	// if the receiver is in ModeSecond, it will send an explicit rejection disposition
+	// that we'll have to ack. so in that case, we don't treat it as a link error.
+	if l.detachOnDispositionError && (l.receiver == nil && (l.ReceiverSettleMode == nil || *l.ReceiverSettleMode == ModeFirst)) {
+		return true
+	}
+	return false
+}
+
 // muxHandleFrame processes fr based on type.
 func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 	var (
-		isSender               = l.receiver == nil
-		errOnRejectDisposition = l.detachOnDispositionError && (isSender && (l.ReceiverSettleMode == nil || *l.ReceiverSettleMode == ModeFirst))
+		isSender = l.receiver == nil
 	)
 
 	switch fr := fr.(type) {
@@ -651,11 +649,10 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 		debug(3, "RX (muxHandleFrame): %s", fr)
 		if isSender {
 			// Senders should never receive transfer frames, but handle it just in case.
-			l.closeWithError(&Error{
+			return l.closeWithError(&Error{
 				Condition:   ErrorNotAllowed,
 				Description: "sender cannot process transfer frame",
 			})
-			return fmt.Errorf("sender received transfer frame")
 		}
 
 		return l.muxReceive(*fr)
@@ -733,8 +730,8 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 		// If sending async and a message is rejected, cause a link error.
 		//
 		// This isn't ideal, but there isn't a clear better way to handle it.
-		if fr, ok := fr.State.(*encoding.StateRejected); ok && errOnRejectDisposition {
-			return fr.Error
+		if fr, ok := fr.State.(*encoding.StateRejected); ok && l.detachOnRejectDisp() {
+			return &DetachError{fr.Error}
 		}
 
 		if fr.Settled {
@@ -779,13 +776,15 @@ func (l *link) Close(ctx context.Context) error {
 	return l.err
 }
 
-func (l *link) closeWithError(de *Error) {
+// returns the error passed in
+func (l *link) closeWithError(de *Error) error {
 	l.closeOnce.Do(func() {
 		l.detachErrorMu.Lock()
 		l.detachError = de
 		l.detachErrorMu.Unlock()
 		close(l.close)
 	})
+	return de
 }
 
 func (l *link) muxDetach() {
@@ -793,17 +792,31 @@ func (l *link) muxDetach() {
 		// final cleanup and signaling
 
 		// deallocate handle
-		select {
-		case l.Session.deallocateHandle <- l:
-		case <-l.Session.done:
-			if l.err == nil {
-				l.err = l.Session.err
+	Loop:
+		for {
+			select {
+			case <-l.RX:
+				// at this point we shouldn't be receiving any more frames for
+				// this link. however, if we do, we need to keep the session mux
+				// unblocked else we deadlock.  so just read and discard them.
+			case l.Session.deallocateHandle <- l:
+				break Loop
+			case <-l.Session.done:
+				if l.err == nil {
+					l.err = l.Session.err
+				}
+				break Loop
 			}
 		}
 
 		// unblock any in flight message dispositions
 		if l.receiver != nil {
 			l.receiver.inFlight.clear(l.err)
+		}
+
+		// unblock any pending drain requests
+		if l.receiver != nil && l.receiver.manualCreditor != nil {
+			l.receiver.manualCreditor.EndDrain()
 		}
 
 		// signal that the link mux has exited

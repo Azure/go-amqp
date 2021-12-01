@@ -35,16 +35,17 @@ func TestManualCreditorDrain(t *testing.T) {
 	drainRoutines := sync.WaitGroup{}
 	drainRoutines.Add(2)
 
+	l := newTestLink(t)
 	var err1, err2 error
 
 	go func() {
 		defer drainRoutines.Done()
-		err1 = mc.Drain(ctx)
+		err1 = mc.Drain(ctx, l)
 	}()
 
 	go func() {
 		defer drainRoutines.Done()
-		err2 = mc.Drain(ctx)
+		err2 = mc.Drain(ctx, l)
 	}()
 
 	// one of the drain calls will have succeeded, the other one should still be blocking.
@@ -88,7 +89,7 @@ func TestManualCreditorIssueCreditsWhileDrainingFails(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-		err := mc.Drain(ctx)
+		err := mc.Drain(ctx, newTestLink(t))
 		require.NoError(t, err)
 	}()
 
@@ -109,5 +110,5 @@ func TestManualCreditorDrainRespectsContext(t *testing.T) {
 
 	cancel()
 
-	require.Error(t, mc.Drain(ctx), context.Canceled.Error())
+	require.Error(t, mc.Drain(ctx, newTestLink(t)), context.Canceled.Error())
 }

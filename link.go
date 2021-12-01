@@ -604,7 +604,7 @@ func (l *link) DrainCredit(ctx context.Context) error {
 	default:
 	}
 
-	return l.receiver.manualCreditor.Drain(ctx)
+	return l.receiver.manualCreditor.Drain(ctx, l)
 }
 
 // IssueCredit requests additional credits be issued for this link.
@@ -812,6 +812,11 @@ func (l *link) muxDetach() {
 		// unblock any in flight message dispositions
 		if l.receiver != nil {
 			l.receiver.inFlight.clear(l.err)
+		}
+
+		// unblock any pending drain requests
+		if l.receiver != nil && l.receiver.manualCreditor != nil {
+			l.receiver.manualCreditor.EndDrain()
 		}
 
 		// signal that the link mux has exited

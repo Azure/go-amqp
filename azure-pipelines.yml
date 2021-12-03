@@ -69,7 +69,8 @@ jobs:
           $(Pipeline.Workspace)/azure-amqp/bin/Debug/TestAmqpBroker/net461/TestAmqpBroker.exe $AMQP_BROKER_ADDR /headless &
           brokerPID=$!
           echo '##[section]Starting tests'
-          go test -tags -race -v -coverprofile=coverage.txt -covermode atomic ./... 2>&1 | go-junit-report > report.xml
+          go test -tags -race -v -coverprofile=coverage.txt -covermode atomic ./... 2>&1 | tee gotestoutput.log 
+          go-junit-report < gotestouput.log > report.xml
           kill $brokerPID
           gocov convert coverage.txt > coverage.json
           gocov-xml < coverage.json > coverage.xml

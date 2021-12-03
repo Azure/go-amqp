@@ -70,7 +70,7 @@ jobs:
           brokerPID=$!
           echo '##[section]Starting tests'
           go test -tags -race -v -coverprofile=coverage.txt -covermode atomic ./... 2>&1 | tee gotestoutput.log 
-          go-junit-report < gotestouput.log > report.xml
+          go-junit-report < gotestoutput.log > report.xml
           kill $brokerPID
           gocov convert coverage.txt > coverage.json
           gocov-xml < coverage.json > coverage.xml

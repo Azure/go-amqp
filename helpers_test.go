@@ -184,6 +184,11 @@ func waitForLink(l *link, paused bool) error {
 		} else if err := ctx.Err(); err != nil {
 			return err
 		}
-		time.Sleep(50 * time.Millisecond)
+		select {
+		case <-l.Detached:
+			return l.detachError
+		case <-time.After(50 * time.Millisecond):
+			// try again
+		}
 	}
 }

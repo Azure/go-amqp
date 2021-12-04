@@ -701,7 +701,7 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 			}
 			return mocks.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
 		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
+			panic(fmt.Sprintf("unhandled frame %T", req))
 		}
 	}
 	conn := mocks.NewNetConn(responder)

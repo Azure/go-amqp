@@ -693,7 +693,7 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 			return b, err
 		}
 		switch ff := req.(type) {
-		case *frames.PerformFlow:
+		case *frames.PerformFlow, *mocks.KeepAlive:
 			return nil, nil
 		case *frames.PerformDisposition:
 			if _, ok := ff.State.(*encoding.StateAccepted); !ok {

@@ -161,7 +161,7 @@ func receiverFrameHandlerNoUnhandled(rsm encoding.ReceiverSettleMode) func(frame
 			return b, err
 		}
 		switch req.(type) {
-		case *frames.PerformFlow:
+		case *frames.PerformFlow, *mocks.KeepAlive:
 			return nil, nil
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
@@ -184,6 +184,11 @@ func waitForLink(l *link, paused bool) error {
 		} else if err := ctx.Err(); err != nil {
 			return err
 		}
-		time.Sleep(50 * time.Millisecond)
+		select {
+		case <-l.Detached:
+			return fmt.Errorf("link detached: detachErr %v, error %v", l.detachError, l.err)
+		case <-time.After(50 * time.Millisecond):
+			// try again
+		}
 	}
 }

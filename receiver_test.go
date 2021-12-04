@@ -705,7 +705,7 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 		}
 	}
 	conn := mocks.NewNetConn(responder)
-	client, err := New(conn, ConnIdleTimeout(0))
+	client, err := New(conn)
 	assert.NoError(t, err)
 	session, err := client.NewSession()
 	assert.NoError(t, err)

@@ -161,8 +161,8 @@ func (n *NetConn) SetDeadline(t time.Time) error {
 func (n *NetConn) SetReadDeadline(t time.Time) error {
 	// called by conn.connReader before calling Read
 	// stop the last timer if available
-	if n.readDL != nil && !n.readDL.Stop() {
-		<-n.readDL.C
+	if n.readDL != nil {
+		n.readDL.Stop()
 	}
 	n.readDL = time.NewTimer(time.Until(t))
 	return nil

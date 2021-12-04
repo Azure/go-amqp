@@ -328,6 +328,34 @@ func (h *MessageHeader) Unmarshal(r *buffer.Buffer) error {
 	}...)
 }
 
+// AMQP types
+type (
+	// AMQPAddress corresponds to the 'address' type in the AMQP spec.
+	// <type name="address-string" class="restricted" source="string" provides="address"/>
+	AMQPAddress = string
+
+	// AMQPMessageID corresponds to the 'message-id' type in the AMQP spec. Internally it can
+	// be one of the following:
+	// - uint64:    <type name="message-id-ulong" class="restricted" source="ulong" provides="message-id"/>
+	// - amqp.UUID: <type name="message-id-uuid" class="restricted" source="uuid" provides="message-id"/>
+	// - []byte:    <type name="message-id-binary" class="restricted" source="binary" provides="message-id"/>
+	// - string:    <type name="message-id-string" class="restricted" source="string" provides="message-id"/>
+	AMQPMessageID = interface{}
+
+	// AMQPSymbol corresponds to the 'symbol' type in the AMQP spec.
+	// <type name="symbol" class="primitive"/>
+	// And either:
+	// - variable-width, 1 byte size	up to 2^8 - 1 seven bit ASCII characters representing a symbolic value
+	// - variable-width, 4 byte size	up to 2^32 - 1 seven bit ASCII characters representing a symbolic value
+	AMQPSymbol = string
+
+	// AMQPSequenceNumber corresponds to the `sequence-no` type in the AMQP spec.
+	// <type name="sequence-no" class="restricted" source="uint"/>
+	AMQPSequenceNumber = uint32
+
+	AMQPBinary = []byte
+)
+
 /*
 <type name="properties" class="composite" source="list" provides="section">
     <descriptor name="amqp:properties:list" code="0x00000000:0x00000073"/>
@@ -354,25 +382,25 @@ type MessageProperties struct {
 	// such a way that it is assured to be globally unique. A broker MAY discard a
 	// message as a duplicate if the value of the message-id matches that of a
 	// previously received message sent to the same node.
-	MessageID interface{} // uint64, UUID, []byte, or string
+	MessageID AMQPMessageID // uint64, UUID, []byte, or string
 
 	// The identity of the user responsible for producing the message.
 	// The client sets this value, and it MAY be authenticated by intermediaries.
-	UserID []byte
+	UserID AMQPBinary
 
 	// The to field identifies the node that is the intended destination of the message.
 	// On any given transfer this might not be the node at the receiving end of the link.
-	To *string
+	To *AMQPAddress
 
 	// A common field for summary information about the message content and purpose.
 	Subject *string
 
 	// The address of the node to send replies to.
-	ReplyTo *string
+	ReplyTo *AMQPAddress
 
 	// This is a client-specific id that can be used to mark or identify messages
 	// between clients.
-	CorrelationID interface{} // uint64, UUID, []byte, or string
+	CorrelationID AMQPMessageID // uint64, UUID, []byte, or string
 
 	// The RFC-2046 [RFC2046] MIME type for the message's application-data section
 	// (body). As per RFC-2046 [RFC2046] this can contain a charset parameter defining
@@ -385,7 +413,7 @@ type MessageProperties struct {
 	//
 	// When using an application-data section with a section code other than data,
 	// content-type SHOULD NOT be set.
-	ContentType *string
+	ContentType *AMQPSymbol
 
 	// The content-encoding property is used as a modifier to the content-type.
 	// When present, its value indicates what additional content encodings have been
@@ -410,19 +438,19 @@ type MessageProperties struct {
 	//
 	// Implementations SHOULD NOT specify multiple content-encoding values except as to
 	// be compatible with messages originally sent with other protocols, e.g. HTTP or SMTP.
-	ContentEncoding *string
+	ContentEncoding *AMQPSymbol
 
 	// An absolute time when this message is considered to be expired.
-	AbsoluteExpiryTime time.Time
+	AbsoluteExpiryTime *time.Time
 
 	// An absolute time when this message was created.
-	CreationTime time.Time
+	CreationTime *time.Time
 
 	// Identifies the group the message belongs to.
 	GroupID *string
 
 	// The relative position of this message within its group.
-	GroupSequence uint32 // RFC-1982 sequence number
+	GroupSequence *AMQPSequenceNumber // RFC-1982 sequence number
 
 	// This is a client-specific id that is used so that client can send replies to this
 	// message to a specific group.
@@ -439,10 +467,10 @@ func (p *MessageProperties) Marshal(wr *buffer.Buffer) error {
 		{Value: p.CorrelationID, Omit: p.CorrelationID == nil},
 		{Value: (*encoding.Symbol)(p.ContentType), Omit: p.ContentType == nil},
 		{Value: (*encoding.Symbol)(p.ContentEncoding), Omit: p.ContentEncoding == nil},
-		{Value: &p.AbsoluteExpiryTime, Omit: p.AbsoluteExpiryTime.IsZero()},
-		{Value: &p.CreationTime, Omit: p.CreationTime.IsZero()},
+		{Value: p.AbsoluteExpiryTime, Omit: p.AbsoluteExpiryTime.IsZero()},
+		{Value: p.CreationTime, Omit: p.CreationTime.IsZero()},
 		{Value: p.GroupID, Omit: p.GroupID == nil},
-		{Value: &p.GroupSequence},
+		{Value: p.GroupSequence},
 		{Value: p.ReplyToGroupID, Omit: p.ReplyToGroupID == nil},
 	})
 }

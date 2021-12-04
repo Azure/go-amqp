@@ -487,10 +487,10 @@ var (
 				CorrelationID:      uint64(34513),
 				ContentType:        stringPtr("text/plain"),
 				ContentEncoding:    stringPtr("UTF-8"),
-				AbsoluteExpiryTime: time.Date(2018, 01, 13, 14, 24, 07, 0, time.UTC),
-				CreationTime:       time.Date(2018, 01, 13, 14, 14, 07, 0, time.UTC),
+				AbsoluteExpiryTime: timePtr(time.Date(2018, 01, 13, 14, 24, 07, 0, time.UTC)),
+				CreationTime:       timePtr(time.Date(2018, 01, 13, 14, 14, 07, 0, time.UTC)),
 				GroupID:            stringPtr("fooGroup"),
-				GroupSequence:      89324,
+				GroupSequence:      uint32Ptr(89324),
 				ReplyToGroupID:     stringPtr("barGroup"),
 			},
 			ApplicationProperties: map[string]interface{}{
@@ -521,10 +521,10 @@ var (
 			CorrelationID:      uint64(34513),
 			ContentType:        stringPtr("text/plain"),
 			ContentEncoding:    stringPtr("UTF-8"),
-			AbsoluteExpiryTime: time.Date(2018, 01, 13, 14, 24, 07, 0, time.UTC),
-			CreationTime:       time.Date(2018, 01, 13, 14, 14, 07, 0, time.UTC),
+			AbsoluteExpiryTime: timePtr(time.Date(2018, 01, 13, 14, 24, 07, 0, time.UTC)),
+			CreationTime:       timePtr(time.Date(2018, 01, 13, 14, 14, 07, 0, time.UTC)),
 			GroupID:            stringPtr("fooGroup"),
-			GroupSequence:      89324,
+			GroupSequence:      uint32Ptr(89324),
 			ReplyToGroupID:     stringPtr("barGroup"),
 		},
 		&encoding.StateReceived{
@@ -653,4 +653,8 @@ func uint32Ptr(u uint32) *uint32 {
 }
 func stringPtr(s string) *string {
 	return &s
+}
+
+func timePtr(t time.Time) *time.Time {
+	return &t
 }

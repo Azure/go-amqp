@@ -588,8 +588,9 @@ func (c *conn) connReader() {
 
 				// send error to mux and return
 				default:
-					c.connErr <- err
-					return
+					panic(err)
+					//c.connErr <- err
+					//return
 				}
 			}
 		}

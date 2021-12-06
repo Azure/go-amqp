@@ -353,6 +353,7 @@ type (
 	// <type name="sequence-no" class="restricted" source="uint"/>
 	AMQPSequenceNumber = uint32
 
+	// AMQPBinary corresponds to the `binary` type in the AMQP spec.
 	AMQPBinary = []byte
 )
 

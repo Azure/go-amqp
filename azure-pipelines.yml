@@ -10,7 +10,7 @@ jobs:
       matrix:
         Linux_Go116:
           vm.image: 'ubuntu-18.04'
-          go.version: '1.16.11'
+          go.version: '1.16.9'
         Linux_Go117:
           vm.image: 'ubuntu-18.04'
           go.version: '1.17'

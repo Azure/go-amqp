@@ -49,7 +49,7 @@ func TestReceiverMethodsNoReceive(t *testing.T) {
 			assert.Equal(t, ExpiryNever, ff.Target.ExpiryPolicy)
 			assert.Equal(t, uint32(300), ff.Target.Timeout)
 			return mocks.ReceiverAttach(0, linkName, 0, ModeFirst, nil)
-		case *frames.PerformFlow:
+		case *frames.PerformFlow, *mocks.KeepAlive:
 			return nil, nil
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
@@ -219,7 +219,7 @@ func TestReceiveInvalidMessage(t *testing.T) {
 			return b, err
 		}
 		switch req.(type) {
-		case *frames.PerformFlow:
+		case *frames.PerformFlow, *mocks.KeepAlive:
 			return nil, nil
 		case *frames.PerformDisposition:
 			return mocks.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
@@ -693,7 +693,7 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 			return b, err
 		}
 		switch ff := req.(type) {
-		case *frames.PerformFlow:
+		case *frames.PerformFlow, *mocks.KeepAlive:
 			return nil, nil
 		case *frames.PerformDisposition:
 			if _, ok := ff.State.(*encoding.StateAccepted); !ok {
@@ -771,7 +771,7 @@ func TestReceiveInvalidMultiFrameMessage(t *testing.T) {
 			return b, err
 		}
 		switch req.(type) {
-		case *frames.PerformFlow:
+		case *frames.PerformFlow, *mocks.KeepAlive:
 			return nil, nil
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
@@ -868,7 +868,7 @@ func TestReceiveMultiFrameMessageAborted(t *testing.T) {
 			return b, err
 		}
 		switch ff := req.(type) {
-		case *frames.PerformFlow:
+		case *frames.PerformFlow, *mocks.KeepAlive:
 			return nil, nil
 		case *frames.PerformDisposition:
 			if _, ok := ff.State.(*encoding.StateAccepted); !ok {
@@ -1069,7 +1069,7 @@ func TestReceiverDispositionBatcherFull(t *testing.T) {
 			return b, err
 		}
 		switch ff := req.(type) {
-		case *frames.PerformFlow:
+		case *frames.PerformFlow, *mocks.KeepAlive:
 			return nil, nil
 		case *frames.PerformDisposition:
 			if _, ok := ff.State.(*encoding.StateAccepted); !ok {
@@ -1137,7 +1137,7 @@ func TestReceiverDispositionBatcherRelease(t *testing.T) {
 			return b, err
 		}
 		switch ff := req.(type) {
-		case *frames.PerformFlow:
+		case *frames.PerformFlow, *mocks.KeepAlive:
 			return nil, nil
 		case *frames.PerformDisposition:
 			if ff.Last == nil || *ff.Last == ff.First {

@@ -715,6 +715,7 @@ func (c *conn) connWriter() {
 
 		// keepalive timer
 		case <-keepalive:
+			debug(3, "sending keep-alive frame")
 			_, err = c.net.Write(keepaliveFrame)
 			// It would be slightly more efficient in terms of network
 			// resources to reset the timer each time a frame is sent.

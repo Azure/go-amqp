@@ -40,12 +40,11 @@ type NetConn struct {
 	// from the call to NetConn.Read.
 	ReadErr chan error
 
-	resp        func(frames.FrameBody) ([]byte, error)
-	readDL      *time.Timer
-	resetReadDL bool
-	readData    chan []byte
-	readClose   chan struct{}
-	closed      bool
+	resp      func(frames.FrameBody) ([]byte, error)
+	readDL    *time.Timer
+	readData  chan []byte
+	readClose chan struct{}
+	closed    bool
 }
 
 // SendFrame sends the encoded frame to the client.
@@ -94,10 +93,6 @@ func (n *NetConn) Read(b []byte) (int, error) {
 	case <-n.readClose:
 		return 0, errors.New("mock connection was closed")
 	case <-n.readDL.C:
-		if n.resetReadDL {
-			n.resetReadDL = false
-			return 0, nil
-		}
 		return 0, errors.New("mock connection read deadline exceeded")
 	case rd := <-n.readData:
 		return copy(b, rd), nil
@@ -167,7 +162,6 @@ func (n *NetConn) SetReadDeadline(t time.Time) error {
 	// called by conn.connReader before calling Read
 	// stop the last timer if available
 	if n.readDL != nil {
-		n.resetReadDL = true
 		n.readDL.Stop()
 	}
 	n.readDL = time.NewTimer(time.Until(t))

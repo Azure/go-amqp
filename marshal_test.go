@@ -505,6 +505,47 @@ var (
 				"hash": []uint8{0, 1, 2, 34, 5, 6, 7, 8, 9, 0},
 			},
 		},
+		&Message{
+			Header: &MessageHeader{
+				Durable:       true,
+				Priority:      234,
+				TTL:           10 * time.Second,
+				FirstAcquirer: true,
+				DeliveryCount: 32,
+			},
+			DeliveryAnnotations: encoding.Annotations{
+				int64(42): "answer",
+			},
+			Annotations: encoding.Annotations{
+				int64(42): "answer",
+			},
+			Properties: &MessageProperties{
+				MessageID:          nil,
+				UserID:             nil,
+				To:                 nil,
+				Subject:            nil,
+				ReplyTo:            nil,
+				CorrelationID:      nil,
+				ContentType:        nil,
+				ContentEncoding:    nil,
+				AbsoluteExpiryTime: nil,
+				CreationTime:       nil,
+				GroupID:            nil,
+				GroupSequence:      nil,
+				ReplyToGroupID:     nil,
+			},
+			ApplicationProperties: map[string]interface{}{
+				"baz": "foo",
+			},
+			Data: [][]byte{
+				[]byte("A nice little data payload."),
+				[]byte("More payload."),
+			},
+			Value: uint8(42),
+			Footer: encoding.Annotations{
+				"hash": []uint8{0, 1, 2, 34, 5, 6, 7, 8, 9, 0},
+			},
+		},
 		&MessageHeader{
 			Durable:       true,
 			Priority:      234,

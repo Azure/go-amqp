@@ -468,10 +468,10 @@ func (p *MessageProperties) Marshal(wr *buffer.Buffer) error {
 		{Value: p.CorrelationID, Omit: p.CorrelationID == nil},
 		{Value: (*encoding.Symbol)(p.ContentType), Omit: p.ContentType == nil},
 		{Value: (*encoding.Symbol)(p.ContentEncoding), Omit: p.ContentEncoding == nil},
-		{Value: p.AbsoluteExpiryTime, Omit: p.AbsoluteExpiryTime.IsZero()},
-		{Value: p.CreationTime, Omit: p.CreationTime.IsZero()},
+		{Value: p.AbsoluteExpiryTime, Omit: p.AbsoluteExpiryTime == nil},
+		{Value: p.CreationTime, Omit: p.CreationTime == nil},
 		{Value: p.GroupID, Omit: p.GroupID == nil},
-		{Value: p.GroupSequence},
+		{Value: p.GroupSequence, Omit: p.GroupSequence == nil},
 		{Value: p.ReplyToGroupID, Omit: p.ReplyToGroupID == nil},
 	})
 }

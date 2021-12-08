@@ -570,12 +570,17 @@ func (l *link) muxReceive(fr frames.PerformTransfer) error {
 		return err
 	}
 	debug(1, "deliveryID %d before push to receiver - deliveryCount : %d - linkCredit: %d, len(messages): %d, len(inflight): %d", l.msg.deliveryID, l.deliveryCount, l.linkCredit, len(l.Messages), l.receiver.inFlight.len())
-	// send to receiver, this should never block due to buffering
-	// and flow control.
+	// send to receiver
 	if receiverSettleModeValue(l.ReceiverSettleMode) == ModeSecond {
 		l.addUnsettled(&l.msg)
 	}
-	l.Messages <- l.msg
+	select {
+	case l.Messages <- l.msg:
+		// message received
+	case <-l.close:
+		// link is being closed
+		return l.err
+	}
 
 	debug(1, "deliveryID %d after push to receiver - deliveryCount : %d - linkCredit: %d, len(messages): %d, len(inflight): %d", l.msg.deliveryID, l.deliveryCount, l.linkCredit, len(l.Messages), l.receiver.inFlight.len())
 

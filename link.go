@@ -691,6 +691,7 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 		)
 
 		// send flow
+		// TODO: missing Available and session info
 		resp := &frames.PerformFlow{
 			Handle:        &l.Handle,
 			DeliveryCount: &deliveryCount,

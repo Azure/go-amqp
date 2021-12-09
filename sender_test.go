@@ -730,3 +730,61 @@ func TestSenderConnWriterError(t *testing.T) {
 		t.Fatalf("unexpected error type %T", err)
 	}
 }
+
+func TestSenderFlowFrameWithEcho(t *testing.T) {
+	linkCredit := uint32(1)
+	echo := make(chan struct{})
+	responder := func(req frames.FrameBody) ([]byte, error) {
+		b, err := senderFrameHandler(encoding.ModeUnsettled)(req)
+		if b != nil || err != nil {
+			return b, err
+		}
+		switch tt := req.(type) {
+		case *frames.PerformFlow:
+			defer func() { close(echo) }()
+			// here we receive the echo.  verify state
+			if id := *tt.Handle; id != 0 {
+				return nil, fmt.Errorf("unexpected Handle %d", id)
+			}
+			if dc := *tt.DeliveryCount; dc != 0 {
+				return nil, fmt.Errorf("unexpected DeliveryCount %d", dc)
+			}
+			if lc := *tt.LinkCredit; lc != linkCredit {
+				return nil, fmt.Errorf("unexpected LinkCredit %d", lc)
+			}
+			return nil, nil
+		default:
+			return nil, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+	netConn := mocks.NewNetConn(responder)
+
+	client, err := New(netConn)
+	require.NoError(t, err)
+
+	session, err := client.NewSession()
+	require.NoError(t, err)
+
+	sender, err := session.NewSender()
+	require.NoError(t, err)
+
+	nextIncomingID := uint32(1)
+	b, err := mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformFlow{
+		Handle:         &sender.link.Handle,
+		NextIncomingID: &nextIncomingID,
+		IncomingWindow: 100,
+		OutgoingWindow: 100,
+		NextOutgoingID: 1,
+		LinkCredit:     &linkCredit,
+		Echo:           true,
+	})
+	require.NoError(t, err)
+	netConn.SendFrame(b)
+
+	<-echo
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	err = sender.Close(ctx)
+	cancel()
+	require.NoError(t, err)
+	require.NoError(t, client.Close())
+}

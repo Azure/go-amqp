@@ -411,6 +411,7 @@ func TestSessionInvalidFlowFrame(t *testing.T) {
 func TestSessionFlowFrameWithEcho(t *testing.T) {
 	nextIncomingID := uint32(1)
 	const nextOutgoingID = 2
+	echo := make(chan struct{})
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {
 		case *mocks.AMQPProto:
@@ -420,6 +421,7 @@ func TestSessionFlowFrameWithEcho(t *testing.T) {
 		case *frames.PerformBegin:
 			return mocks.PerformBegin(0)
 		case *frames.PerformFlow:
+			defer func() { close(echo) }()
 			// here we receive the echo.  verify state
 			if id := *tt.NextIncomingID; id != nextOutgoingID {
 				return nil, fmt.Errorf("unexpected NextIncomingID %d", id)
@@ -458,6 +460,7 @@ func TestSessionFlowFrameWithEcho(t *testing.T) {
 	require.NoError(t, err)
 	netConn.SendFrame(b)
 
+	<-echo
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	err = session.Close(ctx)
 	cancel()

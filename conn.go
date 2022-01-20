@@ -248,7 +248,7 @@ func dialConn(addr string, opts ...ConnOption) (*conn, error) {
 	host, port := u.Hostname(), u.Port()
 	if port == "" {
 		port = "5672"
-		if u.Scheme == "amqps" {
+		if u.Scheme == "amqps" || u.Scheme == "amqp+ssl" {
 			port = "5671"
 		}
 	}
@@ -275,7 +275,7 @@ func dialConn(addr string, opts ...ConnOption) (*conn, error) {
 	switch u.Scheme {
 	case "amqp", "":
 		err = c.dialer.NetDialerDial(c, host, port)
-	case "amqps":
+	case "amqps", "amqp+ssl":
 		c.initTLSConfig()
 		c.tlsNegotiation = false
 		err = c.dialer.TLSDialWithDialer(c, host, port)

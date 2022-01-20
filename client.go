@@ -20,8 +20,8 @@ type Client struct {
 
 // Dial connects to an AMQP server.
 //
-// If the addr includes a scheme, it must be "amqp" or "amqps".
-// If no port is provided, 5672 will be used for "amqp" and 5671 for "amqps".
+// If the addr includes a scheme, it must be "amqp", "amqps", or "amqp+ssl".
+// If no port is provided, 5672 will be used for "amqp" and 5671 for "amqps" or "amqp+ssl".
 //
 // If username and password information is not empty it's used as SASL PLAIN
 // credentials, equal to passing ConnSASLPlain option.

@@ -223,7 +223,7 @@ func (m *Message) Unmarshal(r *buffer.Buffer) error {
 	// loop, decoding sections until bytes have been consumed
 	for r.Len() > 0 {
 		// determine type
-		type_, err := encoding.PeekMessageType(r.Bytes())
+		type_, headerLength, err := encoding.PeekMessageType(r.Bytes())
 		if err != nil {
 			return err
 		}
@@ -254,7 +254,7 @@ func (m *Message) Unmarshal(r *buffer.Buffer) error {
 			section = &m.ApplicationProperties
 
 		case encoding.TypeCodeApplicationData:
-			r.Skip(3)
+			r.Skip(int(headerLength))
 
 			var data []byte
 			err = encoding.Unmarshal(r, &data)
@@ -276,7 +276,7 @@ func (m *Message) Unmarshal(r *buffer.Buffer) error {
 		}
 
 		if discardHeader {
-			r.Skip(3)
+			r.Skip(int(headerLength))
 		}
 
 		err = encoding.Unmarshal(r, section)

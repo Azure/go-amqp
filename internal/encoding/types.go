@@ -410,38 +410,38 @@ func (f *Filter) Unmarshal(r *buffer.Buffer) error {
 
 // peekMessageType reads the message type without
 // modifying any data.
-func PeekMessageType(buf []byte) (uint8, error) {
+func PeekMessageType(buf []byte) (uint8, uint8, error) {
 	if len(buf) < 3 {
-		return 0, errors.New("invalid message")
+		return 0, 0, errors.New("invalid message")
 	}
 
 	if buf[0] != 0 {
-		return 0, fmt.Errorf("invalid composite header %02x", buf[0])
+		return 0, 0, fmt.Errorf("invalid composite header %02x", buf[0])
 	}
 
 	// copied from readUlong to avoid allocations
 	t := AMQPType(buf[1])
 	if t == TypeCodeUlong0 {
-		return 0, nil
+		return 0, 2, nil
 	}
 
 	if t == TypeCodeSmallUlong {
 		if len(buf[2:]) == 0 {
-			return 0, errors.New("invalid ulong")
+			return 0, 0, errors.New("invalid ulong")
 		}
-		return buf[2], nil
+		return buf[2], 3, nil
 	}
 
 	if t != TypeCodeUlong {
-		return 0, fmt.Errorf("invalid type for uint32 %02x", t)
+		return 0, 0, fmt.Errorf("invalid type for uint32 %02x", t)
 	}
 
 	if len(buf[2:]) < 8 {
-		return 0, errors.New("invalid ulong")
+		return 0, 0, errors.New("invalid ulong")
 	}
 	v := binary.BigEndian.Uint64(buf[2:10])
 
-	return uint8(v), nil
+	return uint8(v), 10, nil
 }
 
 func tryReadNull(r *buffer.Buffer) bool {

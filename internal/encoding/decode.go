@@ -178,7 +178,7 @@ func Unmarshal(r *buffer.Buffer, i interface{}) error {
 	case *map[Symbol]interface{}:
 		return (*mapSymbolAny)(t).Unmarshal(r)
 	case *DeliveryState:
-		type_, err := PeekMessageType(r.Bytes())
+		type_, _, err := PeekMessageType(r.Bytes())
 		if err != nil {
 			return err
 		}

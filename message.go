@@ -82,15 +82,16 @@ type Message struct {
 	// simple types only, that is, excluding map, list, and array types.
 
 	// Data payloads.
-	Data [][]byte
 	// A data section contains opaque binary data.
-	// TODO: this could be data(s), amqp-sequence(s), amqp-value rather than single data:
-	// "The body consists of one of the following three choices: one or more data
-	//  sections, one or more amqp-sequence sections, or a single amqp-value section."
+	Data [][]byte
 
 	// Value payload.
-	Value interface{}
 	// An amqp-value section contains a single AMQP value.
+	Value interface{}
+
+	// Sequence will contain AMQP sequence sections from the body of the message.
+	// An amqp-sequence section contains an AMQP sequence.
+	Sequence [][]interface{}
 
 	// The footer section is used for details about the message or delivery which
 	// can only be calculated or evaluated once the whole bare message has been
@@ -202,6 +203,18 @@ func (m *Message) Marshal(wr *buffer.Buffer) error {
 		}
 	}
 
+	if m.Sequence != nil {
+		// the body can basically be one of three different types (value, data or sequence).
+		// When it's sequence it's actually _several_ sequence sections, one for each sub-array.
+		for _, v := range m.Sequence {
+			encoding.WriteDescriptor(wr, encoding.TypeCodeAMQPSequence)
+			err := encoding.Marshal(wr, v)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
 	if m.Footer != nil {
 		encoding.WriteDescriptor(wr, encoding.TypeCodeFooter)
 		err := encoding.Marshal(wr, m.Footer)
@@ -263,6 +276,18 @@ func (m *Message) Unmarshal(r *buffer.Buffer) error {
 			}
 
 			m.Data = append(m.Data, data)
+			continue
+
+		case encoding.TypeCodeAMQPSequence:
+			r.Skip(int(headerLength))
+
+			var data []interface{}
+			err = encoding.Unmarshal(r, &data)
+			if err != nil {
+				return err
+			}
+
+			m.Sequence = append(m.Sequence, data)
 			continue
 
 		case encoding.TypeCodeFooter:

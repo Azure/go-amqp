@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/stretchr/testify/require"
 )
 
 var helperTo = "ActiveMQ.DLQ"
@@ -58,4 +59,25 @@ func TestMessageUnmarshaling(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMessageWithSequence(t *testing.T) {
+	m := &Message{
+		Sequence: [][]interface{}{
+			{"hello1", "world1", 11, 12, 13},
+			{"hello2", "world2", 21, 22, 23},
+		},
+	}
+
+	bytes, err := m.MarshalBinary()
+	require.NoError(t, err)
+
+	newM := &Message{}
+	err = newM.UnmarshalBinary(bytes)
+	require.NoError(t, err)
+
+	require.EqualValues(t, [][]interface{}{
+		{"hello1", "world1", int64(11), int64(12), int64(13)},
+		{"hello2", "world2", int64(21), int64(22), int64(23)},
+	}, newM.Sequence)
 }

@@ -363,9 +363,6 @@ func (c *conn) Close() error {
 	if errors.As(err, &connErr) && connErr.inner == nil {
 		// an empty ConnectionError means the connection was closed by the caller
 		// or as requested by the peer and no error was provided in the close frame.
-		// TODO: unclear if returning an error here is valuable.  it's not really
-		// actionable and we have to use this funky heuristic to skip returning an
-		// error if closing was clean.
 		return nil
 	}
 	return err

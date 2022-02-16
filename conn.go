@@ -391,6 +391,7 @@ func (c *conn) close() {
 	err := c.net.Close()
 	switch {
 	// conn.err already set
+	// TODO: err info is lost, log it?
 	case c.err != nil:
 
 	// conn.err not set and c.net.Close() returned a non-nil error

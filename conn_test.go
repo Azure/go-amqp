@@ -358,11 +358,11 @@ func TestServerSideClose(t *testing.T) {
 	// wait a bit for connReader to read from the mock
 	time.Sleep(100 * time.Millisecond)
 	err = conn.Close()
-	var ee *Error
-	if !errors.As(err, &ee) {
+	var connErr *ConnectionError
+	if !errors.As(err, &connErr) {
 		t.Fatalf("unexpected error type %T", err)
 	}
-	require.Equal(t, encoding.ErrorCondition("Close"), ee.Condition)
+	require.Equal(t, "*Error{Condition: Close, Description: mock server error, Info: map[]}", connErr.Error())
 }
 
 func TestKeepAlives(t *testing.T) {
@@ -408,7 +408,11 @@ func TestConnReaderError(t *testing.T) {
 	netConn.ReadErr <- errors.New("failed")
 	// wait a bit for the connReader goroutine to read from the mock
 	time.Sleep(100 * time.Millisecond)
-	require.Error(t, conn.Close())
+	err = conn.Close()
+	var connErr *ConnectionError
+	if !errors.As(err, &connErr) {
+		t.Fatalf("unexpected error type %T", err)
+	}
 }
 
 func TestConnWriterError(t *testing.T) {
@@ -423,5 +427,9 @@ func TestConnWriterError(t *testing.T) {
 	}))
 	// wait a bit for connReader to read from the mock
 	time.Sleep(100 * time.Millisecond)
-	require.Error(t, conn.Close())
+	err = conn.Close()
+	var connErr *ConnectionError
+	if !errors.As(err, &connErr) {
+		t.Fatalf("unexpected error type %T", err)
+	}
 }

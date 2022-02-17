@@ -61,8 +61,6 @@ func (e *DetachError) Error() string {
 
 // Errors
 var (
-	ErrTimeout = errors.New("amqp: timeout waiting for response")
-
 	// ErrConnClosed is propagated to Session and Senders/Receivers
 	// when Client.Close() is called or the server closes the connection
 	// without specifying an error.

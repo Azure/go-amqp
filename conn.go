@@ -866,7 +866,7 @@ func (c *conn) readProtoHeader() (protoHeader, error) {
 	case fr := <-c.rxFrame:
 		return p, fmt.Errorf("readProtoHeader: unexpected frame %#v", fr)
 	case <-deadline:
-		return p, ErrTimeout
+		return p, errors.New("amqp: timeout waiting for response")
 	}
 }
 
@@ -1035,7 +1035,7 @@ func (c *conn) readFrame() (frames.Frame, error) {
 	case p := <-c.rxProto:
 		return fr, fmt.Errorf("unexpected protocol header %#v", p)
 	case <-deadline:
-		return fr, ErrTimeout
+		return fr, errors.New("amqp: timeout waiting for response")
 	}
 }
 

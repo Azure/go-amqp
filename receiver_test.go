@@ -356,7 +356,7 @@ func TestReceiveSuccessModeFirst(t *testing.T) {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	// wait for the link to unpause as credit should now be available
-	assert.NoError(t, waitForLink(r.link, false))
+	require.NoError(t, waitForLink(r.link, false))
 	// link credit should be 1
 	if c := r.link.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
@@ -409,7 +409,7 @@ func TestReceiveSuccessModeSecondAccept(t *testing.T) {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	// wait for the link to pause as we've consumed all available credit
-	assert.NoError(t, waitForLink(r.link, true))
+	require.NoError(t, waitForLink(r.link, true))
 	// link credit must be zero since we only started with 1
 	if c := r.link.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
@@ -430,7 +430,7 @@ func TestReceiveSuccessModeSecondAccept(t *testing.T) {
 	}
 	cancel()
 	// wait for the link to unpause as credit should now be available
-	assert.NoError(t, waitForLink(r.link, false))
+	require.NoError(t, waitForLink(r.link, false))
 	// link credit should be back to 1
 	if c := r.link.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
@@ -483,7 +483,7 @@ func TestReceiveSuccessModeSecondReject(t *testing.T) {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	// wait for the link to pause as we've consumed all available credit
-	assert.NoError(t, waitForLink(r.link, true))
+	require.NoError(t, waitForLink(r.link, true))
 	// link credit must be zero since we only started with 1
 	if c := r.link.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
@@ -503,7 +503,7 @@ func TestReceiveSuccessModeSecondReject(t *testing.T) {
 	}
 	cancel()
 	// wait for the link to unpause as credit should now be available
-	assert.NoError(t, waitForLink(r.link, false))
+	require.NoError(t, waitForLink(r.link, false))
 	// link credit should be back to 1
 	if c := r.link.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
@@ -551,7 +551,7 @@ func TestReceiveSuccessModeSecondRelease(t *testing.T) {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	// wait for the link to pause as we've consumed all available credit
-	assert.NoError(t, waitForLink(r.link, true))
+	require.NoError(t, waitForLink(r.link, true))
 	// link credit must be zero since we only started with 1
 	if c := r.link.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
@@ -571,7 +571,7 @@ func TestReceiveSuccessModeSecondRelease(t *testing.T) {
 	}
 	cancel()
 	// wait for the link to unpause as credit should now be available
-	assert.NoError(t, waitForLink(r.link, false))
+	require.NoError(t, waitForLink(r.link, false))
 	// link credit should be back to 1
 	if c := r.link.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
@@ -624,7 +624,7 @@ func TestReceiveSuccessModeSecondModify(t *testing.T) {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	// wait for the link to pause as we've consumed all available credit
-	assert.NoError(t, waitForLink(r.link, true))
+	require.NoError(t, waitForLink(r.link, true))
 	// link credit must be zero since we only started with 1
 	if c := r.link.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
@@ -646,7 +646,7 @@ func TestReceiveSuccessModeSecondModify(t *testing.T) {
 	}
 	cancel()
 	// wait for the link to unpause as credit should now be available
-	assert.NoError(t, waitForLink(r.link, false))
+	require.NoError(t, waitForLink(r.link, false))
 	// link credit should be back to 1
 	if c := r.link.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
@@ -733,7 +733,7 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	// wait for the link to pause as we've consumed all available credit
-	assert.NoError(t, waitForLink(r.link, true))
+	require.NoError(t, waitForLink(r.link, true))
 	// link credit must be zero since we only started with 1
 	if c := r.link.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
@@ -754,7 +754,7 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 	}
 	cancel()
 	// wait for the link to unpause as credit should now be available
-	assert.NoError(t, waitForLink(r.link, false))
+	require.NoError(t, waitForLink(r.link, false))
 	// link credit should be back to 1
 	if c := r.link.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
@@ -988,7 +988,7 @@ func TestReceiveSuccessAcceptFails(t *testing.T) {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	// wait for the link to pause as we've consumed all available credit
-	assert.NoError(t, waitForLink(r.link, true))
+	require.NoError(t, waitForLink(r.link, true))
 	// link credit must be zero since we only started with 1
 	if c := r.link.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
@@ -1219,4 +1219,179 @@ func TestReceiverCloseOnUnsettledWithPending(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	require.NoError(t, r.Close(ctx))
 	cancel()
+}
+
+func TestReceiverLinkCreditRefresh(t *testing.T) {
+	t.Skip("race with settling messages needs to be fixed first")
+	const credit = 2
+	const linkHandle = 0
+	deliveryID := uint32(1)
+	receivedFlow := make(chan struct{}, 1)
+	responder := func(req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(ModeSecond)(req)
+		if b != nil || err != nil {
+			return b, err
+		}
+		switch ff := req.(type) {
+		case *mocks.KeepAlive:
+			return nil, nil
+		case *frames.PerformFlow:
+			if *ff.NextIncomingID == deliveryID {
+				// this is the first flow frame, send our payload
+				return mocks.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
+			} else if *ff.LinkCredit == credit {
+				// this is the updated flow frame
+				receivedFlow <- struct{}{}
+			}
+			return nil, nil
+		case *frames.PerformDisposition:
+			return mocks.PerformDisposition(encoding.RoleSender, 0, ff.First, ff.Last, &encoding.StateAccepted{})
+		default:
+			return nil, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+	conn := mocks.NewNetConn(responder)
+	client, err := New(conn)
+	require.NoError(t, err)
+	session, err := client.NewSession()
+	require.NoError(t, err)
+	r, err := session.NewReceiver(LinkReceiverSettle(ModeSecond), LinkCredit(credit))
+	require.NoError(t, err)
+	// receive one message, verify link credit is 1
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	msg, err := r.Receive(ctx)
+	cancel()
+	require.Equal(t, []byte("hello"), msg.Data[0])
+	if c := r.link.countUnsettled(); c != 1 {
+		t.Fatalf("unexpected unsettled count %d", c)
+	}
+	// link credit should be 1
+	if c := r.link.linkCredit; c != 1 {
+		t.Fatalf("unexpected link credit %d", c)
+	}
+	// link is not paused
+	if p := r.link.Paused; p != 0 {
+		t.Fatal("expected link to be unpaused")
+	}
+	// accept message, verify link credit is 2 and updated flow frame was sent
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+	err = r.AcceptMessage(ctx, msg)
+	cancel()
+	require.NoError(t, err)
+	select {
+	case <-receivedFlow:
+		// received updated flow frame
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for flow frame")
+	}
+	if c := r.link.countUnsettled(); c != 0 {
+		t.Fatalf("unexpected unsettled count %d", c)
+	}
+	// link credit should be 1
+	if c := r.link.linkCredit; c != 2 {
+		t.Fatalf("unexpected link credit %d", c)
+	}
+	// link is not paused
+	if p := r.link.Paused; p != 0 {
+		t.Fatal("expected link to be unpaused")
+	}
+}
+
+func TestReceiverIssueCredit(t *testing.T) {
+	receivedFlow := make(chan struct{}, 1)
+	responder := func(req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(ModeSecond)(req)
+		if b != nil || err != nil {
+			return b, err
+		}
+		switch req.(type) {
+		case *mocks.KeepAlive:
+			return nil, nil
+		case *frames.PerformFlow:
+			receivedFlow <- struct{}{}
+			return nil, nil
+		default:
+			return nil, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+	conn := mocks.NewNetConn(responder)
+	client, err := New(conn)
+	require.NoError(t, err)
+	session, err := client.NewSession()
+	require.NoError(t, err)
+	r, err := session.NewReceiver(LinkReceiverSettle(ModeSecond), LinkWithManualCredits())
+	require.NoError(t, err)
+	err = r.IssueCredit(100)
+	require.NoError(t, err)
+	select {
+	case <-receivedFlow:
+		// received flow frame
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for flow frame")
+	}
+	require.Equal(t, uint32(100), r.link.linkCredit)
+}
+
+func TestReceiverDrainCredit(t *testing.T) {
+	deliveryID := uint32(1)
+	linkHandle := uint32(0)
+	deliveryCount := uint32(0)
+	availableCredit := uint32(0)
+	receivedFlow := make(chan struct{}, 1)
+	responder := func(req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(ModeSecond)(req)
+		if b != nil || err != nil {
+			return b, err
+		}
+		switch ff := req.(type) {
+		case *mocks.KeepAlive:
+			return nil, nil
+		case *frames.PerformFlow:
+			receivedFlow <- struct{}{}
+			if ff.Drain {
+				// advance delivery count and ack the drain
+				deliveryCount += availableCredit
+				return mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformFlow{
+					NextIncomingID: &deliveryID,
+					Handle:         &linkHandle,
+					DeliveryCount:  &deliveryCount,
+					Drain:          true,
+				})
+			} else {
+				availableCredit = *ff.LinkCredit
+			}
+			return nil, nil
+		default:
+			return nil, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+	conn := mocks.NewNetConn(responder)
+	client, err := New(conn)
+	require.NoError(t, err)
+	session, err := client.NewSession()
+	require.NoError(t, err)
+	r, err := session.NewReceiver(LinkReceiverSettle(ModeSecond), LinkWithManualCredits())
+	require.NoError(t, err)
+	err = r.IssueCredit(100)
+	require.NoError(t, err)
+	select {
+	case <-receivedFlow:
+		// received flow frame
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for flow frame")
+	}
+	require.Equal(t, uint32(100), r.link.linkCredit)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	err = r.DrainCredit(ctx)
+	cancel()
+	require.NoError(t, err)
+	select {
+	case <-receivedFlow:
+		// received flow frame
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for flow frame")
+	}
+	require.Equal(t, uint32(0), r.link.linkCredit)
+	// TODO: bug?
+	//require.Equal(t, deliveryCount, r.link.deliveryCount)
 }

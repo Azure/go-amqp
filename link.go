@@ -304,69 +304,59 @@ func (l *link) setSettleModes(resp *frames.PerformAttach) error {
 	return nil
 }
 
-// doFlow handles the logical 'flow' event for a link.
-// For receivers it will send (if needed) an AMQP flow frame, via `muxFlow`. If a fatal error
-// occurs it will be set in `l.err` and 'ok' will be false.
-// For senders it will indicate if we should try to send any outgoing transfers (the logical
-// equivalent of a flow for a sender) by returning true for 'enableOutgoingTransfers'.
-func (l *link) doFlow() (ok bool, enableOutgoingTransfers bool) {
+func (l *link) mux() {
+	defer l.muxDetach()
+
 	var (
 		isReceiver = l.receiver != nil
 		isSender   = !isReceiver
 	)
 
-	switch {
-	// enable outgoing transfers case if sender and credits are available
-	case isSender && l.linkCredit > 0:
-		debug(1, "Link Mux isSender: credit: %d, deliveryCount: %d, messages: %d, unsettled: %d", l.linkCredit, l.deliveryCount, len(l.Messages), l.countUnsettled())
-		return true, true
-
-	case isReceiver && l.receiver.manualCreditor != nil:
-		drain, credits := l.receiver.manualCreditor.FlowBits(l.linkCredit)
-
-		if drain || credits > 0 {
-			debug(1, "FLOW Link Mux (manual): source: %s, inflight: %d, credit: %d, creditsToAdd: %d, drain: %v, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s",
-				l.Source.Address, l.receiver.inFlight.len(), l.linkCredit, credits, drain, l.deliveryCount, len(l.Messages), l.countUnsettled(), l.receiver.maxCredit, l.ReceiverSettleMode.String())
-
-			// send a flow frame.
-			l.err = l.muxFlow(credits, drain)
-		}
-
-	// if receiver && half maxCredits have been processed, send more credits
-	case isReceiver && l.linkCredit+uint32(l.countUnsettled()) <= l.receiver.maxCredit/2:
-		debug(1, "FLOW Link Mux half: source: %s, inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s", l.Source.Address, l.receiver.inFlight.len(), l.linkCredit, l.deliveryCount, len(l.Messages), l.countUnsettled(), l.receiver.maxCredit, l.ReceiverSettleMode.String())
-
-		linkCredit := l.receiver.maxCredit - uint32(l.countUnsettled())
-		l.err = l.muxFlow(linkCredit, false)
-
-		if l.err != nil {
-			return false, false
-		}
-		atomic.StoreUint32(&l.Paused, 0)
-
-	case isReceiver && l.linkCredit == 0:
-		debug(1, "PAUSE Link Mux pause: inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s", l.receiver.inFlight.len(), l.linkCredit, l.deliveryCount, len(l.Messages), l.countUnsettled(), l.receiver.maxCredit, l.ReceiverSettleMode.String())
-		atomic.StoreUint32(&l.Paused, 1)
-	}
-
-	return true, false
-}
-
-func (l *link) mux() {
-	defer l.muxDetach()
-
 Loop:
 	for {
 		var outgoingTransfers chan frames.PerformTransfer
 
-		ok, enableOutgoingTransfers := l.doFlow()
-
-		if !ok {
-			return
-		}
-
-		if enableOutgoingTransfers {
+		switch {
+		// enable outgoing transfers case if sender and credits are available
+		case isSender && l.linkCredit > 0:
+			debug(1, "Link Mux isSender: credit: %d, deliveryCount: %d, messages: %d, unsettled: %d", l.linkCredit, l.deliveryCount, len(l.Messages), l.countUnsettled())
 			outgoingTransfers = l.Transfers
+
+		case isReceiver && l.receiver.manualCreditor != nil:
+			// TODO: fix the initial case to behave the same as the non-manual case
+			drain, credits := l.receiver.manualCreditor.FlowBits(l.linkCredit)
+
+			if drain || credits > 0 {
+				debug(1, "FLOW Link Mux (manual): source: %s, inflight: %d, credit: %d, creditsToAdd: %d, drain: %v, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s",
+					l.Source.Address, l.receiver.inFlight.len(), l.linkCredit, credits, drain, l.deliveryCount, len(l.Messages), l.countUnsettled(), l.receiver.maxCredit, l.ReceiverSettleMode.String())
+
+				// send a flow frame.
+				l.err = l.muxFlow(credits, drain)
+				// if muxFlow() decides to send a flow frame, it must "pump" l.RX to keep the
+				// session mux unblocked.  in the event that a frame is received at this point
+				// we must restart the loop so that we can reevaluate our link credit.
+				continue Loop
+			}
+
+		// if receiver && half maxCredits have been processed, send more credits
+		case isReceiver && l.linkCredit+uint32(l.countUnsettled()) <= l.receiver.maxCredit/2:
+			debug(1, "FLOW Link Mux half: source: %s, inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s", l.Source.Address, l.receiver.inFlight.len(), l.linkCredit, l.deliveryCount, len(l.Messages), l.countUnsettled(), l.receiver.maxCredit, l.ReceiverSettleMode.String())
+
+			linkCredit := l.receiver.maxCredit - uint32(l.countUnsettled())
+			l.err = l.muxFlow(linkCredit, false)
+
+			if l.err != nil {
+				return
+			}
+			atomic.StoreUint32(&l.Paused, 0)
+			// if muxFlow() decides to send a flow frame, it must "pump" l.RX to keep the
+			// session mux unblocked.  in the event that a frame is received at this point
+			// we must restart the loop so that we can reevaluate our link credit.
+			continue Loop
+
+		case isReceiver && l.linkCredit == 0:
+			debug(1, "PAUSE Link Mux pause: inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s", l.receiver.inFlight.len(), l.linkCredit, l.deliveryCount, len(l.Messages), l.countUnsettled(), l.receiver.maxCredit, l.ReceiverSettleMode.String())
+			atomic.StoreUint32(&l.Paused, 1)
 		}
 
 		select {

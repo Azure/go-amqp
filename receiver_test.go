@@ -1261,6 +1261,7 @@ func TestReceiverLinkCreditRefresh(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	msg, err := r.Receive(ctx)
 	cancel()
+	require.NoError(t, err)
 	require.Equal(t, []byte("hello"), msg.Data[0])
 	if c := r.link.countUnsettled(); c != 1 {
 		t.Fatalf("unexpected unsettled count %d", c)

@@ -332,6 +332,11 @@ Loop:
 
 				// send a flow frame.
 				l.err = l.muxFlow(credits, drain)
+				// TODO: consolidate error checks
+				if l.err != nil {
+					return
+				}
+
 				// if muxFlow() decides to send a flow frame, it must "pump" l.RX to keep the
 				// session mux unblocked.  in the event that a frame is received at this point
 				// we must restart the loop so that we can reevaluate our link credit.

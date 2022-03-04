@@ -144,9 +144,11 @@ func TestSenderSendOnConnClosed(t *testing.T) {
 	require.NotNil(t, snd)
 
 	require.NoError(t, client.Close())
-	// sending on a closed sender returns ErrLinkClosed
-	if err = snd.Send(context.Background(), NewMessage([]byte("failed"))); !errors.Is(err, ErrConnClosed) {
-		t.Fatalf("unexpected error %T", err)
+	// sending on a closed sender returns a ConnectionError
+	err = snd.Send(context.Background(), NewMessage([]byte("failed")))
+	var connErr *ConnectionError
+	if !errors.As(err, &connErr) {
+		t.Fatalf("unexpected error type %T", err)
 	}
 	require.NoError(t, client.Close())
 }
@@ -671,4 +673,60 @@ func TestSenderSendMultiTransfer(t *testing.T) {
 	require.Equal(t, 8, transferCount)
 
 	require.NoError(t, client.Close())
+}
+
+func TestSenderConnReaderError(t *testing.T) {
+	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
+
+	client, err := New(netConn)
+	require.NoError(t, err)
+
+	session, err := client.NewSession()
+	require.NoError(t, err)
+	snd, err := session.NewSender()
+	require.NoError(t, err)
+	require.NotNil(t, snd)
+
+	go func() {
+		// trigger some kind of error
+		netConn.ReadErr <- errors.New("failed")
+	}()
+
+	err = snd.Send(context.Background(), NewMessage([]byte("failed")))
+	var connErr *ConnectionError
+	if !errors.As(err, &connErr) {
+		t.Fatalf("unexpected error type %T", err)
+	}
+
+	err = client.Close()
+	if !errors.As(err, &connErr) {
+		t.Fatalf("unexpected error type %T", err)
+	}
+}
+
+func TestSenderConnWriterError(t *testing.T) {
+	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
+
+	client, err := New(netConn)
+	require.NoError(t, err)
+
+	session, err := client.NewSession()
+	require.NoError(t, err)
+	snd, err := session.NewSender()
+	require.NoError(t, err)
+	require.NotNil(t, snd)
+
+	// simulate some connWriter error
+	netConn.WriteErr = errors.New("failed")
+
+	err = snd.Send(context.Background(), NewMessage([]byte("failed")))
+	var connErr *ConnectionError
+	if !errors.As(err, &connErr) {
+		t.Fatalf("unexpected error type %T", err)
+	}
+
+	err = client.Close()
+	if !errors.As(err, &connErr) {
+		t.Fatalf("unexpected error type %T", err)
+	}
 }

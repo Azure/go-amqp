@@ -175,7 +175,11 @@ func TestClientNewSession(t *testing.T) {
 	require.NoError(t, client.Close())
 	// creating a session after the connection has been closed returns nothing
 	session, err = client.NewSession()
-	require.Equal(t, ErrConnClosed, err)
+	var connErr *ConnectionError
+	if !errors.As(err, &connErr) {
+		t.Fatalf("unexpected error type %T", err)
+	}
+	require.Equal(t, "amqp: connection closed", connErr.Error())
 	require.Nil(t, session)
 }
 

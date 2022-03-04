@@ -164,12 +164,14 @@ func TestReceiverOnConnClosed(t *testing.T) {
 	}()
 
 	require.NoError(t, client.Close())
-	if err = <-errChan; !errors.Is(err, ErrConnClosed) {
-		t.Fatalf("unexpected error %v", err)
+	err = <-errChan
+	var connErr *ConnectionError
+	if !errors.As(err, &connErr) {
+		t.Fatalf("unexpected error type %T", err)
 	}
 	_, err = r.Receive(context.Background())
-	if !errors.Is(err, ErrConnClosed) {
-		t.Fatalf("unexpected error %v", err)
+	if !errors.As(err, &connErr) {
+		t.Fatalf("unexpected error type %T", err)
 	}
 }
 
@@ -998,8 +1000,9 @@ func TestReceiveSuccessAcceptFails(t *testing.T) {
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	err = r.AcceptMessage(ctx, msg)
 	cancel()
-	if !errors.Is(err, ErrConnClosed) {
-		t.Fatalf("unexpected error %v", err)
+	var connErr *ConnectionError
+	if !errors.As(err, &connErr) {
+		t.Fatalf("unexpected error type %T", err)
 	}
 	if c := r.link.countUnsettled(); c != 1 {
 		t.Fatalf("unexpected unsettled count %d", c)
@@ -1219,4 +1222,65 @@ func TestReceiverCloseOnUnsettledWithPending(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	require.NoError(t, r.Close(ctx))
 	cancel()
+}
+
+func TestReceiverConnReaderError(t *testing.T) {
+	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ModeFirst))
+	client, err := New(conn)
+	assert.NoError(t, err)
+	session, err := client.NewSession()
+	assert.NoError(t, err)
+	r, err := session.NewReceiver()
+	assert.NoError(t, err)
+
+	errChan := make(chan error)
+	go func() {
+		_, err := r.Receive(context.Background())
+		errChan <- err
+	}()
+
+	// trigger some kind of error
+	conn.ReadErr <- errors.New("failed")
+
+	err = <-errChan
+	var connErr *ConnectionError
+	if !errors.As(err, &connErr) {
+		t.Fatalf("unexpected error type %T", err)
+	}
+	_, err = r.Receive(context.Background())
+	if !errors.As(err, &connErr) {
+		t.Fatalf("unexpected error type %T", err)
+	}
+	require.Error(t, conn.Close())
+}
+
+func TestReceiverConnWriterError(t *testing.T) {
+	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ModeFirst))
+	client, err := New(conn)
+	assert.NoError(t, err)
+	session, err := client.NewSession()
+	assert.NoError(t, err)
+	r, err := session.NewReceiver()
+	assert.NoError(t, err)
+
+	errChan := make(chan error)
+	go func() {
+		_, err := r.Receive(context.Background())
+		errChan <- err
+	}()
+
+	conn.WriteErr = errors.New("failed")
+	// trigger the write error
+	conn.SendKeepAlive()
+
+	err = <-errChan
+	var connErr *ConnectionError
+	if !errors.As(err, &connErr) {
+		t.Fatalf("unexpected error type %T", err)
+	}
+	_, err = r.Receive(context.Background())
+	if !errors.As(err, &connErr) {
+		t.Fatalf("unexpected error type %T", err)
+	}
+	require.Error(t, conn.Close())
 }

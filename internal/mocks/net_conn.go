@@ -40,6 +40,11 @@ type NetConn struct {
 	// from the call to NetConn.Read.
 	ReadErr chan error
 
+	// WriteErr is used to simulate a connWriter error.
+	// The error set here is returned from the call to NetConn.Write.
+	// After the error is sent, its value is set to nil.
+	WriteErr error
+
 	resp      func(frames.FrameBody) ([]byte, error)
 	readDL    *time.Timer
 	readData  chan []byte
@@ -113,6 +118,11 @@ func (n *NetConn) Write(b []byte) (int, error) {
 		return 0, errors.New("mock connection was closed")
 	default:
 		// not closed yet
+	}
+
+	if n.WriteErr != nil {
+		defer func() { n.WriteErr = nil }()
+		return 0, n.WriteErr
 	}
 
 	frame, err := decodeFrame(b)

@@ -708,8 +708,9 @@ func TestIntegrationClose(t *testing.T) {
 		}
 
 		msg, err := receiver.Receive(context.Background())
-		if err != amqp.ErrConnClosed {
-			t.Fatalf("Expected ErrConnClosed from receiver.Receiver, got: %+v", err)
+		var connErr *amqp.ConnectionError
+		if !errors.As(err, &connErr) {
+			t.Fatalf("unexpected error type %T", err)
 			return
 		}
 		if msg != nil {

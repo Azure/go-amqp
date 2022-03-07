@@ -701,6 +701,7 @@ func (c *conn) connWriter() {
 	var err error
 	for {
 		if err != nil {
+			debug(1, "connWriter error: %v", err)
 			c.connErr <- err
 			return
 		}

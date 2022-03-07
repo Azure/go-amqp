@@ -479,7 +479,7 @@ func (c *conn) mux() {
 			case *frames.PerformEnd:
 				session, ok = sessionsByRemoteChannel[fr.Channel]
 				if !ok {
-					c.err = fmt.Errorf("%T: didn't find channel %d in sessionsByRemoteChannel", fr.Body, fr.Channel)
+					c.err = fmt.Errorf("%T: didn't find channel %d in sessionsByRemoteChannel (PerformEnd)", fr.Body, fr.Channel)
 					break
 				}
 				// we MUST remove the remote channel from our map as soon as we receive

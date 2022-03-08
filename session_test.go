@@ -20,6 +20,8 @@ func TestSessionClose(t *testing.T) {
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return mocks.PerformOpen("container")
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		case *frames.PerformBegin:
 			b, err := mocks.PerformBegin(uint16(channelNum))
 			if err != nil {
@@ -67,6 +69,8 @@ func TestSessionServerClose(t *testing.T) {
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return mocks.PerformOpen("container")
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		case *frames.PerformBegin:
 			return mocks.PerformBegin(0)
 		case *frames.PerformEnd:
@@ -105,6 +109,8 @@ func TestSessionCloseTimeout(t *testing.T) {
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return mocks.PerformOpen("container")
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		case *frames.PerformBegin:
 			return mocks.PerformBegin(0)
 		case *frames.PerformEnd:
@@ -181,6 +187,8 @@ func TestSessionNewReceiverBatchingOneCredit(t *testing.T) {
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return mocks.PerformOpen("container")
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		case *frames.PerformBegin:
 			return mocks.PerformBegin(0)
 		case *frames.PerformEnd:
@@ -222,6 +230,8 @@ func TestSessionNewReceiverBatchingEnabled(t *testing.T) {
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return mocks.PerformOpen("container")
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		case *frames.PerformBegin:
 			return mocks.PerformBegin(0)
 		case *frames.PerformEnd:
@@ -263,6 +273,8 @@ func TestSessionNewReceiverMismatchedLinkName(t *testing.T) {
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return mocks.PerformOpen("container")
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		case *frames.PerformBegin:
 			return mocks.PerformBegin(0)
 		case *frames.PerformEnd:
@@ -323,6 +335,8 @@ func TestSessionNewSenderMismatchedLinkName(t *testing.T) {
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return mocks.PerformOpen("container")
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		case *frames.PerformBegin:
 			return mocks.PerformBegin(0)
 		case *frames.PerformEnd:
@@ -466,6 +480,8 @@ func TestSessionFlowFrameWithEcho(t *testing.T) {
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return mocks.PerformOpen("container")
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		case *frames.PerformBegin:
 			return mocks.PerformBegin(0)
 		case *frames.PerformFlow:
@@ -525,6 +541,8 @@ func TestSessionInvalidAttachDeadlock(t *testing.T) {
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return mocks.PerformOpen("container")
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		case *frames.PerformBegin:
 			return mocks.PerformBegin(0)
 		case *frames.PerformEnd:

@@ -50,6 +50,8 @@ func TestSenderMethodsNoSend(t *testing.T) {
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return mocks.PerformOpen("container")
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		case *frames.PerformBegin:
 			return mocks.PerformBegin(0)
 		case *frames.PerformEnd:
@@ -222,6 +224,8 @@ func TestSenderAttachError(t *testing.T) {
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return mocks.PerformOpen("container")
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		case *frames.PerformBegin:
 			return mocks.PerformBegin(0)
 		case *frames.PerformEnd:
@@ -455,6 +459,8 @@ func TestSenderSendRejectedNoDetach(t *testing.T) {
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return mocks.PerformOpen("container")
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		case *frames.PerformBegin:
 			return mocks.PerformBegin(0)
 		case *frames.PerformEnd:
@@ -585,6 +591,8 @@ func TestSenderSendMsgTooBig(t *testing.T) {
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return mocks.PerformOpen("container")
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		case *frames.PerformBegin:
 			return mocks.PerformBegin(0)
 		case *frames.PerformEnd:
@@ -688,6 +696,8 @@ func TestSenderSendMultiTransfer(t *testing.T) {
 				IdleTimeout:  time.Minute,
 				MaxFrameSize: maxReceiverFrameSize, // really small max frame size
 			})
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		case *frames.PerformBegin:
 			return mocks.PerformBegin(0)
 		case *frames.PerformEnd:
@@ -798,8 +808,10 @@ func TestSenderConnWriterError(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, snd)
 
+	sendInitialFlowFrame(t, netConn, 0, 100)
+
 	// simulate some connWriter error
-	netConn.WriteErr = errors.New("failed")
+	netConn.WriteErr = func() error { return errors.New("failed") }
 
 	err = snd.Send(context.Background(), NewMessage([]byte("failed")))
 	var connErr *ConnectionError

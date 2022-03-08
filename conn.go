@@ -717,7 +717,7 @@ func (c *conn) connWriter() {
 		// keepalive timer
 		case <-keepalive:
 			debug(3, "sending keep-alive frame")
-			_, err = c.net.Write(keepaliveFrame)
+			_, err = c.netWriteWithRetry(keepaliveFrame)
 			// It would be slightly more efficient in terms of network
 			// resources to reset the timer each time a frame is sent.
 			// However, keepalives are small (8 bytes) and the interval
@@ -731,11 +731,13 @@ func (c *conn) connWriter() {
 			// send close
 			cls := &frames.PerformClose{}
 			debug(1, "TX (connWriter): %s", cls)
-			_ = c.writeFrame(frames.Frame{
+			err = c.writeFrame(frames.Frame{
 				Type: frameTypeAMQP,
 				Body: cls,
 			})
-			return
+			if err == nil {
+				return
+			}
 		}
 	}
 }
@@ -761,7 +763,7 @@ func (c *conn) writeFrame(fr frames.Frame) error {
 	}
 
 	// write to network
-	_, err = c.net.Write(c.txBuf.Bytes())
+	_, err = c.netWriteWithRetry(c.txBuf.Bytes())
 	return err
 }
 
@@ -771,8 +773,24 @@ func (c *conn) writeProtoHeader(pID protoID) error {
 	if c.connectTimeout != 0 {
 		_ = c.net.SetWriteDeadline(time.Now().Add(c.connectTimeout))
 	}
-	_, err := c.net.Write([]byte{'A', 'M', 'Q', 'P', byte(pID), 1, 0, 0})
+	_, err := c.netWriteWithRetry([]byte{'A', 'M', 'Q', 'P', byte(pID), 1, 0, 0})
 	return err
+}
+
+func (c *conn) netWriteWithRetry(b []byte) (int, error) {
+	var n int
+	var err error
+	for i := 0; i < 5; i++ {
+		n, err = c.net.Write(b)
+		if err == nil {
+			break
+		}
+		// exponential back-off starting at 100ms
+		delay := (100 * time.Millisecond) * time.Duration(math.Pow(2, float64(i)))
+		debug(3, "netWriteWithRetry: %v; sleep for %s", err, delay)
+		time.Sleep(delay)
+	}
+	return n, err
 }
 
 // keepaliveFrame is an AMQP frame with no body, used for keepalives

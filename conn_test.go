@@ -377,6 +377,8 @@ func TestKeepAlives(t *testing.T) {
 		case *frames.PerformOpen:
 			// specify small idle timeout so we receive a lot of keep-alives
 			return mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformOpen{ContainerID: "container", IdleTimeout: 100 * time.Millisecond})
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		case *mocks.KeepAlive:
 			keepAlives <- struct{}{}
 			return nil, nil

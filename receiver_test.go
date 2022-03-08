@@ -56,6 +56,8 @@ func TestReceiverMethodsNoReceive(t *testing.T) {
 			require.Equal(t, ExpiryNever, ff.Target.ExpiryPolicy)
 			require.Equal(t, uint32(300), ff.Target.Timeout)
 			return mocks.ReceiverAttach(0, linkName, 0, ModeFirst, nil)
+		case *frames.PerformDetach:
+			return mocks.PerformDetach(0, ff.Handle, nil)
 		case *frames.PerformFlow, *mocks.KeepAlive:
 			return nil, nil
 		default:
@@ -1374,11 +1376,14 @@ func TestReceiverConnWriterError(t *testing.T) {
 
 	errChan := make(chan error)
 	go func() {
-		_, err := r.Receive(context.Background())
+		// bump up the timeout to account for retries
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_, err := r.Receive(ctx)
+		cancel()
 		errChan <- err
 	}()
 
-	conn.WriteErr = errors.New("failed")
+	conn.WriteErr = func() error { return errors.New("failed") }
 	// trigger the write error
 	conn.SendKeepAlive()
 

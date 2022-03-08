@@ -42,18 +42,20 @@ func TestClientDial(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, client)
 	// error case
+	mockErr := errors.New("mock read failed")
 	responder = func(req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *mocks.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
-			return nil, errors.New("mock read failed")
+			return nil, mockErr
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
 	client, err = Dial("amqp://localhost", connDialer(mockDialer{resp: responder}))
 	require.Error(t, err)
+	require.Equal(t, mockErr, err)
 	require.Nil(t, client)
 }
 
@@ -64,6 +66,8 @@ func TestClientClose(t *testing.T) {
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return mocks.PerformOpen("container")
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -150,6 +154,8 @@ func TestClientNewSession(t *testing.T) {
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return mocks.PerformOpen("container")
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		case *frames.PerformBegin:
 			if tt.RemoteChannel != nil {
 				return nil, errors.New("expected nil remote channel")
@@ -196,6 +202,8 @@ func TestClientMultipleSessions(t *testing.T) {
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return mocks.PerformOpen("container")
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		case *frames.PerformBegin:
 			b, err := mocks.PerformBegin(channelNum)
 			channelNum++
@@ -239,6 +247,8 @@ func TestClientTooManySessions(t *testing.T) {
 				IdleTimeout:  time.Minute,
 				MaxFrameSize: 4294967295,
 			})
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		case *frames.PerformBegin:
 			b, err := mocks.PerformBegin(channelNum)
 			channelNum++
@@ -287,6 +297,8 @@ func TestClientNewSessionMissingRemoteChannel(t *testing.T) {
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return mocks.PerformOpen("container")
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		case *frames.PerformBegin:
 			// return begin with nil RemoteChannel
 			return mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformBegin{
@@ -318,6 +330,8 @@ func TestClientNewSessionInvalidInitialResponse(t *testing.T) {
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return mocks.PerformOpen("container")
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		case *frames.PerformBegin:
 			// respond with the wrong frame type
 			return mocks.PerformOpen("bad")
@@ -345,6 +359,8 @@ func TestClientNewSessionInvalidSecondResponseSameChannel(t *testing.T) {
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return mocks.PerformOpen("container")
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		case *frames.PerformBegin:
 			if firstChan {
 				firstChan = false
@@ -385,6 +401,8 @@ func TestClientNewSessionInvalidSecondResponseDifferentChannel(t *testing.T) {
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return mocks.PerformOpen("container")
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		case *frames.PerformBegin:
 			if firstChan {
 				firstChan = false

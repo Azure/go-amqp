@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Azure/go-amqp"
+	amqp "github.com/Azure/go-amqp"
 	"github.com/fortytw2/leaktest"
 )
 

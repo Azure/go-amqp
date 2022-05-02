@@ -1,1 +1,16 @@
-* @richardpark-msft @jhendrixMSFT
+# Instructions for CODEOWNERS file format and automatic build failure notifications:
+# https://github.com/Azure/azure-sdk/blob/master/docs/policies/opensource.md#codeowners
+
+################
+# Automation
+################
+
+# Git Hub integration and bot rules
+/.github/                @richardpark-msft @jhendrixMSFT @rickwinter
+
+#############
+# go-amqp
+############# 
+
+# Catch all for non-code project files and unowned files | folders
+*                        @richardpark-msft @jhendrixMSFT @rickwinter

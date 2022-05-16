@@ -241,6 +241,7 @@ func TestLinkOptions(t *testing.T) {
 		opts  []LinkOption
 
 		wantSource     *frames.Source
+		wantTarget     *frames.Target
 		wantProperties map[encoding.Symbol]interface{}
 	}{
 		{
@@ -298,6 +299,15 @@ func TestLinkOptions(t *testing.T) {
 				LinkSourceCapabilities("cap1", "cap2", "cap3"),
 			},
 			wantSource: &frames.Source{
+				Capabilities: []encoding.Symbol{"cap1", "cap2", "cap3"},
+			},
+		},
+		{
+			label: "link-target-capabilities",
+			opts: []LinkOption{
+				LinkTargetCapabilities("cap1", "cap2", "cap3"),
+			},
+			wantTarget: &frames.Target{
 				Capabilities: []encoding.Symbol{"cap1", "cap2", "cap3"},
 			},
 		},

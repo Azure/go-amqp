@@ -87,7 +87,7 @@ func BenchmarkFrameMarshal(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				err := writeFrame(&buf, tt.frame)
 				if err != nil {
-					b.Error(fmt.Sprintf("%+v", err))
+					b.Errorf("%+v", err)
 				}
 				bytesSink = buf.Bytes()
 				buf.Reset()
@@ -102,7 +102,7 @@ func BenchmarkFrameUnmarshal(b *testing.B) {
 			var buf buffer.Buffer
 			err := writeFrame(&buf, tt.frame)
 			if err != nil {
-				b.Error(fmt.Sprintf("%+v", err))
+				b.Errorf("%+v", err)
 			}
 			data := buf.Bytes()
 			buf.Reset()
@@ -137,7 +137,7 @@ func BenchmarkMarshal(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				err := encoding.Marshal(&buf, typ)
 				if err != nil {
-					b.Error(fmt.Sprintf("%+v", err))
+					b.Errorf("%+v", err)
 				}
 				bytesSink = buf.Bytes()
 				buf.Reset()
@@ -152,7 +152,7 @@ func BenchmarkUnmarshal(b *testing.B) {
 			var buf buffer.Buffer
 			err := encoding.Marshal(&buf, type_)
 			if err != nil {
-				b.Error(fmt.Sprintf("%+v", err))
+				b.Errorf("%+v", err)
 			}
 			data := buf.Bytes()
 			newType := reflect.New(reflect.TypeOf(type_)).Interface()
@@ -163,7 +163,7 @@ func BenchmarkUnmarshal(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				err = encoding.Unmarshal(buffer.New(data), newType)
 				if err != nil {
-					b.Error(fmt.Sprintf("%v", err))
+					b.Errorf("%v", err)
 				}
 			}
 		})
@@ -178,7 +178,7 @@ func TestMarshalUnmarshal(t *testing.T) {
 			var buf buffer.Buffer
 			err := encoding.Marshal(&buf, type_)
 			if err != nil {
-				t.Fatal(fmt.Sprintf("%+v", err))
+				t.Fatalf("%+v", err)
 			}
 
 			if updateFuzzCorpus {
@@ -196,7 +196,7 @@ func TestMarshalUnmarshal(t *testing.T) {
 			if type_ == nil {
 				err = encoding.Unmarshal(&buf, nil)
 				if err != nil {
-					t.Fatal(fmt.Sprintf("%+v", err))
+					t.Fatalf("%+v", err)
 					return
 				}
 				return
@@ -205,7 +205,7 @@ func TestMarshalUnmarshal(t *testing.T) {
 			newType := reflect.New(reflect.TypeOf(type_))
 			err = encoding.Unmarshal(&buf, newType.Interface())
 			if err != nil {
-				t.Fatal(fmt.Sprintf("%+v", err))
+				t.Fatalf("%+v", err)
 				return
 			}
 			cmpType := reflect.Indirect(newType).Interface()

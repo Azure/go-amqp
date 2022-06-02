@@ -11,27 +11,26 @@ import (
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/frames"
 	"github.com/Azure/go-amqp/internal/mocks"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestReceiverInvalidOptions(t *testing.T) {
 	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ModeFirst))
 	client, err := New(conn)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	session, err := client.NewSession()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	r, err := session.NewReceiver(LinkReceiverSettle(3))
-	assert.Error(t, err)
-	assert.Nil(t, r)
+	require.Error(t, err)
+	require.Nil(t, r)
 
 	r, err = session.NewReceiver(LinkTargetDurability(3))
-	assert.Error(t, err)
-	assert.Nil(t, r)
+	require.Error(t, err)
+	require.Nil(t, r)
 
 	r, err = session.NewReceiver(LinkTargetExpiryPolicy("not-a-real-policy"))
-	assert.Error(t, err)
-	assert.Nil(t, r)
+	require.Error(t, err)
+	require.Nil(t, r)
 }
 
 func TestReceiverMethodsNoReceive(t *testing.T) {
@@ -45,9 +44,9 @@ func TestReceiverMethodsNoReceive(t *testing.T) {
 		case *frames.PerformBegin:
 			return mocks.PerformBegin(0)
 		case *frames.PerformAttach:
-			assert.Equal(t, DurabilityUnsettledState, ff.Target.Durable)
-			assert.Equal(t, ExpiryNever, ff.Target.ExpiryPolicy)
-			assert.Equal(t, uint32(300), ff.Target.Timeout)
+			require.Equal(t, DurabilityUnsettledState, ff.Target.Durable)
+			require.Equal(t, ExpiryNever, ff.Target.ExpiryPolicy)
+			require.Equal(t, uint32(300), ff.Target.Timeout)
 			return mocks.ReceiverAttach(0, linkName, 0, ModeFirst, nil)
 		case *frames.PerformFlow, *mocks.KeepAlive:
 			return nil, nil
@@ -57,9 +56,9 @@ func TestReceiverMethodsNoReceive(t *testing.T) {
 	}
 	conn := mocks.NewNetConn(responder)
 	client, err := New(conn)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	session, err := client.NewSession()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	const sourceAddr = "thesource"
 	r, err := session.NewReceiver(
 		LinkName(linkName),
@@ -67,7 +66,7 @@ func TestReceiverMethodsNoReceive(t *testing.T) {
 		LinkTargetDurability(DurabilityUnsettledState),
 		LinkTargetExpiryPolicy(ExpiryNever),
 		LinkTargetTimeout(300))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	require.Equal(t, sourceAddr, r.Address())
 	require.Equal(t, linkName, r.LinkName())
 	require.Nil(t, r.LinkSourceFilterValue("nofilter"))
@@ -79,13 +78,13 @@ func TestReceiverMethodsNoReceive(t *testing.T) {
 func TestReceiverLinkSourceFilter(t *testing.T) {
 	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ModeFirst))
 	client, err := New(conn)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	session, err := client.NewSession()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	const filterName = "myfilter"
 	const filterExp = "filter_exp"
 	r, err := session.NewReceiver(LinkAddressDynamic(), LinkSourceFilter(filterName, 0, filterExp))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	require.Equal(t, "test", r.Address())
 	require.NotEmpty(t, r.LinkName())
 	require.Equal(t, filterExp, r.LinkSourceFilterValue(filterName))
@@ -97,11 +96,11 @@ func TestReceiverLinkSourceFilter(t *testing.T) {
 func TestReceiverOnClosed(t *testing.T) {
 	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ModeFirst))
 	client, err := New(conn)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	session, err := client.NewSession()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	r, err := session.NewReceiver()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	errChan := make(chan error)
 	go func() {
@@ -124,11 +123,11 @@ func TestReceiverOnClosed(t *testing.T) {
 func TestReceiverOnSessionClosed(t *testing.T) {
 	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ModeFirst))
 	client, err := New(conn)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	session, err := client.NewSession()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	r, err := session.NewReceiver()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	errChan := make(chan error)
 	go func() {
@@ -151,11 +150,11 @@ func TestReceiverOnSessionClosed(t *testing.T) {
 func TestReceiverOnConnClosed(t *testing.T) {
 	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ModeFirst))
 	client, err := New(conn)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	session, err := client.NewSession()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	r, err := session.NewReceiver()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	errChan := make(chan error)
 	go func() {
@@ -178,11 +177,11 @@ func TestReceiverOnConnClosed(t *testing.T) {
 func TestReceiverOnDetached(t *testing.T) {
 	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ModeFirst))
 	client, err := New(conn)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	session, err := client.NewSession()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	r, err := session.NewReceiver()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	errChan := make(chan error)
 	go func() {
@@ -231,11 +230,11 @@ func TestReceiveInvalidMessage(t *testing.T) {
 	}
 	conn := mocks.NewNetConn(responder)
 	client, err := New(conn)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	session, err := client.NewSession()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	r, err := session.NewReceiver()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	msgChan := make(chan *Message)
 	errChan := make(chan error)
@@ -249,15 +248,15 @@ func TestReceiveInvalidMessage(t *testing.T) {
 	fr, err := mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformTransfer{
 		Handle: linkHandle,
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	conn.SendFrame(fr)
 
-	assert.Nil(t, <-msgChan)
+	require.Nil(t, <-msgChan)
 	var amqpErr *Error
 	if err = <-errChan; !errors.As(err, &amqpErr) {
 		t.Fatalf("unexpected error %v", err)
 	}
-	assert.Equal(t, ErrorNotAllowed, amqpErr.Condition)
+	require.Equal(t, ErrorNotAllowed, amqpErr.Condition)
 
 	_, err = r.Receive(context.Background())
 	if !errors.As(err, &amqpErr) {
@@ -266,7 +265,7 @@ func TestReceiveInvalidMessage(t *testing.T) {
 
 	// missing MessageFormat
 	r, err = session.NewReceiver()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	go func() {
 		msg, err := r.Receive(context.Background())
 		msgChan <- msg
@@ -276,14 +275,14 @@ func TestReceiveInvalidMessage(t *testing.T) {
 		DeliveryID: &deliveryID,
 		Handle:     linkHandle,
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	conn.SendFrame(fr)
 
-	assert.Nil(t, <-msgChan)
+	require.Nil(t, <-msgChan)
 	if err = <-errChan; !errors.As(err, &amqpErr) {
 		t.Fatalf("unexpected error %v", err)
 	}
-	assert.Equal(t, ErrorNotAllowed, amqpErr.Condition)
+	require.Equal(t, ErrorNotAllowed, amqpErr.Condition)
 
 	_, err = r.Receive(context.Background())
 	if !errors.As(err, &amqpErr) {
@@ -293,7 +292,7 @@ func TestReceiveInvalidMessage(t *testing.T) {
 	// missing delivery tag
 	format := uint32(0)
 	r, err = session.NewReceiver()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	go func() {
 		msg, err := r.Receive(context.Background())
 		msgChan <- msg
@@ -304,21 +303,21 @@ func TestReceiveInvalidMessage(t *testing.T) {
 		Handle:        linkHandle,
 		MessageFormat: &format,
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	conn.SendFrame(fr)
 
-	assert.Nil(t, <-msgChan)
+	require.Nil(t, <-msgChan)
 	if err = <-errChan; !errors.As(err, &amqpErr) {
 		t.Fatalf("unexpected error %v", err)
 	}
-	assert.Equal(t, ErrorNotAllowed, amqpErr.Condition)
+	require.Equal(t, ErrorNotAllowed, amqpErr.Condition)
 
 	_, err = r.Receive(context.Background())
 	if !errors.As(err, &amqpErr) {
 		t.Fatalf("unexpected error %v", err)
 	}
 
-	assert.NoError(t, client.Close())
+	require.NoError(t, client.Close())
 }
 
 func TestReceiveSuccessModeFirst(t *testing.T) {
@@ -345,20 +344,20 @@ func TestReceiveSuccessModeFirst(t *testing.T) {
 	}
 	conn := mocks.NewNetConn(responder)
 	client, err := New(conn)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	session, err := client.NewSession()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	r, err := session.NewReceiver(LinkReceiverSettle(ModeFirst))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	msg, err := r.Receive(ctx)
 	cancel()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	if c := r.link.countUnsettled(); c != 0 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	// wait for the link to unpause as credit should now be available
-	assert.NoError(t, waitForLink(r.link, false))
+	require.NoError(t, waitForLink(r.link, false))
 	// link credit should be 1
 	if c := r.link.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
@@ -367,8 +366,8 @@ func TestReceiveSuccessModeFirst(t *testing.T) {
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	err = r.AcceptMessage(ctx, msg)
 	cancel()
-	assert.NoError(t, err)
-	assert.NoError(t, client.Close())
+	require.NoError(t, err)
+	require.NoError(t, client.Close())
 }
 
 func TestReceiveSuccessModeSecondAccept(t *testing.T) {
@@ -398,20 +397,20 @@ func TestReceiveSuccessModeSecondAccept(t *testing.T) {
 	}
 	conn := mocks.NewNetConn(responder)
 	client, err := New(conn)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	session, err := client.NewSession()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	r, err := session.NewReceiver(LinkReceiverSettle(ModeSecond))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	msg, err := r.Receive(ctx)
 	cancel()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	if c := r.link.countUnsettled(); c != 1 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	// wait for the link to pause as we've consumed all available credit
-	assert.NoError(t, waitForLink(r.link, true))
+	require.NoError(t, waitForLink(r.link, true))
 	// link credit must be zero since we only started with 1
 	if c := r.link.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
@@ -419,7 +418,7 @@ func TestReceiveSuccessModeSecondAccept(t *testing.T) {
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	err = r.AcceptMessage(ctx, msg)
 	cancel()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	if c := r.link.countUnsettled(); c != 0 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
@@ -432,7 +431,7 @@ func TestReceiveSuccessModeSecondAccept(t *testing.T) {
 	}
 	cancel()
 	// wait for the link to unpause as credit should now be available
-	assert.NoError(t, waitForLink(r.link, false))
+	require.NoError(t, waitForLink(r.link, false))
 	// link credit should be back to 1
 	if c := r.link.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
@@ -441,8 +440,8 @@ func TestReceiveSuccessModeSecondAccept(t *testing.T) {
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	err = r.AcceptMessage(ctx, msg)
 	cancel()
-	assert.NoError(t, err)
-	assert.NoError(t, client.Close())
+	require.NoError(t, err)
+	require.NoError(t, client.Close())
 }
 
 func TestReceiveSuccessModeSecondReject(t *testing.T) {
@@ -472,20 +471,20 @@ func TestReceiveSuccessModeSecondReject(t *testing.T) {
 	}
 	conn := mocks.NewNetConn(responder)
 	client, err := New(conn)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	session, err := client.NewSession()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	r, err := session.NewReceiver(LinkReceiverSettle(ModeSecond))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	msg, err := r.Receive(ctx)
 	cancel()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	if c := r.link.countUnsettled(); c != 1 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	// wait for the link to pause as we've consumed all available credit
-	assert.NoError(t, waitForLink(r.link, true))
+	require.NoError(t, waitForLink(r.link, true))
 	// link credit must be zero since we only started with 1
 	if c := r.link.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
@@ -493,7 +492,7 @@ func TestReceiveSuccessModeSecondReject(t *testing.T) {
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	err = r.RejectMessage(ctx, msg, nil)
 	cancel()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	if c := r.link.countUnsettled(); c != 0 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
@@ -505,12 +504,12 @@ func TestReceiveSuccessModeSecondReject(t *testing.T) {
 	}
 	cancel()
 	// wait for the link to unpause as credit should now be available
-	assert.NoError(t, waitForLink(r.link, false))
+	require.NoError(t, waitForLink(r.link, false))
 	// link credit should be back to 1
 	if c := r.link.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
-	assert.NoError(t, client.Close())
+	require.NoError(t, client.Close())
 }
 
 func TestReceiveSuccessModeSecondRelease(t *testing.T) {
@@ -540,20 +539,20 @@ func TestReceiveSuccessModeSecondRelease(t *testing.T) {
 	}
 	conn := mocks.NewNetConn(responder)
 	client, err := New(conn)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	session, err := client.NewSession()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	r, err := session.NewReceiver(LinkReceiverSettle(ModeSecond))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	msg, err := r.Receive(ctx)
 	cancel()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	if c := r.link.countUnsettled(); c != 1 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	// wait for the link to pause as we've consumed all available credit
-	assert.NoError(t, waitForLink(r.link, true))
+	require.NoError(t, waitForLink(r.link, true))
 	// link credit must be zero since we only started with 1
 	if c := r.link.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
@@ -561,7 +560,7 @@ func TestReceiveSuccessModeSecondRelease(t *testing.T) {
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	err = r.ReleaseMessage(ctx, msg)
 	cancel()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	if c := r.link.countUnsettled(); c != 0 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
@@ -573,12 +572,12 @@ func TestReceiveSuccessModeSecondRelease(t *testing.T) {
 	}
 	cancel()
 	// wait for the link to unpause as credit should now be available
-	assert.NoError(t, waitForLink(r.link, false))
+	require.NoError(t, waitForLink(r.link, false))
 	// link credit should be back to 1
 	if c := r.link.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
-	assert.NoError(t, client.Close())
+	require.NoError(t, client.Close())
 }
 
 func TestReceiveSuccessModeSecondModify(t *testing.T) {
@@ -613,20 +612,20 @@ func TestReceiveSuccessModeSecondModify(t *testing.T) {
 	}
 	conn := mocks.NewNetConn(responder)
 	client, err := New(conn)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	session, err := client.NewSession()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	r, err := session.NewReceiver(LinkReceiverSettle(ModeSecond))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	msg, err := r.Receive(ctx)
 	cancel()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	if c := r.link.countUnsettled(); c != 1 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	// wait for the link to pause as we've consumed all available credit
-	assert.NoError(t, waitForLink(r.link, true))
+	require.NoError(t, waitForLink(r.link, true))
 	// link credit must be zero since we only started with 1
 	if c := r.link.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
@@ -636,7 +635,7 @@ func TestReceiveSuccessModeSecondModify(t *testing.T) {
 		"some": "value",
 	})
 	cancel()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	if c := r.link.countUnsettled(); c != 0 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
@@ -648,12 +647,12 @@ func TestReceiveSuccessModeSecondModify(t *testing.T) {
 	}
 	cancel()
 	// wait for the link to unpause as credit should now be available
-	assert.NoError(t, waitForLink(r.link, false))
+	require.NoError(t, waitForLink(r.link, false))
 	// link credit should be back to 1
 	if c := r.link.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
-	assert.NoError(t, client.Close())
+	require.NoError(t, client.Close())
 }
 
 func TestReceiverPrefetch(t *testing.T) {
@@ -708,11 +707,11 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 	}
 	conn := mocks.NewNetConn(responder)
 	client, err := New(conn)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	session, err := client.NewSession()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	r, err := session.NewReceiver(LinkReceiverSettle(ModeSecond))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	msgChan := make(chan *Message)
 	errChan := make(chan error)
 	go func() {
@@ -722,20 +721,20 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 	}()
 	// send multi-frame message
 	payload := []byte("this should be split into three frames for a multi-frame transfer message")
-	assert.NoError(t, conn.SendMultiFrameTransfer(0, linkHandle, deliveryID, payload, nil))
+	require.NoError(t, conn.SendMultiFrameTransfer(0, linkHandle, deliveryID, payload, nil))
 	msg := <-msgChan
-	assert.NoError(t, <-errChan)
+	require.NoError(t, <-errChan)
 	// validate message content
 	result := []byte{}
 	for i := range msg.Data {
 		result = append(result, msg.Data[i]...)
 	}
-	assert.Equal(t, payload, result)
+	require.Equal(t, payload, result)
 	if c := r.link.countUnsettled(); c != 1 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	// wait for the link to pause as we've consumed all available credit
-	assert.NoError(t, waitForLink(r.link, true))
+	require.NoError(t, waitForLink(r.link, true))
 	// link credit must be zero since we only started with 1
 	if c := r.link.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
@@ -743,7 +742,7 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	err = r.AcceptMessage(ctx, msg)
 	cancel()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	if c := r.link.countUnsettled(); c != 0 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
@@ -756,12 +755,12 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 	}
 	cancel()
 	// wait for the link to unpause as credit should now be available
-	assert.NoError(t, waitForLink(r.link, false))
+	require.NoError(t, waitForLink(r.link, false))
 	// link credit should be back to 1
 	if c := r.link.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
-	assert.NoError(t, client.Close())
+	require.NoError(t, client.Close())
 }
 
 func TestReceiveInvalidMultiFrameMessage(t *testing.T) {
@@ -781,11 +780,11 @@ func TestReceiveInvalidMultiFrameMessage(t *testing.T) {
 	}
 	conn := mocks.NewNetConn(responder)
 	client, err := New(conn)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	session, err := client.NewSession()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	r, err := session.NewReceiver(LinkReceiverSettle(ModeSecond))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	msgChan := make(chan *Message)
 	errChan := make(chan error)
 	go func() {
@@ -797,7 +796,7 @@ func TestReceiveInvalidMultiFrameMessage(t *testing.T) {
 	payload := []byte("this should be split into two frames for a multi-frame transfer")
 
 	// mismatched DeliveryID
-	assert.NoError(t, conn.SendMultiFrameTransfer(0, linkHandle, deliveryID, payload, func(i int, fr *frames.PerformTransfer) {
+	require.NoError(t, conn.SendMultiFrameTransfer(0, linkHandle, deliveryID, payload, func(i int, fr *frames.PerformTransfer) {
 		if i == 0 {
 			return
 		}
@@ -806,22 +805,22 @@ func TestReceiveInvalidMultiFrameMessage(t *testing.T) {
 		fr.DeliveryID = &badID
 	}))
 	msg := <-msgChan
-	assert.Nil(t, msg)
+	require.Nil(t, msg)
 	var amqpErr *Error
 	if err = <-errChan; !errors.As(err, &amqpErr) {
 		t.Fatalf("unexpected error %v", err)
 	}
-	assert.Equal(t, ErrorNotAllowed, amqpErr.Condition)
+	require.Equal(t, ErrorNotAllowed, amqpErr.Condition)
 
 	// mismatched MessageFormat
 	r, err = session.NewReceiver(LinkReceiverSettle(ModeSecond))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	go func() {
 		msg, err := r.Receive(context.Background())
 		msgChan <- msg
 		errChan <- err
 	}()
-	assert.NoError(t, conn.SendMultiFrameTransfer(0, linkHandle, deliveryID, payload, func(i int, fr *frames.PerformTransfer) {
+	require.NoError(t, conn.SendMultiFrameTransfer(0, linkHandle, deliveryID, payload, func(i int, fr *frames.PerformTransfer) {
 		if i == 0 {
 			return
 		}
@@ -830,21 +829,21 @@ func TestReceiveInvalidMultiFrameMessage(t *testing.T) {
 		fr.MessageFormat = &badFormat
 	}))
 	msg = <-msgChan
-	assert.Nil(t, msg)
+	require.Nil(t, msg)
 	if err = <-errChan; !errors.As(err, &amqpErr) {
 		t.Fatalf("unexpected error %v", err)
 	}
-	assert.Equal(t, ErrorNotAllowed, amqpErr.Condition)
+	require.Equal(t, ErrorNotAllowed, amqpErr.Condition)
 
 	// mismatched DeliveryTag
 	r, err = session.NewReceiver(LinkReceiverSettle(ModeSecond))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	go func() {
 		msg, err := r.Receive(context.Background())
 		msgChan <- msg
 		errChan <- err
 	}()
-	assert.NoError(t, conn.SendMultiFrameTransfer(0, linkHandle, deliveryID, payload, func(i int, fr *frames.PerformTransfer) {
+	require.NoError(t, conn.SendMultiFrameTransfer(0, linkHandle, deliveryID, payload, func(i int, fr *frames.PerformTransfer) {
 		if i == 0 {
 			return
 		}
@@ -852,13 +851,13 @@ func TestReceiveInvalidMultiFrameMessage(t *testing.T) {
 		fr.DeliveryTag = []byte("bad_tag")
 	}))
 	msg = <-msgChan
-	assert.Nil(t, msg)
+	require.Nil(t, msg)
 	if err = <-errChan; !errors.As(err, &amqpErr) {
 		t.Fatalf("unexpected error %v", err)
 	}
-	assert.Equal(t, ErrorNotAllowed, amqpErr.Condition)
+	require.Equal(t, ErrorNotAllowed, amqpErr.Condition)
 
-	assert.NoError(t, client.Close())
+	require.NoError(t, client.Close())
 }
 
 func TestReceiveMultiFrameMessageAborted(t *testing.T) {
@@ -883,11 +882,11 @@ func TestReceiveMultiFrameMessageAborted(t *testing.T) {
 	}
 	conn := mocks.NewNetConn(responder)
 	client, err := New(conn)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	session, err := client.NewSession()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	r, err := session.NewReceiver(LinkReceiverSettle(ModeSecond))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	msgChan := make(chan *Message)
 	errChan := make(chan error)
 	go func() {
@@ -897,7 +896,7 @@ func TestReceiveMultiFrameMessageAborted(t *testing.T) {
 	}()
 	// send multi-frame message
 	payload := []byte("this should be split into three frames for a multi-frame transfer message")
-	assert.NoError(t, conn.SendMultiFrameTransfer(0, linkHandle, deliveryID, payload, func(i int, fr *frames.PerformTransfer) {
+	require.NoError(t, conn.SendMultiFrameTransfer(0, linkHandle, deliveryID, payload, func(i int, fr *frames.PerformTransfer) {
 		if i < 2 {
 			return
 		}
@@ -907,12 +906,12 @@ func TestReceiveMultiFrameMessageAborted(t *testing.T) {
 	// we shouldn't have received any message at this point, now send a single-frame message
 	payload = []byte("single message")
 	b, err := mocks.PerformTransfer(0, linkHandle, deliveryID+1, payload)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	conn.SendFrame(b)
-	assert.NoError(t, <-errChan)
+	require.NoError(t, <-errChan)
 	msg := <-msgChan
-	assert.Equal(t, payload, msg.GetData())
-	assert.NoError(t, client.Close())
+	require.Equal(t, payload, msg.GetData())
+	require.NoError(t, client.Close())
 }
 
 func TestReceiveMessageTooBig(t *testing.T) {
@@ -938,21 +937,21 @@ func TestReceiveMessageTooBig(t *testing.T) {
 	}
 	conn := mocks.NewNetConn(responder)
 	client, err := New(conn)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	session, err := client.NewSession()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	r, err := session.NewReceiver(LinkReceiverSettle(ModeSecond), LinkMaxMessageSize(128))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	msg, err := r.Receive(ctx)
 	cancel()
-	assert.Nil(t, msg)
+	require.Nil(t, msg)
 	var amqpErr *Error
 	if !errors.As(err, &amqpErr) {
 		t.Fatalf("unexpected error %v", err)
 	}
-	assert.Equal(t, ErrorMessageSizeExceeded, amqpErr.Condition)
-	assert.NoError(t, client.Close())
+	require.Equal(t, ErrorMessageSizeExceeded, amqpErr.Condition)
+	require.NoError(t, client.Close())
 }
 
 func TestReceiveSuccessAcceptFails(t *testing.T) {
@@ -977,26 +976,26 @@ func TestReceiveSuccessAcceptFails(t *testing.T) {
 	}
 	conn := mocks.NewNetConn(responder)
 	client, err := New(conn)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	session, err := client.NewSession()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	r, err := session.NewReceiver(LinkReceiverSettle(ModeSecond))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	msg, err := r.Receive(ctx)
 	cancel()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	if c := r.link.countUnsettled(); c != 1 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	// wait for the link to pause as we've consumed all available credit
-	assert.NoError(t, waitForLink(r.link, true))
+	require.NoError(t, waitForLink(r.link, true))
 	// link credit must be zero since we only started with 1
 	if c := r.link.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 	// close client before accepting the message
-	assert.NoError(t, client.Close())
+	require.NoError(t, client.Close())
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	err = r.AcceptMessage(ctx, msg)
 	cancel()
@@ -1036,28 +1035,28 @@ func TestReceiverDispositionBatcherTimer(t *testing.T) {
 	}
 	conn := mocks.NewNetConn(responder)
 	client, err := New(conn)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	session, err := client.NewSession()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	r, err := session.NewReceiver(LinkReceiverSettle(ModeSecond), LinkCredit(2), LinkBatchMaxAge(time.Second), LinkBatching(true))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	msg, err := r.Receive(ctx)
 	cancel()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	if c := r.link.countUnsettled(); c != 1 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	ctx, cancel = context.WithTimeout(context.Background(), 2*time.Second)
 	err = r.AcceptMessage(ctx, msg)
 	cancel()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	if c := r.link.countUnsettled(); c != 0 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
-	assert.Equal(t, 0, r.inFlight.len())
-	assert.Equal(t, true, msg.settled)
-	assert.NoError(t, client.Close())
+	require.Equal(t, 0, r.inFlight.len())
+	require.Equal(t, true, msg.settled)
+	require.NoError(t, client.Close())
 }
 
 func TestReceiverDispositionBatcherFull(t *testing.T) {
@@ -1093,25 +1092,25 @@ func TestReceiverDispositionBatcherFull(t *testing.T) {
 	}
 	conn := mocks.NewNetConn(responder)
 	client, err := New(conn)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	session, err := client.NewSession()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	r, err := session.NewReceiver(LinkReceiverSettle(ModeSecond), LinkCredit(credit), LinkBatchMaxAge(time.Second), LinkBatching(true))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	wg := &sync.WaitGroup{}
 	wg.Add(credit)
 	for i := 0; i < credit; i++ {
 		b, err := mocks.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		conn.SendFrame(b)
 		deliveryID++
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		msg, err := r.Receive(ctx)
 		cancel()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		go func() {
-			assert.NoError(t, r.AcceptMessage(context.Background(), msg))
-			assert.Equal(t, true, msg.settled)
+			require.NoError(t, r.AcceptMessage(context.Background(), msg))
+			require.Equal(t, true, msg.settled)
 			wg.Done()
 		}()
 	}
@@ -1124,8 +1123,8 @@ func TestReceiverDispositionBatcherFull(t *testing.T) {
 		t.Fatalf("not all messages were settled within the allotted time: %d", acceptCount)
 	}
 	wg.Wait()
-	assert.Equal(t, 0, r.inFlight.len())
-	assert.NoError(t, client.Close())
+	require.Equal(t, 0, r.inFlight.len())
+	require.NoError(t, client.Close())
 }
 
 func TestReceiverDispositionBatcherRelease(t *testing.T) {
@@ -1158,29 +1157,29 @@ func TestReceiverDispositionBatcherRelease(t *testing.T) {
 	}
 	conn := mocks.NewNetConn(responder)
 	client, err := New(conn)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	session, err := client.NewSession()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	r, err := session.NewReceiver(LinkReceiverSettle(ModeSecond), LinkCredit(credit), LinkBatchMaxAge(time.Second), LinkBatching(true))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	wg := &sync.WaitGroup{}
 	wg.Add(credit)
 	for i := 0; i < credit; i++ {
 		b, err := mocks.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		conn.SendFrame(b)
 		deliveryID++
 		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
 		msg, err := r.Receive(ctx)
 		cancel()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		go func(count int) {
 			if count == credit-1 {
-				assert.NoError(t, r.AcceptMessage(context.Background(), msg))
+				require.NoError(t, r.AcceptMessage(context.Background(), msg))
 			} else {
-				assert.NoError(t, r.ReleaseMessage(context.Background(), msg))
+				require.NoError(t, r.ReleaseMessage(context.Background(), msg))
 			}
-			assert.Equal(t, true, msg.settled)
+			require.Equal(t, true, msg.settled)
 			wg.Done()
 		}(i)
 	}
@@ -1193,18 +1192,18 @@ func TestReceiverDispositionBatcherRelease(t *testing.T) {
 		t.Fatalf("not all messages were settled within the allotted time: %d", acceptCount)
 	}
 	wg.Wait()
-	assert.Equal(t, 0, r.inFlight.len())
-	assert.NoError(t, client.Close())
+	require.Equal(t, 0, r.inFlight.len())
+	require.NoError(t, client.Close())
 }
 
 func TestReceiverCloseOnUnsettledWithPending(t *testing.T) {
 	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ModeFirst))
 	client, err := New(conn)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	session, err := client.NewSession()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	r, err := session.NewReceiver()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// first message exhausts the link credit
 	b, err := mocks.PerformTransfer(0, 0, 1, []byte("message 1"))
@@ -1227,11 +1226,11 @@ func TestReceiverCloseOnUnsettledWithPending(t *testing.T) {
 func TestReceiverConnReaderError(t *testing.T) {
 	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ModeFirst))
 	client, err := New(conn)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	session, err := client.NewSession()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	r, err := session.NewReceiver()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	errChan := make(chan error)
 	go func() {
@@ -1257,11 +1256,11 @@ func TestReceiverConnReaderError(t *testing.T) {
 func TestReceiverConnWriterError(t *testing.T) {
 	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ModeFirst))
 	client, err := New(conn)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	session, err := client.NewSession()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	r, err := session.NewReceiver()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	errChan := make(chan error)
 	go func() {

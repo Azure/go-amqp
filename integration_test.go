@@ -323,6 +323,20 @@ func TestIntegrationReceiverModeSecond(t *testing.T) {
 				"2Ho there!",
 			},
 		},
+		{
+			label:    "1000 roundtrip, small payload",
+			sessions: 1,
+			data: repeatStrings(1000,
+				"3Hey there!",
+				"3Hi there!",
+				"3Ho there!",
+			),
+		},
+		{
+			label:    "1 roundtrip, small payload, 10 sessions",
+			sessions: 10,
+			data:     []string{"1Hello there!"},
+		},
 	}
 
 	for _, tt := range tests {

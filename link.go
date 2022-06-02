@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"sync/atomic"
 
 	"github.com/Azure/go-amqp/internal/buffer"
 	"github.com/Azure/go-amqp/internal/encoding"
@@ -62,7 +61,6 @@ type link struct {
 	err                error // err returned on Close()
 
 	// message receiving
-	Paused                uint32              // atomically accessed; indicates that all link credits have been used by sender
 	ReceiverReady         chan struct{}       // receiver sends on this when mux is paused to indicate it can handle more messages
 	Messages              chan Message        // used to send completed messages to receiver
 	unsettledMessages     map[string]struct{} // used to keep track of messages being handled downstream
@@ -344,11 +342,9 @@ func (l *link) doFlow() (ok bool, enableOutgoingTransfers bool) {
 		if l.err != nil {
 			return false, false
 		}
-		atomic.StoreUint32(&l.Paused, 0)
 
 	case isReceiver && l.linkCredit == 0:
 		debug(1, "PAUSE Link Mux pause: inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s", l.receiver.inFlight.len(), l.linkCredit, l.deliveryCount, len(l.Messages), l.countUnsettled(), l.receiver.maxCredit, l.ReceiverSettleMode.String())
-		atomic.StoreUint32(&l.Paused, 1)
 	}
 
 	return true, false

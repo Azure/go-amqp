@@ -3,7 +3,6 @@ package amqp
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/Azure/go-amqp/internal/encoding"
@@ -47,11 +46,9 @@ func (r *Receiver) DrainCredit(ctx context.Context) error {
 // one of the following: AcceptMessage, RejectMessage, ReleaseMessage, ModifyMessage.
 // When using ModeFirst, the message is spontaneously Accepted at reception.
 func (r *Receiver) Prefetched(ctx context.Context) (*Message, error) {
-	if atomic.LoadUint32(&r.link.Paused) == 1 {
-		select {
-		case r.link.ReceiverReady <- struct{}{}:
-		default:
-		}
+	select {
+	case r.link.ReceiverReady <- struct{}{}:
+	default:
 	}
 
 	// non-blocking receive to ensure buffered messages are

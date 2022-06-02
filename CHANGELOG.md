@@ -16,3 +16,4 @@
 ### Other Changes
 * Errors when reading/writing to the underlying `net.Conn` are now wrapped in a `ConnectionError` type.
 * Disambiguate error message for distinct cases where a session wasn't found for the specified remote channel.
+* Removed `link.Paused` as it didn't add much value and was broken in some cases.

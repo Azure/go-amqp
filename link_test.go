@@ -29,7 +29,6 @@ func TestLinkFlowForSender(t *testing.T) {
 
 	// and flow goes through the non-manual credit path
 	require.EqualValues(t, 0, l.linkCredit, "No link credits have been added")
-	require.EqualValues(t, 0, l.Paused, "Link not paused")
 
 	// if we have link credit we can enable outgoing transfers
 	l.linkCredit = 1
@@ -37,7 +36,6 @@ func TestLinkFlowForSender(t *testing.T) {
 
 	require.True(t, ok, "no errors, should continue to process")
 	require.True(t, enableOutgoingTransfers, "outgoing transfers needed for senders")
-	require.EqualValues(t, 0, l.Paused, "Link not paused")
 }
 
 func TestLinkFlowThatNeedsToReplenishCredits(t *testing.T) {
@@ -51,7 +49,6 @@ func TestLinkFlowThatNeedsToReplenishCredits(t *testing.T) {
 
 	// and flow goes through the non-manual credit path
 	require.EqualValues(t, 0, l.linkCredit, "No link credits have been added")
-	require.EqualValues(t, 0, l.Paused, "Link not paused")
 
 	// we've consumed half of the maximum credit we're allowed to have - reflow!
 	l.receiver.maxCredit = 2
@@ -62,7 +59,6 @@ func TestLinkFlowThatNeedsToReplenishCredits(t *testing.T) {
 
 	require.True(t, ok, "no errors, should continue to process")
 	require.False(t, enableOutgoingTransfers, "outgoing transfers only needed for senders")
-	require.EqualValues(t, 0, l.Paused, "Link not paused")
 
 	// flow happens immmediately in 'mux'
 	txFrame := <-l.Session.tx
@@ -88,7 +84,6 @@ func TestLinkFlowWithZeroCredits(t *testing.T) {
 
 	// and flow goes through the non-manual credit path
 	require.EqualValues(t, 0, l.linkCredit, "No link credits have been added")
-	require.EqualValues(t, 0, l.Paused, "Link not paused...yet")
 
 	l.receiver.maxCredit = 2
 	l.linkCredit = 0
@@ -101,7 +96,6 @@ func TestLinkFlowWithZeroCredits(t *testing.T) {
 
 	require.True(t, ok)
 	require.False(t, enableOutgoingTransfers)
-	require.EqualValues(t, uint32(1), l.Paused, "Link is paused because credits are zero")
 }
 
 func TestLinkFlowDrain(t *testing.T) {

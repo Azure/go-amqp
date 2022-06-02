@@ -235,7 +235,9 @@ func attachLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 		l.Messages = make(chan Message, l.receiver.maxCredit)
 		l.unsettledMessages = map[string]struct{}{}
 		// copy the received filter values
-		l.Source.Filter = resp.Source.Filter
+		if resp.Source != nil {
+			l.Source.Filter = resp.Source.Filter
+		}
 	} else {
 		if l.Target == nil {
 			l.Target = new(frames.Target)

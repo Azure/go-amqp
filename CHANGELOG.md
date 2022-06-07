@@ -11,6 +11,9 @@
 * The following methods now require a `context.Context` as their first parameter.
   * `Client.NewSession()`, `Session.NewReceiver()`, `Session.NewSender()`
 * Removed `context.Context` parameter from method `Receiver.Prefetched()`.
+* The following type names had the prefix `AMQP` removed to prevent stuttering.
+  * `AMQPAddress`, `AMQPMessageID`, `AMQPSymbol`, `AMQPSequenceNumber`, `AMQPBinary`
+* Various `Default*` constants are no longer exported.
 
 ### Bugs Fixed
 * Fixed potential panic in `muxHandleFrame()` when checking for manual creditor.

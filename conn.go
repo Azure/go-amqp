@@ -20,9 +20,9 @@ import (
 
 // Default connection options
 const (
-	DefaultIdleTimeout  = 1 * time.Minute
-	DefaultMaxFrameSize = 65536
-	DefaultMaxSessions  = 65536
+	defaultIdleTimeout  = 1 * time.Minute
+	defaultMaxFrameSize = 65536
+	defaultMaxSessions  = 65536
 )
 
 // ConnOption is a function for configuring an AMQP connection.
@@ -291,10 +291,10 @@ func dialConn(addr string, opts ...ConnOption) (*conn, error) {
 func newConn(netConn net.Conn, opts ...ConnOption) (*conn, error) {
 	c := &conn{
 		net:              netConn,
-		maxFrameSize:     DefaultMaxFrameSize,
-		PeerMaxFrameSize: DefaultMaxFrameSize,
-		channelMax:       DefaultMaxSessions - 1, // -1 because channel-max starts at zero
-		idleTimeout:      DefaultIdleTimeout,
+		maxFrameSize:     defaultMaxFrameSize,
+		PeerMaxFrameSize: defaultMaxFrameSize,
+		channelMax:       defaultMaxSessions - 1, // -1 because channel-max starts at zero
+		idleTimeout:      defaultIdleTimeout,
 		containerID:      randString(40),
 		Done:             make(chan struct{}),
 		connErr:          make(chan error, 2), // buffered to ensure connReader/Writer won't leak

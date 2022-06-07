@@ -3,7 +3,6 @@ package amqp
 import (
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/Azure/go-amqp/internal/encoding"
 )
@@ -82,10 +81,3 @@ func (c *ConnectionError) Error() string {
 	}
 	return c.inner.Error()
 }
-
-// Default link options
-const (
-	DefaultLinkCredit      = 1
-	DefaultLinkBatching    = false
-	DefaultLinkBatchMaxAge = 5 * time.Second
-)

@@ -5,10 +5,24 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/Azure/go-amqp/internal/bitmap"
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/frames"
+)
+
+// Default session options
+const (
+	defaultMaxLinks = 4294967296
+	defaultWindow   = 1000
+)
+
+// Default link options
+const (
+	defaultLinkCredit      = 1
+	defaultLinkBatching    = false
+	defaultLinkBatchMaxAge = 5 * time.Second
 )
 
 // Session is an AMQP session.
@@ -46,9 +60,9 @@ func newSession(c *conn, channel uint16) *Session {
 		rx:               make(chan frames.Frame),
 		tx:               make(chan frames.FrameBody),
 		txTransfer:       make(chan *frames.PerformTransfer),
-		incomingWindow:   DefaultWindow,
-		outgoingWindow:   DefaultWindow,
-		handleMax:        DefaultMaxLinks - 1,
+		incomingWindow:   defaultWindow,
+		outgoingWindow:   defaultWindow,
+		handleMax:        defaultMaxLinks - 1,
 		allocateHandle:   make(chan *link),
 		deallocateHandle: make(chan *link),
 		close:            make(chan struct{}),
@@ -87,9 +101,9 @@ func (s *Session) txFrame(p frames.FrameBody, done chan encoding.DeliveryState) 
 // NewReceiver opens a new receiver link on the session.
 func (s *Session) NewReceiver(ctx context.Context, opts ...LinkOption) (*Receiver, error) {
 	r := &Receiver{
-		batching:    DefaultLinkBatching,
-		batchMaxAge: DefaultLinkBatchMaxAge,
-		maxCredit:   DefaultLinkCredit,
+		batching:    defaultLinkBatching,
+		batchMaxAge: defaultLinkBatchMaxAge,
+		maxCredit:   defaultLinkCredit,
 	}
 
 	l, err := attachLink(ctx, s, r, opts)

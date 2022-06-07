@@ -128,12 +128,6 @@ func (c *Client) NewSession(ctx context.Context, opts ...SessionOption) (*Sessio
 	return s, nil
 }
 
-// Default session options
-const (
-	DefaultMaxLinks = 4294967296
-	DefaultWindow   = 1000
-)
-
 // SessionOption is an function for configuring an AMQP session.
 type SessionOption func(*Session) error
 

@@ -477,10 +477,10 @@ func TestSessionFlowFrameWithEcho(t *testing.T) {
 			if id := tt.NextOutgoingID; id != 0 {
 				return nil, fmt.Errorf("unexpected NextOutgoingID %d", id)
 			}
-			if w := tt.IncomingWindow; w != DefaultWindow {
+			if w := tt.IncomingWindow; w != defaultWindow {
 				return nil, fmt.Errorf("unexpected IncomingWindow %d", w)
 			}
-			if w := tt.OutgoingWindow; w != DefaultWindow {
+			if w := tt.OutgoingWindow; w != defaultWindow {
 				return nil, fmt.Errorf("unexpected OutgoingWindow %d", w)
 			}
 			return nil, nil

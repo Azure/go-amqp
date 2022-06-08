@@ -366,16 +366,19 @@ func TestServerSideClose(t *testing.T) {
 }
 
 func TestKeepAlives(t *testing.T) {
-	keepAlives := make(chan struct{})
+	// closing conn can race with keep-alive ticks, so sometimes we get
+	// two in this test.  the test needs to receive at least one keep-alive,
+	// so use a buffered channel to absorb any extras.
+	keepAlives := make(chan struct{}, 3)
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *mocks.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			// specify small idle timeout so we receive a lot of keep-alives
-			return mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformOpen{ContainerID: "container", IdleTimeout: 1 * time.Millisecond})
+			return mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformOpen{ContainerID: "container", IdleTimeout: 100 * time.Millisecond})
 		case *mocks.KeepAlive:
-			close(keepAlives)
+			keepAlives <- struct{}{}
 			return nil, nil
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)

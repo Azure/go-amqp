@@ -19,20 +19,18 @@ func Example() {
 	}
 	defer client.Close()
 
+	ctx := context.TODO()
+
 	// Open a session
-	session, err := client.NewSession()
+	session, err := client.NewSession(ctx)
 	if err != nil {
 		log.Fatal("Creating AMQP session:", err)
 	}
 
-	ctx := context.TODO()
-
 	// Send a message
 	{
 		// Create a sender
-		sender, err := session.NewSender(
-			amqp.LinkTargetAddress("/queue-name"),
-		)
+		sender, err := session.NewSender(ctx, amqp.LinkTargetAddress("/queue-name"))
 		if err != nil {
 			log.Fatal("Creating sender link:", err)
 		}
@@ -53,6 +51,7 @@ func Example() {
 	{
 		// Create a receiver
 		receiver, err := session.NewReceiver(
+			ctx,
 			amqp.LinkSourceAddress("/queue-name"),
 			amqp.LinkCredit(10),
 		)

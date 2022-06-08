@@ -349,7 +349,9 @@ func TestSessionFlowDisablesTransfer(t *testing.T) {
 	client, err := New(netConn)
 	require.NoError(t, err)
 
-	session, err := client.NewSession()
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	session, err := client.NewSession(ctx)
+	cancel()
 	require.NoError(t, err)
 
 	b, err := mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformFlow{
@@ -361,7 +363,7 @@ func TestSessionFlowDisablesTransfer(t *testing.T) {
 	require.NoError(t, err)
 	netConn.SendFrame(b)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	err = session.Close(ctx)
 	cancel()
 	require.NoError(t, err)
@@ -375,12 +377,19 @@ func TestExactlyOnceDoesntWork(t *testing.T) {
 	client, err := New(netConn)
 	require.NoError(t, err)
 
-	session, err := client.NewSession()
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	session, err := client.NewSession(ctx)
+	cancel()
 	require.NoError(t, err)
 
-	snd, err := session.NewSender(LinkSenderSettle(ModeMixed),
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(
+		ctx,
+		LinkSenderSettle(ModeMixed),
 		LinkReceiverSettle(ModeSecond),
-		LinkTargetAddress("doesntwork"))
+		LinkTargetAddress("doesntwork"),
+	)
+	cancel()
 	require.Error(t, err)
 	require.Nil(t, snd)
 	require.NoError(t, client.Close())

@@ -8,6 +8,9 @@
 
 ### Breaking Changes
 * Removed `ErrConnClosed` and `ErrTimeout` sentinel error types.
+* The following methods now require a `context.Context` as their first parameter.
+  * `Client.NewSession()`, `Session.NewReceiver()`, `Session.NewSender()`
+* Removed `context.Context` parameter from method `Receiver.Prefetched()`.
 
 ### Bugs Fixed
 * Fixed potential panic in `muxHandleFrame()` when checking for manual creditor.

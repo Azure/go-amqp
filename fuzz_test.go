@@ -27,12 +27,12 @@ func fuzzConn(data []byte) int {
 	}
 	defer client.Close()
 
-	s, err := client.NewSession()
+	s, err := client.NewSession(context.Background())
 	if err != nil {
 		return 0
 	}
 
-	r, err := s.NewReceiver(LinkSourceAddress("source"), LinkCredit(2))
+	r, err := s.NewReceiver(context.Background(), LinkSourceAddress("source"), LinkCredit(2))
 	if err != nil {
 		return 0
 	}
@@ -63,12 +63,12 @@ func fuzzConn(data []byte) int {
 	}
 	defer client.Close()
 
-	s, err = client.NewSession()
+	s, err = client.NewSession(context.Background())
 	if err != nil {
 		return 0
 	}
 
-	sender, err := s.NewSender(LinkTargetAddress("source"), LinkCredit(2))
+	sender, err := s.NewSender(context.Background(), LinkTargetAddress("source"), LinkCredit(2))
 	if err != nil {
 		return 0
 	}

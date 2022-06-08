@@ -20,7 +20,9 @@ func BenchmarkSimple(b *testing.B) {
 	}
 	defer client.Close()
 
-	session, err := client.NewSession()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx)
+	cancel()
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -28,16 +30,16 @@ func BenchmarkSimple(b *testing.B) {
 	// add a random suffix to the link name so the test broker always creates a new node
 	targetName := fmt.Sprintf("BenchmarkSimple %d", rand.Uint64())
 
-	sender, err := session.NewSender(
-		amqp.LinkTargetAddress(targetName),
-	)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	sender, err := session.NewSender(ctx, amqp.LinkTargetAddress(targetName))
+	cancel()
 	if err != nil {
 		b.Fatal(err)
 	}
 
-	receiver, err := session.NewReceiver(
-		amqp.LinkSourceAddress(targetName),
-	)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	receiver, err := session.NewReceiver(ctx, amqp.LinkSourceAddress(targetName))
+	cancel()
 	if err != nil {
 		b.Fatal(err)
 	}

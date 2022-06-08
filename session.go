@@ -85,14 +85,14 @@ func (s *Session) txFrame(p frames.FrameBody, done chan encoding.DeliveryState) 
 }
 
 // NewReceiver opens a new receiver link on the session.
-func (s *Session) NewReceiver(opts ...LinkOption) (*Receiver, error) {
+func (s *Session) NewReceiver(ctx context.Context, opts ...LinkOption) (*Receiver, error) {
 	r := &Receiver{
 		batching:    DefaultLinkBatching,
 		batchMaxAge: DefaultLinkBatchMaxAge,
 		maxCredit:   DefaultLinkCredit,
 	}
 
-	l, err := attachLink(s, r, opts)
+	l, err := attachLink(ctx, s, r, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -115,8 +115,8 @@ func (s *Session) NewReceiver(opts ...LinkOption) (*Receiver, error) {
 }
 
 // NewSender opens a new sender link on the session.
-func (s *Session) NewSender(opts ...LinkOption) (*Sender, error) {
-	l, err := attachLink(s, nil, opts)
+func (s *Session) NewSender(ctx context.Context, opts ...LinkOption) (*Sender, error) {
+	l, err := attachLink(ctx, s, nil, opts)
 	if err != nil {
 		return nil, err
 	}

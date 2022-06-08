@@ -20,17 +20,25 @@ func TestSenderInvalidOptions(t *testing.T) {
 	client, err := New(netConn)
 	require.NoError(t, err)
 
-	session, err := client.NewSession()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx)
+	cancel()
 	require.NoError(t, err)
-	snd, err := session.NewSender(LinkCredit(3))
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx, LinkCredit(3))
+	cancel()
 	require.Error(t, err)
 	require.Nil(t, snd)
 
-	snd, err = session.NewSender(LinkWithManualCredits())
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err = session.NewSender(ctx, LinkWithManualCredits())
+	cancel()
 	require.Error(t, err)
 	require.Nil(t, snd)
 
-	snd, err = session.NewSender(LinkSenderSettle(3))
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err = session.NewSender(ctx, LinkSenderSettle(3))
+	cancel()
 	require.Error(t, err)
 	require.Nil(t, snd)
 }
@@ -62,26 +70,32 @@ func TestSenderMethodsNoSend(t *testing.T) {
 	client, err := New(netConn)
 	require.NoError(t, err)
 
-	session, err := client.NewSession()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx)
+	cancel()
 	require.NoError(t, err)
 	const (
 		linkAddr   = "addr1"
 		linkName   = "test1"
 		maxMsgSize = uint64(4096)
 	)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	snd, err := session.NewSender(
+		ctx,
 		LinkTargetAddress(linkAddr),
 		LinkName(linkName),
 		LinkMaxMessageSize(maxMsgSize),
 		LinkSourceDurability(DurabilityUnsettledState),
 		LinkSourceExpiryPolicy(ExpiryNever),
-		LinkSourceTimeout(300))
+		LinkSourceTimeout(300),
+	)
+	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, snd)
 	require.Equal(t, linkAddr, snd.Address())
 	require.Equal(t, linkName, snd.LinkName())
 	require.Equal(t, maxMsgSize, snd.MaxMessageSize())
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	require.NoError(t, snd.Close(ctx))
 	cancel()
 	require.NoError(t, client.Close())
@@ -93,13 +107,17 @@ func TestSenderSendOnClosed(t *testing.T) {
 	client, err := New(netConn)
 	require.NoError(t, err)
 
-	session, err := client.NewSession()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx)
+	cancel()
 	require.NoError(t, err)
-	snd, err := session.NewSender()
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx)
+	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, snd)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	require.NoError(t, snd.Close(ctx))
 	cancel()
 	// sending on a closed sender returns ErrLinkClosed
@@ -115,13 +133,17 @@ func TestSenderSendOnSessionClosed(t *testing.T) {
 	client, err := New(netConn)
 	require.NoError(t, err)
 
-	session, err := client.NewSession()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx)
+	cancel()
 	require.NoError(t, err)
-	snd, err := session.NewSender()
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx)
+	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, snd)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	require.NoError(t, session.Close(ctx))
 	cancel()
 	// sending on a closed sender returns ErrLinkClosed
@@ -137,9 +159,13 @@ func TestSenderSendOnConnClosed(t *testing.T) {
 	client, err := New(netConn)
 	require.NoError(t, err)
 
-	session, err := client.NewSession()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx)
+	cancel()
 	require.NoError(t, err)
-	snd, err := session.NewSender()
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx)
+	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, snd)
 
@@ -159,9 +185,13 @@ func TestSenderSendOnDetached(t *testing.T) {
 	client, err := New(netConn)
 	require.NoError(t, err)
 
-	session, err := client.NewSession()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx)
+	cancel()
 	require.NoError(t, err)
-	snd, err := session.NewSender()
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx)
+	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, snd)
 	// initiate a server-side detach
@@ -211,7 +241,9 @@ func TestSenderAttachError(t *testing.T) {
 	client, err := New(netConn)
 	require.NoError(t, err)
 
-	session, err := client.NewSession()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx)
+	cancel()
 	require.NoError(t, err)
 
 	const (
@@ -237,7 +269,9 @@ func TestSenderAttachError(t *testing.T) {
 		require.NoError(t, err)
 		netConn.SendFrame(b)
 	}
-	snd, err := session.NewSender()
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx)
+	cancel()
 	var de *Error
 	if !errors.As(err, &de) {
 		t.Fatalf("unexpected error type %T", err)
@@ -255,9 +289,13 @@ func TestSenderSendMismatchedModes(t *testing.T) {
 	client, err := New(netConn)
 	require.NoError(t, err)
 
-	session, err := client.NewSession()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx)
+	cancel()
 	require.NoError(t, err)
-	snd, err := session.NewSender(LinkSenderSettle(encoding.ModeSettled))
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx, LinkSenderSettle(encoding.ModeSettled))
+	cancel()
 	require.Error(t, err)
 	require.Equal(t, "amqp: sender settlement mode \"settled\" requested, received \"unsettled\" from server", err.Error())
 	require.Nil(t, snd)
@@ -294,14 +332,18 @@ func TestSenderSendSuccess(t *testing.T) {
 	client, err := New(netConn)
 	require.NoError(t, err)
 
-	session, err := client.NewSession()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx)
+	cancel()
 	require.NoError(t, err)
-	snd, err := session.NewSender()
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx)
+	cancel()
 	require.NoError(t, err)
 
 	sendInitialFlowFrame(t, netConn, 0, 100)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	require.NoError(t, snd.Send(ctx, NewMessage([]byte("test"))))
 	cancel()
 
@@ -335,14 +377,18 @@ func TestSenderSendSettled(t *testing.T) {
 	client, err := New(netConn)
 	require.NoError(t, err)
 
-	session, err := client.NewSession()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx)
+	cancel()
 	require.NoError(t, err)
-	snd, err := session.NewSender(LinkSenderSettle(ModeSettled))
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx, LinkSenderSettle(ModeSettled))
+	cancel()
 	require.NoError(t, err)
 
 	sendInitialFlowFrame(t, netConn, 0, 100)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	require.NoError(t, snd.Send(ctx, NewMessage([]byte("test"))))
 	cancel()
 
@@ -372,14 +418,18 @@ func TestSenderSendRejected(t *testing.T) {
 	client, err := New(netConn)
 	require.NoError(t, err)
 
-	session, err := client.NewSession()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx)
+	cancel()
 	require.NoError(t, err)
-	snd, err := session.NewSender()
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx)
+	cancel()
 	require.NoError(t, err)
 
 	sendInitialFlowFrame(t, netConn, 0, 100)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	err = snd.Send(ctx, NewMessage([]byte("test")))
 	cancel()
 	var deErr *DetachError
@@ -433,14 +483,18 @@ func TestSenderSendRejectedNoDetach(t *testing.T) {
 	client, err := New(netConn)
 	require.NoError(t, err)
 
-	session, err := client.NewSession()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx)
+	cancel()
 	require.NoError(t, err)
-	snd, err := session.NewSender(LinkDetachOnDispositionError(false))
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx, LinkDetachOnDispositionError(false))
+	cancel()
 	require.NoError(t, err)
 
 	sendInitialFlowFrame(t, netConn, 0, 100)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	err = snd.Send(ctx, NewMessage([]byte("test")))
 	cancel()
 	var asErr *Error
@@ -478,14 +532,18 @@ func TestSenderSendDetached(t *testing.T) {
 	client, err := New(netConn)
 	require.NoError(t, err)
 
-	session, err := client.NewSession()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx)
+	cancel()
 	require.NoError(t, err)
-	snd, err := session.NewSender()
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx)
+	cancel()
 	require.NoError(t, err)
 
 	sendInitialFlowFrame(t, netConn, 0, 100)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	err = snd.Send(ctx, NewMessage([]byte("test")))
 	cancel()
 	var asErr *DetachError
@@ -503,13 +561,17 @@ func TestSenderSendTimeout(t *testing.T) {
 	client, err := New(netConn)
 	require.NoError(t, err)
 
-	session, err := client.NewSession()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx)
+	cancel()
 	require.NoError(t, err)
-	snd, err := session.NewSender()
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx)
+	cancel()
 	require.NoError(t, err)
 
 	// no credits have been issued so the send will time out
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	ctx, cancel = context.WithTimeout(context.Background(), 10*time.Millisecond)
 	require.Error(t, snd.Send(ctx, NewMessage([]byte("test"))))
 	cancel()
 
@@ -554,14 +616,18 @@ func TestSenderSendMsgTooBig(t *testing.T) {
 	client, err := New(netConn)
 	require.NoError(t, err)
 
-	session, err := client.NewSession()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx)
+	cancel()
 	require.NoError(t, err)
-	snd, err := session.NewSender()
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx)
+	cancel()
 	require.NoError(t, err)
 
 	sendInitialFlowFrame(t, netConn, 0, 100)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	require.Error(t, snd.Send(ctx, NewMessage([]byte("test message that's too big"))))
 	cancel()
 
@@ -586,14 +652,18 @@ func TestSenderSendTagTooBig(t *testing.T) {
 	client, err := New(netConn)
 	require.NoError(t, err)
 
-	session, err := client.NewSession()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx)
+	cancel()
 	require.NoError(t, err)
-	snd, err := session.NewSender()
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx)
+	cancel()
 	require.NoError(t, err)
 
 	sendInitialFlowFrame(t, netConn, 0, 100)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	msg := NewMessage([]byte("test"))
 	// make the tag larger than max allowed of 32
 	msg.DeliveryTag = make([]byte, 33)
@@ -654,14 +724,18 @@ func TestSenderSendMultiTransfer(t *testing.T) {
 	client, err := New(netConn)
 	require.NoError(t, err)
 
-	session, err := client.NewSession()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx)
+	cancel()
 	require.NoError(t, err)
-	snd, err := session.NewSender()
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx)
+	cancel()
 	require.NoError(t, err)
 
 	sendInitialFlowFrame(t, netConn, 0, 100)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100000*time.Millisecond)
+	ctx, cancel = context.WithTimeout(context.Background(), 100000*time.Millisecond)
 	payload := make([]byte, maxReceiverFrameSize*4)
 	for i := 0; i < maxReceiverFrameSize*4; i++ {
 		payload[i] = byte(i % 256)
@@ -681,9 +755,13 @@ func TestSenderConnReaderError(t *testing.T) {
 	client, err := New(netConn)
 	require.NoError(t, err)
 
-	session, err := client.NewSession()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx)
+	cancel()
 	require.NoError(t, err)
-	snd, err := session.NewSender()
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx)
+	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, snd)
 
@@ -710,9 +788,13 @@ func TestSenderConnWriterError(t *testing.T) {
 	client, err := New(netConn)
 	require.NoError(t, err)
 
-	session, err := client.NewSession()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx)
+	cancel()
 	require.NoError(t, err)
-	snd, err := session.NewSender()
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx)
+	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, snd)
 
@@ -762,10 +844,14 @@ func TestSenderFlowFrameWithEcho(t *testing.T) {
 	client, err := New(netConn)
 	require.NoError(t, err)
 
-	session, err := client.NewSession()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx)
+	cancel()
 	require.NoError(t, err)
 
-	sender, err := session.NewSender()
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	sender, err := session.NewSender(ctx)
+	cancel()
 	require.NoError(t, err)
 
 	nextIncomingID := uint32(1)
@@ -782,7 +868,7 @@ func TestSenderFlowFrameWithEcho(t *testing.T) {
 	netConn.SendFrame(b)
 
 	<-echo
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	err = sender.Close(ctx)
 	cancel()
 	require.NoError(t, err)

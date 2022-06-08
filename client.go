@@ -1,6 +1,7 @@
 package amqp
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -54,10 +55,12 @@ func (c *Client) Close() error {
 
 // NewSession opens a new AMQP session to the server.
 // Returns ErrConnClosed if the underlying connection has been closed.
-func (c *Client) NewSession(opts ...SessionOption) (*Session, error) {
+func (c *Client) NewSession(ctx context.Context, opts ...SessionOption) (*Session, error) {
 	// get a session allocated by Client.mux
 	var sResp newSessionResp
 	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	case <-c.conn.Done:
 		return nil, c.conn.Err()
 	case sResp = <-c.conn.NewSession:
@@ -73,7 +76,11 @@ func (c *Client) NewSession(opts ...SessionOption) (*Session, error) {
 		if err != nil {
 			// deallocate session on error.  we can't call
 			// s.Close() as the session mux hasn't started yet.
-			c.conn.DelSession <- s
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case c.conn.DelSession <- s:
+			}
 			return nil, err
 		}
 	}
@@ -91,6 +98,8 @@ func (c *Client) NewSession(opts ...SessionOption) (*Session, error) {
 	// wait for response
 	var fr frames.Frame
 	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	case <-c.conn.Done:
 		return nil, c.conn.Err()
 	case fr = <-s.rx:
@@ -105,7 +114,11 @@ func (c *Client) NewSession(opts ...SessionOption) (*Session, error) {
 		// either swallow the frame or blow up in some other way, both causing this call to hang.
 		// deallocate session on error.  we can't call
 		// s.Close() as the session mux hasn't started yet.
-		c.conn.DelSession <- s
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case c.conn.DelSession <- s:
+		}
 		return nil, fmt.Errorf("unexpected begin response: %+v", fr.Body)
 	}
 

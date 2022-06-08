@@ -98,7 +98,7 @@ func newLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 }
 
 // attachLink is used by Receiver and Sender to create new links
-func attachLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
+func attachLink(ctx context.Context, s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 	l, err := newLink(s, r, opts)
 	if err != nil {
 		return nil, err
@@ -120,6 +120,8 @@ func attachLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 
 	// request handle from Session.mux
 	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	case <-s.done:
 		return nil, s.err
 	case s.allocateHandle <- l:
@@ -127,6 +129,8 @@ func attachLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 
 	// wait for handle allocation
 	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	case <-s.done:
 		return nil, s.err
 	case <-l.RX:
@@ -169,6 +173,8 @@ func attachLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 	// wait for response
 	var fr frames.FrameBody
 	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	case <-s.done:
 		return nil, s.err
 	case fr = <-l.RX:
@@ -191,6 +197,8 @@ func attachLink(s *Session, r *Receiver, opts []LinkOption) (*link, error) {
 	if resp.Source == nil && resp.Target == nil {
 		// wait for detach
 		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
 		case <-s.done:
 			return nil, s.err
 		case fr = <-l.RX:

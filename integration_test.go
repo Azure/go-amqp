@@ -96,7 +96,9 @@ func TestIntegrationRoundTrip(t *testing.T) {
 
 			for i := 0; i < tt.sessions; i++ {
 				// Open a session
-				session, err := client.NewSession()
+				ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+				session, err := client.NewSession(ctx)
+				cancel()
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -105,9 +107,12 @@ func TestIntegrationRoundTrip(t *testing.T) {
 				targetName := fmt.Sprintf("%s %d", tt.label, rand.Uint64())
 
 				// Create a sender
+				ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 				sender, err := session.NewSender(
+					ctx,
 					amqp.LinkTargetAddress(targetName),
 				)
+				cancel()
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -147,10 +152,13 @@ func TestIntegrationRoundTrip(t *testing.T) {
 					defer wg.Done()
 
 					// Create a receiver
+					ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 					receiver, err := session.NewReceiver(
+						ctx,
 						amqp.LinkSourceAddress(targetName),
 						amqp.LinkCredit(10),
 					)
+					cancel()
 					if err != nil {
 						receiveErr.write(err)
 						return
@@ -243,7 +251,9 @@ func TestIntegrationRoundTrip_Buffered(t *testing.T) {
 			defer client.Close()
 
 			// Open a session
-			session, err := client.NewSession()
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			session, err := client.NewSession(ctx)
+			cancel()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -251,9 +261,12 @@ func TestIntegrationRoundTrip_Buffered(t *testing.T) {
 			// Create a sender
 			// add a random suffix to the link name so the test broker always creates a new node
 			targetName := fmt.Sprintf("%s %d", tt.label, rand.Uint64())
+			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 			sender, err := session.NewSender(
+				ctx,
 				amqp.LinkTargetAddress(targetName),
 			)
+			cancel()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -269,11 +282,14 @@ func TestIntegrationRoundTrip_Buffered(t *testing.T) {
 			testClose(t, sender.Close)
 
 			// Create a receiver
+			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 			receiver, err := session.NewReceiver(
+				ctx,
 				amqp.LinkSourceAddress(targetName),
 				amqp.LinkCredit(uint32(len(tt.data))),   // enough credit to buffer all messages
 				amqp.LinkSenderSettle(amqp.ModeSettled), // don't require acknowledgment
 			)
+			cancel()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -352,7 +368,9 @@ func TestIntegrationReceiverModeSecond(t *testing.T) {
 
 			for i := 0; i < tt.sessions; i++ {
 				// Open a session
-				session, err := client.NewSession()
+				ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+				session, err := client.NewSession(ctx)
+				cancel()
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -361,9 +379,12 @@ func TestIntegrationReceiverModeSecond(t *testing.T) {
 				targetName := fmt.Sprintf("%s %d", tt.label, rand.Uint64())
 
 				// Create a sender
+				ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 				sender, err := session.NewSender(
+					ctx,
 					amqp.LinkTargetAddress(targetName),
 				)
+				cancel()
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -393,10 +414,13 @@ func TestIntegrationReceiverModeSecond(t *testing.T) {
 					defer wg.Done()
 
 					// Create a receiver
+					ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 					receiver, err := session.NewReceiver(
+						ctx,
 						amqp.LinkSourceAddress(targetName),
 						amqp.LinkReceiverSettle(amqp.ModeSecond),
 					)
+					cancel()
 					if err != nil {
 						receiveErr.write(err)
 						return
@@ -497,9 +521,9 @@ func TestIntegrationSessionHandleMax(t *testing.T) {
 			defer client.Close()
 
 			// Open a session
-			session, err := client.NewSession(
-				amqp.SessionMaxLinks(tt.maxLinks),
-			)
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			session, err := client.NewSession(ctx, amqp.SessionMaxLinks(tt.maxLinks))
+			cancel()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -508,9 +532,12 @@ func TestIntegrationSessionHandleMax(t *testing.T) {
 
 			// Create a sender
 			for i := 0; i < tt.links; i++ {
+				ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 				sender, err := session.NewSender(
+					ctx,
 					amqp.LinkTargetAddress(fmt.Sprintf("TestIntegrationSessionHandleMax %d", rand.Uint64())),
 				)
+				cancel()
 				switch {
 				case err == nil:
 				case tt.error == nil:
@@ -566,25 +593,33 @@ func TestIntegrationLinkName(t *testing.T) {
 			defer client.Close()
 
 			// Open a session
-			session, err := client.NewSession()
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			session, err := client.NewSession(ctx)
+			cancel()
 			if err != nil {
 				t.Fatal(err)
 			}
 
+			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 			senderOrigin, err := session.NewSender(
+				ctx,
 				amqp.LinkTargetAddress("TestIntegrationLinkName"),
 				amqp.LinkName(tt.name),
 			)
+			cancel()
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer testClose(t, senderOrigin.Close)
 
 			// This one should fail
+			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 			sender, err := session.NewSender(
+				ctx,
 				amqp.LinkTargetAddress("TestIntegrationLinkName"),
 				amqp.LinkName(tt.name),
 			)
+			cancel()
 			if err == nil {
 				testClose(t, sender.Close)
 			}
@@ -618,15 +653,20 @@ func TestIntegrationClose(t *testing.T) {
 		defer client.Close()
 
 		// Open a session
-		session, err := client.NewSession()
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		session, err := client.NewSession(ctx)
+		cancel()
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		// Create a sender
+		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 		receiver, err := session.NewReceiver(
+			ctx,
 			amqp.LinkSourceAddress("TestIntegrationClose"),
 		)
+		cancel()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -659,15 +699,20 @@ func TestIntegrationClose(t *testing.T) {
 		defer client.Close()
 
 		// Open a session
-		session, err := client.NewSession()
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		session, err := client.NewSession(ctx)
+		cancel()
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		// Create a sender
+		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 		receiver, err := session.NewReceiver(
+			ctx,
 			amqp.LinkSourceAddress("TestIntegrationClose"),
 		)
+		cancel()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -703,15 +748,20 @@ func TestIntegrationClose(t *testing.T) {
 		defer client.Close()
 
 		// Open a session
-		session, err := client.NewSession()
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		session, err := client.NewSession(ctx)
+		cancel()
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		// Create a sender
+		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 		receiver, err := session.NewReceiver(
+			ctx,
 			amqp.LinkSourceAddress("TestIntegrationClose"),
 		)
+		cancel()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -752,7 +802,9 @@ func TestMultipleSessionsOpenClose(t *testing.T) {
 	sessions := [10]*amqp.Session{}
 	for i := 0; i < 10; i++ {
 		for j := 0; j < 10; j++ {
-			session, err := client.NewSession()
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			session, err := client.NewSession(ctx)
+			cancel()
 			if err != nil {
 				t.Fatalf("failed to create session: %v", err)
 				return
@@ -789,12 +841,14 @@ func TestConcurrentSessionsOpenClose(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			session, err := client.NewSession()
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			session, err := client.NewSession(ctx)
+			cancel()
 			if err != nil {
 				t.Errorf("failed to create session: %v", err)
 				return
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
 			err = session.Close(ctx)
 			cancel()
 			if err != nil {

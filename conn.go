@@ -731,13 +731,11 @@ func (c *conn) connWriter() {
 			// send close
 			cls := &frames.PerformClose{}
 			debug(1, "TX (connWriter): %s", cls)
-			err = c.writeFrame(frames.Frame{
+			_ = c.writeFrame(frames.Frame{
 				Type: frameTypeAMQP,
 				Body: cls,
 			})
-			if err == nil {
-				return
-			}
+			return
 		}
 	}
 }
@@ -781,6 +779,12 @@ func (c *conn) netWriteWithRetry(b []byte) (int, error) {
 	var n int
 	var err error
 	for i := 0; i < 5; i++ {
+		select {
+		case <-c.closeMux:
+			return n, err
+		default:
+			// mux is still live
+		}
 		n, err = c.net.Write(b)
 		if err == nil {
 			break

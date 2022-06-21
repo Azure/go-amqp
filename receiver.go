@@ -120,26 +120,35 @@ func (r *Receiver) ReleaseMessage(ctx context.Context, msg *Message) error {
 
 // Modify notifies the server that the message was not acted upon
 // and should be modifed.
-//
-// deliveryFailed indicates that the server must consider this and
-// unsuccessful delivery attempt and increment the delivery count.
-//
-// undeliverableHere indicates that the server must not redeliver
-// the message to this link.
-//
-// messageAnnotations is an optional annotation map to be merged
-// with the existing message annotations, overwriting existing keys
-// if necessary.
-func (r *Receiver) ModifyMessage(ctx context.Context, msg *Message, deliveryFailed, undeliverableHere bool, messageAnnotations Annotations) error {
+func (r *Receiver) ModifyMessage(ctx context.Context, msg *Message, options *ModifyMessageOptions) error {
 	if !msg.shouldSendDisposition() {
 		return nil
 	}
+	if options == nil {
+		options = &ModifyMessageOptions{}
+	}
 	return r.messageDisposition(ctx,
 		msg, &encoding.StateModified{
-			DeliveryFailed:     deliveryFailed,
-			UndeliverableHere:  undeliverableHere,
-			MessageAnnotations: messageAnnotations,
+			DeliveryFailed:     options.DeliveryFailed,
+			UndeliverableHere:  options.UndeliverableHere,
+			MessageAnnotations: options.Annotations,
 		})
+}
+
+// ModifyMessageOptions contains the optional parameters to ModifyMessage.
+type ModifyMessageOptions struct {
+	// DeliveryFailed indicates that the server must consider this and
+	// unsuccessful delivery attempt and increment the delivery count.
+	DeliveryFailed bool
+
+	// UndeliverableHere indicates that the server must not redeliver
+	// the message to this link.
+	UndeliverableHere bool
+
+	// Annotations is an optional annotation map to be merged
+	// with the existing message annotations, overwriting existing keys
+	// if necessary.
+	Annotations Annotations
 }
 
 // Address returns the link's address.

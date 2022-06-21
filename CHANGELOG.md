@@ -14,6 +14,7 @@
 * The following type names had the prefix `AMQP` removed to prevent stuttering.
   * `AMQPAddress`, `AMQPMessageID`, `AMQPSymbol`, `AMQPSequenceNumber`, `AMQPBinary`
 * Various `Default*` constants are no longer exported.
+* The args to `Receiver.ModifyMessage()` have changed.
 
 ### Bugs Fixed
 * Fixed potential panic in `muxHandleFrame()` when checking for manual creditor.

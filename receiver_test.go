@@ -693,8 +693,11 @@ func TestReceiveSuccessModeSecondModify(t *testing.T) {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
-	err = r.ModifyMessage(ctx, msg, false, true, Annotations{
-		"some": "value",
+	err = r.ModifyMessage(ctx, msg, &ModifyMessageOptions{
+		UndeliverableHere: true,
+		Annotations: Annotations{
+			"some": "value",
+		},
 	})
 	cancel()
 	require.NoError(t, err)

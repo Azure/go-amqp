@@ -118,8 +118,7 @@ func (r *Receiver) ReleaseMessage(ctx context.Context, msg *Message) error {
 	return r.messageDisposition(ctx, msg, &encoding.StateReleased{})
 }
 
-// Modify notifies the server that the message was not acted upon
-// and should be modifed.
+// Modify notifies the server that the message was not acted upon and should be modifed.
 func (r *Receiver) ModifyMessage(ctx context.Context, msg *Message, options *ModifyMessageOptions) error {
 	if !msg.shouldSendDisposition() {
 		return nil
@@ -137,7 +136,7 @@ func (r *Receiver) ModifyMessage(ctx context.Context, msg *Message, options *Mod
 
 // ModifyMessageOptions contains the optional parameters to ModifyMessage.
 type ModifyMessageOptions struct {
-	// DeliveryFailed indicates that the server must consider this and
+	// DeliveryFailed indicates that the server must consider this an
 	// unsuccessful delivery attempt and increment the delivery count.
 	DeliveryFailed bool
 

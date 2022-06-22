@@ -16,6 +16,7 @@ import (
 	"github.com/Azure/go-amqp/internal/buffer"
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/frames"
+	"github.com/Azure/go-amqp/internal/log"
 )
 
 // Default connection options
@@ -575,7 +576,7 @@ func (c *conn) connReader() {
 			}
 			err := buf.ReadFromOnce(c.net)
 			if err != nil {
-				debug(1, "connReader error: %v", err)
+				log.Debug(1, "connReader error: %v", err)
 				select {
 				// check if error was due to close in progress
 				case <-c.Done:
@@ -701,7 +702,7 @@ func (c *conn) connWriter() {
 	var err error
 	for {
 		if err != nil {
-			debug(1, "connWriter error: %v", err)
+			log.Debug(1, "connWriter error: %v", err)
 			c.connErr <- err
 			return
 		}
@@ -716,7 +717,7 @@ func (c *conn) connWriter() {
 
 		// keepalive timer
 		case <-keepalive:
-			debug(3, "sending keep-alive frame")
+			log.Debug(3, "sending keep-alive frame")
 			_, err = c.net.Write(keepaliveFrame)
 			// It would be slightly more efficient in terms of network
 			// resources to reset the timer each time a frame is sent.
@@ -730,7 +731,7 @@ func (c *conn) connWriter() {
 		case <-c.Done:
 			// send close
 			cls := &frames.PerformClose{}
-			debug(1, "TX (connWriter): %s", cls)
+			log.Debug(1, "TX (connWriter): %s", cls)
 			_ = c.writeFrame(frames.Frame{
 				Type: frameTypeAMQP,
 				Body: cls,
@@ -919,7 +920,7 @@ func (c *conn) openAMQP() stateFunc {
 		IdleTimeout:  c.idleTimeout / 2, // per spec, advertise half our idle timeout
 		Properties:   c.properties,
 	}
-	debug(1, "TX (openAMQP): %s", open)
+	log.Debug(1, "TX (openAMQP): %s", open)
 	c.err = c.writeFrame(frames.Frame{
 		Type:    frameTypeAMQP,
 		Body:    open,
@@ -940,7 +941,7 @@ func (c *conn) openAMQP() stateFunc {
 		c.err = fmt.Errorf("openAMQP: unexpected frame type %T", fr.Body)
 		return nil
 	}
-	debug(1, "RX (openAMQP): %s", o)
+	log.Debug(1, "RX (openAMQP): %s", o)
 
 	// update peer settings
 	if o.MaxFrameSize > 0 {
@@ -972,7 +973,7 @@ func (c *conn) negotiateSASL() stateFunc {
 		c.err = fmt.Errorf("negotiateSASL: unexpected frame type %T", fr.Body)
 		return nil
 	}
-	debug(1, "RX (negotiateSASL): %s", sm)
+	log.Debug(1, "RX (negotiateSASL): %s", sm)
 
 	// return first match in c.saslHandlers based on order received
 	for _, mech := range sm.Mechanisms {
@@ -1004,7 +1005,7 @@ func (c *conn) saslOutcome() stateFunc {
 		c.err = fmt.Errorf("saslOutcome: unexpected frame type %T", fr.Body)
 		return nil
 	}
-	debug(1, "RX (saslOutcome): %s", so)
+	log.Debug(1, "RX (saslOutcome): %s", so)
 
 	// check if auth succeeded
 	if so.Code != encoding.CodeSASLOK {

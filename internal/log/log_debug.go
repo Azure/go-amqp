@@ -1,7 +1,7 @@
 //go:build debug
 // +build debug
 
-package amqp
+package log
 
 import "log"
 import "os"
@@ -21,7 +21,7 @@ func init() {
 	debugLevel = level
 }
 
-func debug(level int, format string, v ...interface{}) {
+func Debug(level int, format string, v ...interface{}) {
 	if level <= debugLevel {
 		logger.Printf(format, v...)
 	}

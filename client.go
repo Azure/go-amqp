@@ -12,6 +12,7 @@ import (
 
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/frames"
+	"github.com/Azure/go-amqp/internal/log"
 )
 
 // Client is an AMQP client connection.
@@ -92,7 +93,7 @@ func (c *Client) NewSession(ctx context.Context, opts ...SessionOption) (*Sessio
 		OutgoingWindow: s.outgoingWindow,
 		HandleMax:      s.handleMax,
 	}
-	debug(1, "TX (NewSession): %s", begin)
+	log.Debug(1, "TX (NewSession): %s", begin)
 	_ = s.txFrame(begin, nil)
 
 	// wait for response
@@ -104,7 +105,7 @@ func (c *Client) NewSession(ctx context.Context, opts ...SessionOption) (*Sessio
 		return nil, c.conn.Err()
 	case fr = <-s.rx:
 	}
-	debug(1, "RX (NewSession): %s", fr.Body)
+	log.Debug(1, "RX (NewSession): %s", fr.Body)
 
 	begin, ok := fr.Body.(*frames.PerformBegin)
 	if !ok {

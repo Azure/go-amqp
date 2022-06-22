@@ -1,8 +1,8 @@
 //go:build !debug
 // +build !debug
 
-package amqp
+package log
 
 // dummy functions used when debugging is not enabled
 
-func debug(_ int, _ string, _ ...interface{}) {}
+func Debug(_ int, _ string, _ ...interface{}) {}

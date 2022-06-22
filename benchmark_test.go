@@ -14,7 +14,7 @@ func BenchmarkSimple(b *testing.B) {
 	if localBrokerAddr == "" {
 		b.Skip()
 	}
-	client, err := amqp.Dial(localBrokerAddr)
+	client, err := amqp.Dial(localBrokerAddr, nil)
 	if err != nil {
 		b.Fatal(err)
 	}

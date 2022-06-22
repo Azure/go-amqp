@@ -50,7 +50,7 @@ func TestIntegrationRoundTrip(t *testing.T) {
 	}
 	tests := []struct {
 		label    string
-		sessions int
+		sessions uint16
 		data     []string
 	}{
 		{
@@ -88,13 +88,15 @@ func TestIntegrationRoundTrip(t *testing.T) {
 			checkLeaks := leaktest.CheckTimeout(t, 60*time.Second)
 
 			// Create client
-			client, err := amqp.Dial(localBrokerAddr, amqp.ConnMaxSessions(tt.sessions))
+			client, err := amqp.Dial(localBrokerAddr, &amqp.ConnOptions{
+				MaxSessions: tt.sessions,
+			})
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer client.Close()
 
-			for i := 0; i < tt.sessions; i++ {
+			for i := uint16(0); i < tt.sessions; i++ {
 				// Open a session
 				ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 				session, err := client.NewSession(ctx)
@@ -244,7 +246,7 @@ func TestIntegrationRoundTrip_Buffered(t *testing.T) {
 			checkLeaks := leaktest.CheckTimeout(t, 60*time.Second)
 
 			// Create client
-			client, err := amqp.Dial(localBrokerAddr)
+			client, err := amqp.Dial(localBrokerAddr, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -360,7 +362,7 @@ func TestIntegrationReceiverModeSecond(t *testing.T) {
 			checkLeaks := leaktest.CheckTimeout(t, 60*time.Second)
 
 			// Create client
-			client, err := amqp.Dial(localBrokerAddr)
+			client, err := amqp.Dial(localBrokerAddr, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -514,7 +516,7 @@ func TestIntegrationSessionHandleMax(t *testing.T) {
 			// checkLeaks := leaktest.CheckTimeout(t, 60*time.Second)
 
 			// Create client
-			client, err := amqp.Dial(localBrokerAddr)
+			client, err := amqp.Dial(localBrokerAddr, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -586,7 +588,7 @@ func TestIntegrationLinkName(t *testing.T) {
 		label := fmt.Sprintf("name %v", tt.name)
 		t.Run(label, func(t *testing.T) {
 			// Create client
-			client, err := amqp.Dial(localBrokerAddr)
+			client, err := amqp.Dial(localBrokerAddr, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -646,7 +648,7 @@ func TestIntegrationClose(t *testing.T) {
 		checkLeaks := leaktest.CheckTimeout(t, 60*time.Second)
 
 		// Create client
-		client, err := amqp.Dial(localBrokerAddr)
+		client, err := amqp.Dial(localBrokerAddr, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -692,7 +694,7 @@ func TestIntegrationClose(t *testing.T) {
 		checkLeaks := leaktest.CheckTimeout(t, 60*time.Second)
 
 		// Create client
-		client, err := amqp.Dial(localBrokerAddr)
+		client, err := amqp.Dial(localBrokerAddr, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -741,7 +743,7 @@ func TestIntegrationClose(t *testing.T) {
 		checkLeaks := leaktest.CheckTimeout(t, 60*time.Second)
 
 		// Create client
-		client, err := amqp.Dial(localBrokerAddr)
+		client, err := amqp.Dial(localBrokerAddr, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -793,7 +795,7 @@ func TestMultipleSessionsOpenClose(t *testing.T) {
 	//checkLeaks := leaktest.Check(t)
 
 	// Create client
-	client, err := amqp.Dial(localBrokerAddr)
+	client, err := amqp.Dial(localBrokerAddr, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -831,7 +833,7 @@ func TestConcurrentSessionsOpenClose(t *testing.T) {
 	//checkLeaks := leaktest.Check(t)
 
 	// Create client
-	client, err := amqp.Dial(localBrokerAddr)
+	client, err := amqp.Dial(localBrokerAddr, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

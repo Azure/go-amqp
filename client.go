@@ -27,8 +27,10 @@ type Client struct {
 //
 // If username and password information is not empty it's used as SASL PLAIN
 // credentials, equal to passing ConnSASLPlain option.
-func Dial(addr string, opts ...ConnOption) (*Client, error) {
-	c, err := dialConn(addr, opts...)
+//
+// opts: pass nil to accept the default values.
+func Dial(addr string, opts *ConnOptions) (*Client, error) {
+	c, err := dialConn(addr, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -40,8 +42,9 @@ func Dial(addr string, opts ...ConnOption) (*Client, error) {
 }
 
 // New establishes an AMQP client connection over conn.
-func New(conn net.Conn, opts ...ConnOption) (*Client, error) {
-	c, err := newConn(conn, opts...)
+// opts: pass nil to accept the default values.
+func New(conn net.Conn, opts *ConnOptions) (*Client, error) {
+	c, err := newConn(conn, opts)
 	if err != nil {
 		return nil, err
 	}

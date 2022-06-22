@@ -11,9 +11,9 @@ import (
 
 func Example() {
 	// Create client
-	client, err := amqp.Dial("amqps://my-namespace.servicebus.windows.net",
-		amqp.ConnSASLPlain("access-key-name", "access-key"),
-	)
+	client, err := amqp.Dial("amqps://my-namespace.servicebus.windows.net", &amqp.ConnOptions{
+		SASLType: amqp.SASLTypePlain("access-key-name", "access-key"),
+	})
 	if err != nil {
 		log.Fatal("Dialing AMQP server:", err)
 	}

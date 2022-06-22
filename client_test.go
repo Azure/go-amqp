@@ -38,7 +38,7 @@ func TestClientDial(t *testing.T) {
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	client, err := Dial("amqp://localhost", connDialer(mockDialer{resp: responder}))
+	client, err := Dial("amqp://localhost", &ConnOptions{dialer: mockDialer{resp: responder}})
 	require.NoError(t, err)
 	require.NotNil(t, client)
 	// error case
@@ -52,7 +52,7 @@ func TestClientDial(t *testing.T) {
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	client, err = Dial("amqp://localhost", connDialer(mockDialer{resp: responder}))
+	client, err = Dial("amqp://localhost", &ConnOptions{dialer: mockDialer{resp: responder}})
 	require.Error(t, err)
 	require.Nil(t, client)
 }
@@ -68,7 +68,7 @@ func TestClientClose(t *testing.T) {
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	client, err := Dial("amqp://localhost", connDialer(mockDialer{resp: responder}))
+	client, err := Dial("amqp://localhost", &ConnOptions{dialer: mockDialer{resp: responder}})
 	require.NoError(t, err)
 	require.NotNil(t, client)
 	require.NoError(t, client.Close())
@@ -167,7 +167,7 @@ func TestClientNewSession(t *testing.T) {
 	}
 	netConn := mocks.NewNetConn(responder)
 
-	client, err := New(netConn)
+	client, err := New(netConn, nil)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	session, err := client.NewSession(ctx, SessionIncomingWindow(incomingWindow), SessionOutgoingWindow(outgoingWindow))
@@ -206,7 +206,7 @@ func TestClientMultipleSessions(t *testing.T) {
 	}
 	netConn := mocks.NewNetConn(responder)
 
-	client, err := New(netConn)
+	client, err := New(netConn, nil)
 	require.NoError(t, err)
 	// first session
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -249,7 +249,7 @@ func TestClientTooManySessions(t *testing.T) {
 	}
 	netConn := mocks.NewNetConn(responder)
 
-	client, err := New(netConn)
+	client, err := New(netConn, nil)
 	require.NoError(t, err)
 	for i := uint16(0); i < 3; i++ {
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -270,7 +270,7 @@ func TestClientTooManySessions(t *testing.T) {
 func TestClientNewSessionInvalidOption(t *testing.T) {
 	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
 
-	client, err := New(netConn)
+	client, err := New(netConn, nil)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	session, err := client.NewSession(ctx, SessionMaxLinks(0))
@@ -301,7 +301,7 @@ func TestClientNewSessionMissingRemoteChannel(t *testing.T) {
 	}
 	netConn := mocks.NewNetConn(responder)
 
-	client, err := New(netConn)
+	client, err := New(netConn, nil)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	session, err := client.NewSession(ctx, SessionMaxLinks(1))
@@ -327,7 +327,7 @@ func TestClientNewSessionInvalidInitialResponse(t *testing.T) {
 	}
 	netConn := mocks.NewNetConn(responder)
 
-	client, err := New(netConn)
+	client, err := New(netConn, nil)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	session, err := client.NewSession(ctx)
@@ -360,7 +360,7 @@ func TestClientNewSessionInvalidSecondResponseSameChannel(t *testing.T) {
 	}
 	netConn := mocks.NewNetConn(responder)
 
-	client, err := New(netConn)
+	client, err := New(netConn, nil)
 	require.NoError(t, err)
 	// fisrt session succeeds
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -401,7 +401,7 @@ func TestClientNewSessionInvalidSecondResponseDifferentChannel(t *testing.T) {
 	}
 	netConn := mocks.NewNetConn(responder)
 
-	client, err := New(netConn)
+	client, err := New(netConn, nil)
 	require.NoError(t, err)
 	// fisrt session succeeds
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)

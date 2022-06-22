@@ -26,145 +26,70 @@ const (
 	defaultMaxSessions  = 65536
 )
 
-// ConnOption is a function for configuring an AMQP connection.
-type ConnOption func(*conn) error
+// ConnOptions contains the optional settings for configuring an AMQP connection.
+type ConnOptions struct {
+	// ConnContainerID sets the container-id to use when opening the connection.
+	//
+	// A container ID will be randomly generated if this option is not used.
+	ContainerID string
 
-// ConnServerHostname sets the hostname sent in the AMQP
-// Open frame and TLS ServerName (if not otherwise set).
-//
-// This is useful when the AMQP connection will be established
-// via a pre-established TLS connection as the server may not
-// know which hostname the client is attempting to connect to.
-func ConnServerHostname(hostname string) ConnOption {
-	return func(c *conn) error {
-		c.hostname = hostname
-		return nil
-	}
-}
+	// HostName sets the hostname sent in the AMQP
+	// Open frame and TLS ServerName (if not otherwise set).
+	HostName string
 
-// ConnTLS toggles TLS negotiation.
-//
-// Default: false.
-func ConnTLS(enable bool) ConnOption {
-	return func(c *conn) error {
-		c.tlsNegotiation = enable
-		return nil
-	}
-}
+	// ConnIdleTimeout specifies the maximum period in milliseconds between
+	// receiving frames from the peer.
+	//
+	// Specify a value less than zero to disable idle timeout.
+	//
+	// Default: 1 minute.
+	IdleTimeout time.Duration
 
-// ConnTLSConfig sets the tls.Config to be used during
-// TLS negotiation.
-//
-// This option is for advanced usage, in most scenarios
-// providing a URL scheme of "amqps://" or ConnTLS(true)
-// is sufficient.
-func ConnTLSConfig(tc *tls.Config) ConnOption {
-	return func(c *conn) error {
-		c.tlsConfig = tc
-		c.tlsNegotiation = true
-		return nil
-	}
-}
+	// ConnMaxFrameSize sets the maximum frame size that
+	// the connection will accept.
+	//
+	// Must be 512 or greater.
+	//
+	// Default: 512.
+	MaxFrameSize uint32
 
-// ConnIdleTimeout specifies the maximum period between receiving
-// frames from the peer.
-//
-// Resolution is milliseconds. A value of zero indicates no timeout.
-// This setting is in addition to TCP keepalives.
-//
-// Default: 1 minute.
-func ConnIdleTimeout(d time.Duration) ConnOption {
-	return func(c *conn) error {
-		if d < 0 {
-			return errors.New("idle timeout cannot be negative")
-		}
-		c.idleTimeout = d
-		return nil
-	}
-}
+	// MaxSessions sets the maximum number of channels.
+	// The value must be greater than zero.
+	//
+	// Default: 65535.
+	MaxSessions uint16
 
-// ConnMaxFrameSize sets the maximum frame size that
-// the connection will accept.
-//
-// Must be 512 or greater.
-//
-// Default: 512.
-func ConnMaxFrameSize(n uint32) ConnOption {
-	return func(c *conn) error {
-		if n < 512 {
-			return errors.New("max frame size must be 512 or greater")
-		}
-		c.maxFrameSize = n
-		return nil
-	}
-}
+	// ConnProperty sets an entry in the connection properties map sent to the server.
+	Properties map[string]interface{}
 
-// ConnConnectTimeout configures how long to wait for the
-// server during connection establishment.
-//
-// Once the connection has been established, ConnIdleTimeout
-// applies. If duration is zero, no timeout will be applied.
-//
-// Default: 0.
-func ConnConnectTimeout(d time.Duration) ConnOption {
-	return func(c *conn) error { c.connectTimeout = d; return nil }
-}
+	// SASLType contains the specified SASL authentication mechanism.
+	SASLType SASLType
 
-// ConnMaxSessions sets the maximum number of channels.
-//
-// n must be in the range 1 to 65536.
-//
-// Default: 65536.
-func ConnMaxSessions(n int) ConnOption {
-	return func(c *conn) error {
-		if n < 1 {
-			return errors.New("max sessions cannot be less than 1")
-		}
-		if n > 65536 {
-			return errors.New("max sessions cannot be greater than 65536")
-		}
-		c.channelMax = uint16(n - 1)
-		return nil
-	}
-}
+	// Timeout configures how long to wait for the
+	// server during connection establishment.
+	//
+	// Once the connection has been established, IdleTimeout
+	// applies. If duration is zero, no timeout will be applied.
+	//
+	// Default: 0.
+	Timeout time.Duration
 
-// ConnProperty sets an entry in the connection properties map sent to the server.
-//
-// This option can be used multiple times.
-func ConnProperty(key, value string) ConnOption {
-	return func(c *conn) error {
-		if key == "" {
-			return errors.New("connection property key must not be empty")
-		}
-		if c.properties == nil {
-			c.properties = make(map[encoding.Symbol]interface{})
-		}
-		c.properties[encoding.Symbol(key)] = value
-		return nil
-	}
-}
+	// ConnTLSConfig sets the tls.Config to be used during
+	// TLS negotiation.
+	//
+	// This option is for advanced usage, in most scenarios
+	// providing a URL scheme of "amqps://" or ConnTLS(true)
+	// is sufficient.
+	TLSConfig *tls.Config
 
-// ConnContainerID sets the container-id to use when opening the connection.
-//
-// A container ID will be randomly generated if this option is not used.
-func ConnContainerID(id string) ConnOption {
-	return func(c *conn) error {
-		c.containerID = id
-		return nil
-	}
+	// test hook
+	dialer dialer
 }
 
 // used to abstract the underlying dialer for testing purposes
 type dialer interface {
 	NetDialerDial(c *conn, host, port string) error
 	TLSDialWithDialer(c *conn, host, port string) error
-}
-
-func connDialer(d dialer) ConnOption {
-	return func(c *conn) error {
-		c.dialer = d
-		return nil
-	}
 }
 
 // conn is an AMQP connection.
@@ -240,7 +165,7 @@ func (defaultDialer) TLSDialWithDialer(c *conn, host, port string) (err error) {
 	return
 }
 
-func dialConn(addr string, opts ...ConnOption) (*conn, error) {
+func dialConn(addr string, opts *ConnOptions) (*conn, error) {
 	u, err := url.Parse(addr)
 	if err != nil {
 		return nil, err
@@ -253,21 +178,22 @@ func dialConn(addr string, opts ...ConnOption) (*conn, error) {
 		}
 	}
 
+	var cp ConnOptions
+	if opts != nil {
+		cp = *opts
+	}
+
 	// prepend SASL credentials when the user/pass segment is not empty
 	if u.User != nil {
 		pass, _ := u.User.Password()
-		opts = append([]ConnOption{
-			ConnSASLPlain(u.User.Username(), pass),
-		}, opts...)
+		cp.SASLType = SASLTypePlain(u.User.Username(), pass)
 	}
 
-	// append default options so user specified can overwrite
-	opts = append([]ConnOption{
-		connDialer(defaultDialer{}),
-		ConnServerHostname(host),
-	}, opts...)
+	if cp.HostName == "" {
+		cp.HostName = host
+	}
 
-	c, err := newConn(nil, opts...)
+	c, err := newConn(nil, &cp)
 	if err != nil {
 		return nil, err
 	}
@@ -289,8 +215,9 @@ func dialConn(addr string, opts ...ConnOption) (*conn, error) {
 	return c, nil
 }
 
-func newConn(netConn net.Conn, opts ...ConnOption) (*conn, error) {
+func newConn(netConn net.Conn, opts *ConnOptions) (*conn, error) {
 	c := &conn{
+		dialer:           defaultDialer{},
 		net:              netConn,
 		maxFrameSize:     defaultMaxFrameSize,
 		PeerMaxFrameSize: defaultMaxFrameSize,
@@ -311,11 +238,48 @@ func newConn(netConn net.Conn, opts ...ConnOption) (*conn, error) {
 	}
 
 	// apply options
-	for _, opt := range opts {
-		if err := opt(c); err != nil {
-			return nil, err
+	if opts == nil {
+		opts = &ConnOptions{}
+	}
+
+	if opts.ContainerID != "" {
+		c.containerID = opts.ContainerID
+	}
+	if opts.HostName != "" {
+		c.hostname = opts.HostName
+	}
+	if opts.IdleTimeout > 0 {
+		c.idleTimeout = opts.IdleTimeout
+	} else if opts.IdleTimeout < 0 {
+		c.idleTimeout = 0
+	}
+	if opts.MaxFrameSize > 0 && opts.MaxFrameSize < 512 {
+		return nil, fmt.Errorf("invalid MaxFrameSize value %d", opts.MaxFrameSize)
+	} else if opts.MaxFrameSize > 512 {
+		c.maxFrameSize = opts.MaxFrameSize
+	}
+	if opts.MaxSessions > 0 {
+		c.channelMax = opts.MaxSessions
+	}
+	if opts.SASLType != nil {
+		opts.SASLType(c)
+	}
+	if opts.Timeout > 0 {
+		c.connectTimeout = opts.Timeout
+	}
+	if opts.Properties != nil {
+		c.properties = make(map[encoding.Symbol]interface{})
+		for key, val := range opts.Properties {
+			c.properties[encoding.Symbol(key)] = val
 		}
 	}
+	if opts.TLSConfig != nil {
+		c.tlsConfig = opts.TLSConfig.Clone()
+	}
+	if opts.dialer != nil {
+		c.dialer = opts.dialer
+	}
+
 	return c, nil
 }
 

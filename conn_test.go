@@ -17,7 +17,7 @@ import (
 func TestConnOptions(t *testing.T) {
 	tests := []struct {
 		label  string
-		opts   []ConnOption
+		opts   ConnOptions
 		verify func(t *testing.T, c *conn)
 		fails  bool
 	}{
@@ -27,10 +27,11 @@ func TestConnOptions(t *testing.T) {
 		},
 		{
 			label: "multiple properties",
-			opts: []ConnOption{
-				ConnProperty("x-opt-test1", "test1"),
-				ConnProperty("x-opt-test2", "test2"),
-				ConnProperty("x-opt-test1", "test3"),
+			opts: ConnOptions{
+				Properties: map[string]interface{}{
+					"x-opt-test1": "test3",
+					"x-opt-test2": "test2",
+				},
 			},
 			verify: func(t *testing.T, c *conn) {
 				wantProperties := map[encoding.Symbol]interface{}{
@@ -38,14 +39,14 @@ func TestConnOptions(t *testing.T) {
 					"x-opt-test2": "test2",
 				}
 				if !testEqual(c.properties, wantProperties) {
-					t.Errorf("Properties don't match expected:\n %s", testDiff(c.properties, wantProperties))
+					require.Equal(t, wantProperties, c.properties)
 				}
 			},
 		},
 		{
 			label: "ConnServerHostname",
-			opts: []ConnOption{
-				ConnServerHostname("testhost"),
+			opts: ConnOptions{
+				HostName: "testhost",
 			},
 			verify: func(t *testing.T, c *conn) {
 				if c.hostname != "testhost" {
@@ -54,20 +55,9 @@ func TestConnOptions(t *testing.T) {
 			},
 		},
 		{
-			label: "ConnTLS",
-			opts: []ConnOption{
-				ConnTLS(true),
-			},
-			verify: func(t *testing.T, c *conn) {
-				if !c.tlsNegotiation {
-					t.Error("expected TLS enabled")
-				}
-			},
-		},
-		{
 			label: "ConnTLSConfig",
-			opts: []ConnOption{
-				ConnTLSConfig(&tls.Config{MinVersion: tls.VersionTLS13}),
+			opts: ConnOptions{
+				TLSConfig: &tls.Config{MinVersion: tls.VersionTLS13},
 			},
 			verify: func(t *testing.T, c *conn) {
 				if c.tlsConfig.MinVersion != tls.VersionTLS13 {
@@ -77,8 +67,8 @@ func TestConnOptions(t *testing.T) {
 		},
 		{
 			label: "ConnIdleTimeout_Valid",
-			opts: []ConnOption{
-				ConnIdleTimeout(15 * time.Minute),
+			opts: ConnOptions{
+				IdleTimeout: 15 * time.Minute,
 			},
 			verify: func(t *testing.T, c *conn) {
 				if c.idleTimeout != 15*time.Minute {
@@ -89,14 +79,14 @@ func TestConnOptions(t *testing.T) {
 		{
 			label: "ConnIdleTimeout_Invalid",
 			fails: true,
-			opts: []ConnOption{
-				ConnIdleTimeout(-15 * time.Minute),
+			opts: ConnOptions{
+				IdleTimeout: -15 * time.Minute,
 			},
 		},
 		{
 			label: "ConnMaxFrameSize_Valid",
-			opts: []ConnOption{
-				ConnMaxFrameSize(1024),
+			opts: ConnOptions{
+				MaxFrameSize: 1024,
 			},
 			verify: func(t *testing.T, c *conn) {
 				if c.maxFrameSize != 1024 {
@@ -107,14 +97,14 @@ func TestConnOptions(t *testing.T) {
 		{
 			label: "ConnMaxFrameSize_Invalid",
 			fails: true,
-			opts: []ConnOption{
-				ConnMaxFrameSize(128),
+			opts: ConnOptions{
+				MaxFrameSize: 128,
 			},
 		},
 		{
 			label: "ConnConnectTimeout",
-			opts: []ConnOption{
-				ConnConnectTimeout(5 * time.Minute),
+			opts: ConnOptions{
+				Timeout: 5 * time.Minute,
 			},
 			verify: func(t *testing.T, c *conn) {
 				if c.connectTimeout != 5*time.Minute {
@@ -124,11 +114,11 @@ func TestConnOptions(t *testing.T) {
 		},
 		{
 			label: "ConnMaxSessions_Success",
-			opts: []ConnOption{
-				ConnMaxSessions(32768),
+			opts: ConnOptions{
+				MaxSessions: 32768,
 			},
 			verify: func(t *testing.T, c *conn) {
-				if c.channelMax != 32768-1 { // zero-based
+				if c.channelMax != 32768 {
 					t.Errorf("unexpected session count %d", c.channelMax)
 				}
 			},
@@ -136,28 +126,14 @@ func TestConnOptions(t *testing.T) {
 		{
 			label: "ConnMaxSessions_TooSmall",
 			fails: true,
-			opts: []ConnOption{
-				ConnMaxSessions(0),
-			},
-		},
-		{
-			label: "ConnMaxSessions_TooBig",
-			fails: true,
-			opts: []ConnOption{
-				ConnMaxSessions(70000),
-			},
-		},
-		{
-			label: "ConnProperty_Invalid",
-			fails: true,
-			opts: []ConnOption{
-				ConnProperty("", "value"),
+			opts: ConnOptions{
+				MaxSessions: 0,
 			},
 		},
 		{
 			label: "ConnContainerID",
-			opts: []ConnOption{
-				ConnContainerID("myid"),
+			opts: ConnOptions{
+				ContainerID: "myid",
 			},
 			verify: func(t *testing.T, c *conn) {
 				if c.containerID != "myid" {
@@ -169,7 +145,7 @@ func TestConnOptions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			got, err := newConn(nil, tt.opts...)
+			got, err := newConn(nil, &tt.opts)
 			if err != nil && !tt.fails {
 				t.Fatal(err)
 			}
@@ -202,30 +178,30 @@ func (f fakeDialer) error() error {
 }
 
 func TestDialConn(t *testing.T) {
-	c, err := dialConn(":bad url/ value", connDialer(fakeDialer{}))
+	c, err := dialConn(":bad url/ value", &ConnOptions{dialer: fakeDialer{}})
 	require.Error(t, err)
 	require.Nil(t, c)
-	c, err = dialConn("http://localhost", connDialer(fakeDialer{}))
+	c, err = dialConn("http://localhost", &ConnOptions{dialer: fakeDialer{}})
 	require.Error(t, err)
 	require.Nil(t, c)
-	c, err = dialConn("amqp://localhost", connDialer(fakeDialer{}))
+	c, err = dialConn("amqp://localhost", &ConnOptions{dialer: fakeDialer{}})
 	require.NoError(t, err)
 	require.NotNil(t, c)
 	require.Nil(t, c.tlsConfig)
-	c, err = dialConn("amqps://localhost", connDialer(fakeDialer{}))
+	c, err = dialConn("amqps://localhost", &ConnOptions{dialer: fakeDialer{}})
 	require.NoError(t, err)
 	require.NotNil(t, c)
 	require.NotNil(t, c.tlsConfig)
-	c, err = dialConn("amqp://localhost:12345", connDialer(fakeDialer{}))
+	c, err = dialConn("amqp://localhost:12345", &ConnOptions{dialer: fakeDialer{}})
 	require.NoError(t, err)
 	require.NotNil(t, c)
-	c, err = dialConn("amqp://username:password@localhost", connDialer(fakeDialer{}))
+	c, err = dialConn("amqp://username:password@localhost", &ConnOptions{dialer: fakeDialer{}})
 	require.NoError(t, err)
 	require.NotNil(t, c)
 	if _, ok := c.saslHandlers[saslMechanismPLAIN]; !ok {
 		t.Fatal("missing SASL plain handler")
 	}
-	c, err = dialConn("amqp://localhost", connDialer(fakeDialer{fail: true}))
+	c, err = dialConn("amqp://localhost", &ConnOptions{dialer: fakeDialer{fail: true}})
 	require.Error(t, err)
 	require.Nil(t, c)
 }
@@ -306,7 +282,7 @@ func TestStart(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
 			netConn := mocks.NewNetConn(tt.responder)
-			conn, err := newConn(netConn)
+			conn, err := newConn(netConn, nil)
 			require.NoError(t, err)
 			err = conn.Start()
 			if tt.fails && err == nil {
@@ -320,13 +296,13 @@ func TestStart(t *testing.T) {
 
 func TestClose(t *testing.T) {
 	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
-	conn, err := newConn(netConn)
+	conn, err := newConn(netConn, nil)
 	require.NoError(t, err)
 	require.NoError(t, conn.Start())
 	require.NoError(t, conn.Close())
 	// with Close error
 	netConn = mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
-	conn, err = newConn(netConn)
+	conn, err = newConn(netConn, nil)
 	require.NoError(t, err)
 	require.NoError(t, conn.Start())
 	netConn.OnClose = func() error {
@@ -339,7 +315,7 @@ func TestClose(t *testing.T) {
 
 func TestServerSideClose(t *testing.T) {
 	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
-	conn, err := newConn(netConn)
+	conn, err := newConn(netConn, nil)
 	require.NoError(t, err)
 	require.NoError(t, conn.Start())
 	fr, err := mocks.PerformClose(nil)
@@ -349,7 +325,7 @@ func TestServerSideClose(t *testing.T) {
 	require.NoError(t, err)
 	// with error
 	netConn = mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
-	conn, err = newConn(netConn)
+	conn, err = newConn(netConn, nil)
 	require.NoError(t, err)
 	require.NoError(t, conn.Start())
 	fr, err = mocks.PerformClose(&Error{Condition: "Close", Description: "mock server error"})
@@ -386,7 +362,7 @@ func TestKeepAlives(t *testing.T) {
 	}
 
 	netConn := mocks.NewNetConn(responder)
-	conn, err := newConn(netConn)
+	conn, err := newConn(netConn, nil)
 	require.NoError(t, err)
 	require.NoError(t, conn.Start())
 	// send keepalive
@@ -404,7 +380,7 @@ func TestKeepAlives(t *testing.T) {
 
 func TestConnReaderError(t *testing.T) {
 	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
-	conn, err := newConn(netConn)
+	conn, err := newConn(netConn, nil)
 	require.NoError(t, err)
 	require.NoError(t, conn.Start())
 	// trigger some kind of error
@@ -420,7 +396,7 @@ func TestConnReaderError(t *testing.T) {
 
 func TestConnWriterError(t *testing.T) {
 	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
-	conn, err := newConn(netConn)
+	conn, err := newConn(netConn, nil)
 	require.NoError(t, err)
 	require.NoError(t, conn.Start())
 	// send a frame that our responder doesn't handle to simulate a conn.connWriter error

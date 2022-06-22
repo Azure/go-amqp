@@ -346,7 +346,7 @@ func TestSessionFlowDisablesTransfer(t *testing.T) {
 	nextIncomingID := uint32(0)
 	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
 
-	client, err := New(netConn)
+	client, err := New(netConn, nil)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -374,7 +374,7 @@ func TestSessionFlowDisablesTransfer(t *testing.T) {
 func TestExactlyOnceDoesntWork(t *testing.T) {
 	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
 
-	client, err := New(netConn)
+	client, err := New(netConn, nil)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)

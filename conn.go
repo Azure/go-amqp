@@ -776,25 +776,31 @@ func (c *conn) writeProtoHeader(pID protoID) error {
 }
 
 func (c *conn) netWriteWithRetry(b []byte) (int, error) {
-	var n int
+	var total int
 	var err error
 	for i := 0; i < 5; i++ {
 		select {
 		case <-c.closeMux:
-			return n, err
+			return total, err
 		default:
 			// mux is still live
 		}
-		n, err = c.net.Write(b)
+		var written int
+		written, err = c.net.Write(b)
+		total += written
 		if err == nil {
 			break
+		}
+		if written > 0 {
+			// slice off the portion that was written
+			b = b[written:]
 		}
 		// exponential back-off starting at 100ms
 		delay := (100 * time.Millisecond) * time.Duration(math.Pow(2, float64(i)))
 		debug(3, "netWriteWithRetry: %v; sleep for %s", err, delay)
 		time.Sleep(delay)
 	}
-	return n, err
+	return total, err
 }
 
 // keepaliveFrame is an AMQP frame with no body, used for keepalives

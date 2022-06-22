@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"net"
 	"testing"
 	"time"
 
@@ -437,4 +438,40 @@ func TestConnWriterError(t *testing.T) {
 	if !errors.As(err, &connErr) {
 		t.Fatalf("unexpected error type %T", err)
 	}
+}
+
+type failingWriter struct {
+	net.Conn
+	maxErrs int
+	numErrs int
+	tracked []byte
+}
+
+func (f *failingWriter) Write(b []byte) (int, error) {
+	if f.numErrs == f.maxErrs {
+		f.tracked = append(f.tracked, b...)
+		return len(b), nil
+	}
+	f.numErrs++
+	chunk := len(b) / f.maxErrs
+	f.tracked = append(f.tracked, b[:chunk]...)
+	return chunk, errors.New("try again")
+}
+
+func TestNetWriteWithRetry(t *testing.T) {
+	writer := &failingWriter{maxErrs: 3}
+	conn := &conn{
+		closeMux: make(chan struct{}),
+		net:      writer,
+	}
+
+	const maxBytes = 100
+	toWrite := make([]byte, maxBytes)
+	for i := 0; i < 100; i++ {
+		toWrite[i] = byte(i)
+	}
+	written, err := conn.netWriteWithRetry(toWrite)
+	require.NoError(t, err)
+	require.Equal(t, maxBytes, written)
+	require.Equal(t, toWrite, writer.tracked)
 }

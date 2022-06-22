@@ -78,8 +78,7 @@ type ConnOptions struct {
 	// TLS negotiation.
 	//
 	// This option is for advanced usage, in most scenarios
-	// providing a URL scheme of "amqps://" or ConnTLS(true)
-	// is sufficient.
+	// providing a URL scheme of "amqps://" is sufficient.
 	TLSConfig *tls.Config
 
 	// test hook

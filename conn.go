@@ -262,7 +262,9 @@ func newConn(netConn net.Conn, opts *ConnOptions) (*conn, error) {
 		c.channelMax = opts.MaxSessions
 	}
 	if opts.SASLType != nil {
-		opts.SASLType(c)
+		if err := opts.SASLType(c); err != nil {
+			return nil, err
+		}
 	}
 	if opts.Timeout > 0 {
 		c.connectTimeout = opts.Timeout

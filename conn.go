@@ -28,7 +28,7 @@ const (
 
 // ConnOptions contains the optional settings for configuring an AMQP connection.
 type ConnOptions struct {
-	// ConnContainerID sets the container-id to use when opening the connection.
+	// ContainerID sets the container-id to use when opening the connection.
 	//
 	// A container ID will be randomly generated if this option is not used.
 	ContainerID string
@@ -37,7 +37,7 @@ type ConnOptions struct {
 	// Open frame and TLS ServerName (if not otherwise set).
 	HostName string
 
-	// ConnIdleTimeout specifies the maximum period in milliseconds between
+	// IdleTimeout specifies the maximum period in milliseconds between
 	// receiving frames from the peer.
 	//
 	// Specify a value less than zero to disable idle timeout.
@@ -45,7 +45,7 @@ type ConnOptions struct {
 	// Default: 1 minute.
 	IdleTimeout time.Duration
 
-	// ConnMaxFrameSize sets the maximum frame size that
+	// MaxFrameSize sets the maximum frame size that
 	// the connection will accept.
 	//
 	// Must be 512 or greater.
@@ -59,7 +59,7 @@ type ConnOptions struct {
 	// Default: 65535.
 	MaxSessions uint16
 
-	// ConnProperty sets an entry in the connection properties map sent to the server.
+	// Properties sets an entry in the connection properties map sent to the server.
 	Properties map[string]interface{}
 
 	// SASLType contains the specified SASL authentication mechanism.
@@ -74,7 +74,7 @@ type ConnOptions struct {
 	// Default: 0.
 	Timeout time.Duration
 
-	// ConnTLSConfig sets the tls.Config to be used during
+	// TLSConfig sets the tls.Config to be used during
 	// TLS negotiation.
 	//
 	// This option is for advanced usage, in most scenarios

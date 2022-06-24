@@ -16,10 +16,11 @@
   * `AMQPAddress`, `AMQPMessageID`, `AMQPSymbol`, `AMQPSequenceNumber`, `AMQPBinary`
 * Various `Default*` constants are no longer exported.
 * The args to `Receiver.ModifyMessage()` have changed.
-* The "variadic config" pattern for `Client` constructors has been replaced with a struct-based config.
-  * This removes the `ConnOption` type and all of the associated configuration funcs.
+* The "variadic config" pattern for `Client` and `Session` constructors has been replaced with a struct-based config.
+  * This removes the `ConnOption` and `SessionOption` types and all of the associated configuration funcs.
   * The `ConnTLS()` option was removed as part of this change.
 * The `Dial()` and `New()` constructors now require an `*ConnOptions` parameter.
+* `Client.NewSession()` now requires a `*SessionOptions` parameter.
 * The various SASL configuration funcs have been slightly renamed.
 
 ### Bugs Fixed

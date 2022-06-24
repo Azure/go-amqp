@@ -21,7 +21,7 @@ func BenchmarkSimple(b *testing.B) {
 	defer client.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	if err != nil {
 		b.Fatal(err)

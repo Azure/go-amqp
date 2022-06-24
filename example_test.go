@@ -22,7 +22,7 @@ func Example() {
 	ctx := context.TODO()
 
 	// Open a session
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	if err != nil {
 		log.Fatal("Creating AMQP session:", err)
 	}

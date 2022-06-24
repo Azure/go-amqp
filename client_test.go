@@ -83,13 +83,14 @@ func TestSessionOptions(t *testing.T) {
 	)
 	tests := []struct {
 		label  string
-		opt    SessionOption
+		opt    SessionOptions
 		verify func(t *testing.T, s *Session)
-		fails  bool
 	}{
 		{
 			label: "SessionIncomingWindow",
-			opt:   SessionIncomingWindow(5000),
+			opt: SessionOptions{
+				IncomingWindow: 5000,
+			},
 			verify: func(t *testing.T, s *Session) {
 				if s.incomingWindow != 5000 {
 					t.Errorf("unexpected incoming window %d", s.incomingWindow)
@@ -98,7 +99,9 @@ func TestSessionOptions(t *testing.T) {
 		},
 		{
 			label: "SessionOutgoingWindow",
-			opt:   SessionOutgoingWindow(6000),
+			opt: SessionOptions{
+				OutgoingWindow: 6000,
+			},
 			verify: func(t *testing.T, s *Session) {
 				if s.outgoingWindow != 6000 {
 					t.Errorf("unexpected outgoing window %d", s.outgoingWindow)
@@ -106,18 +109,10 @@ func TestSessionOptions(t *testing.T) {
 			},
 		},
 		{
-			label: "SessionMaxLinksTooSmall",
-			opt:   SessionMaxLinks(0),
-			fails: true,
-		},
-		{
-			label: "SessionMaxLinksTooLarge",
-			opt:   SessionMaxLinks(MaxInt),
-			fails: true,
-		},
-		{
 			label: "SessionMaxLinks",
-			opt:   SessionMaxLinks(4096),
+			opt: SessionOptions{
+				MaxLinks: 4096,
+			},
 			verify: func(t *testing.T, s *Session) {
 				if s.handleMax != 4096-1 {
 					t.Errorf("unexpected max links %d", s.handleMax)
@@ -129,13 +124,7 @@ func TestSessionOptions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
 			session := newSession(nil, 0)
-			err := tt.opt(session)
-			if err != nil && !tt.fails {
-				t.Error(err)
-			}
-			if !tt.fails {
-				tt.verify(t, session)
-			}
+			session.init(&tt.opt)
 		})
 	}
 }
@@ -170,7 +159,10 @@ func TestClientNewSession(t *testing.T) {
 	client, err := New(netConn, nil)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx, SessionIncomingWindow(incomingWindow), SessionOutgoingWindow(outgoingWindow))
+	session, err := client.NewSession(ctx, &SessionOptions{
+		IncomingWindow: incomingWindow,
+		OutgoingWindow: outgoingWindow,
+	})
 	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, session)
@@ -178,7 +170,7 @@ func TestClientNewSession(t *testing.T) {
 	require.NoError(t, client.Close())
 	// creating a session after the connection has been closed returns nothing
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	session, err = client.NewSession(ctx)
+	session, err = client.NewSession(ctx, nil)
 	cancel()
 	var connErr *ConnectionError
 	if !errors.As(err, &connErr) {
@@ -210,14 +202,14 @@ func TestClientMultipleSessions(t *testing.T) {
 	require.NoError(t, err)
 	// first session
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session1, err := client.NewSession(ctx)
+	session1, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, session1)
 	require.Equal(t, channelNum-1, session1.channel)
 	// second session
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	session2, err := client.NewSession(ctx)
+	session2, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, session2)
@@ -253,7 +245,7 @@ func TestClientTooManySessions(t *testing.T) {
 	require.NoError(t, err)
 	for i := uint16(0); i < 3; i++ {
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		session, err := client.NewSession(ctx)
+		session, err := client.NewSession(ctx, nil)
 		cancel()
 		if i < 2 {
 			require.NoError(t, err)
@@ -264,19 +256,6 @@ func TestClientTooManySessions(t *testing.T) {
 			require.Nil(t, session)
 		}
 	}
-	require.NoError(t, client.Close())
-}
-
-func TestClientNewSessionInvalidOption(t *testing.T) {
-	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
-
-	client, err := New(netConn, nil)
-	require.NoError(t, err)
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx, SessionMaxLinks(0))
-	cancel()
-	require.Error(t, err)
-	require.Nil(t, session)
 	require.NoError(t, client.Close())
 }
 
@@ -304,7 +283,9 @@ func TestClientNewSessionMissingRemoteChannel(t *testing.T) {
 	client, err := New(netConn, nil)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx, SessionMaxLinks(1))
+	session, err := client.NewSession(ctx, &SessionOptions{
+		MaxLinks: 1,
+	})
 	cancel()
 	require.Error(t, err)
 	require.Nil(t, session)
@@ -330,7 +311,7 @@ func TestClientNewSessionInvalidInitialResponse(t *testing.T) {
 	client, err := New(netConn, nil)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.Error(t, err)
 	require.Nil(t, session)
@@ -364,13 +345,13 @@ func TestClientNewSessionInvalidSecondResponseSameChannel(t *testing.T) {
 	require.NoError(t, err)
 	// fisrt session succeeds
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, session)
 	// second session fails
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	session, err = client.NewSession(ctx)
+	session, err = client.NewSession(ctx, nil)
 	cancel()
 	require.Error(t, err)
 	require.Nil(t, session)
@@ -405,13 +386,13 @@ func TestClientNewSessionInvalidSecondResponseDifferentChannel(t *testing.T) {
 	require.NoError(t, err)
 	// fisrt session succeeds
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, session)
 	// second session fails
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	session, err = client.NewSession(ctx)
+	session, err = client.NewSession(ctx, nil)
 	cancel()
 	require.Error(t, err)
 	require.Nil(t, session)

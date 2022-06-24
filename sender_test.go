@@ -21,7 +21,7 @@ func TestSenderInvalidOptions(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -71,7 +71,7 @@ func TestSenderMethodsNoSend(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	const (
@@ -108,7 +108,7 @@ func TestSenderSendOnClosed(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -134,7 +134,7 @@ func TestSenderSendOnSessionClosed(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -160,7 +160,7 @@ func TestSenderSendOnConnClosed(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -186,7 +186,7 @@ func TestSenderSendOnDetached(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -242,7 +242,7 @@ func TestSenderAttachError(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 
@@ -290,7 +290,7 @@ func TestSenderSendMismatchedModes(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -333,7 +333,7 @@ func TestSenderSendSuccess(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -378,7 +378,7 @@ func TestSenderSendSettled(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -419,7 +419,7 @@ func TestSenderSendRejected(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -484,7 +484,7 @@ func TestSenderSendRejectedNoDetach(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -533,7 +533,7 @@ func TestSenderSendDetached(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -562,7 +562,7 @@ func TestSenderSendTimeout(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -617,7 +617,7 @@ func TestSenderSendMsgTooBig(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -653,7 +653,7 @@ func TestSenderSendTagTooBig(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -725,7 +725,7 @@ func TestSenderSendMultiTransfer(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -756,7 +756,7 @@ func TestSenderConnReaderError(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -789,7 +789,7 @@ func TestSenderConnWriterError(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -845,7 +845,7 @@ func TestSenderFlowFrameWithEcho(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
@@ -15,8 +16,7 @@ import (
 
 // Default session options
 const (
-	defaultMaxLinks = 4294967296
-	defaultWindow   = 1000
+	defaultWindow = 1000
 )
 
 // Default link options
@@ -63,11 +63,28 @@ func newSession(c *conn, channel uint16) *Session {
 		txTransfer:       make(chan *frames.PerformTransfer),
 		incomingWindow:   defaultWindow,
 		outgoingWindow:   defaultWindow,
-		handleMax:        defaultMaxLinks - 1,
+		handleMax:        math.MaxUint32,
 		allocateHandle:   make(chan *link),
 		deallocateHandle: make(chan *link),
 		close:            make(chan struct{}),
 		done:             make(chan struct{}),
+	}
+}
+
+func (s *Session) init(opts *SessionOptions) {
+	if opts != nil {
+		if opts.IncomingWindow != 0 {
+			s.incomingWindow = opts.IncomingWindow
+		}
+		if opts.MaxLinks != 0 {
+			// MaxLinks is the number of total links.
+			// handleMax is the max handle ID which starts
+			// at zero.  so we decrement by one
+			s.handleMax = opts.MaxLinks - 1
+		}
+		if opts.OutgoingWindow != 0 {
+			s.outgoingWindow = opts.OutgoingWindow
+		}
 	}
 }
 

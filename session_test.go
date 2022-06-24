@@ -48,7 +48,7 @@ func TestSessionClose(t *testing.T) {
 	require.NoError(t, err)
 	for i := 0; i < 4; i++ {
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		session, err := client.NewSession(ctx)
+		session, err := client.NewSession(ctx, nil)
 		cancel()
 		require.NoErrorf(t, err, "iteration %d", i)
 		require.Equalf(t, channelNum-1, session.channel, "iteration %d", i)
@@ -81,7 +81,7 @@ func TestSessionServerClose(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	// initiate server-side closing of session
@@ -121,7 +121,7 @@ func TestSessionCloseTimeout(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -138,7 +138,7 @@ func TestConnCloseSessionClose(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 
@@ -159,7 +159,7 @@ func TestSessionNewReceiverBadOptionFails(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -199,7 +199,7 @@ func TestSessionNewReceiverBatchingOneCredit(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -240,7 +240,7 @@ func TestSessionNewReceiverBatchingEnabled(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -279,7 +279,7 @@ func TestSessionNewReceiverMismatchedLinkName(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -301,7 +301,7 @@ func TestSessionNewSenderBadOptionFails(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -339,7 +339,7 @@ func TestSessionNewSenderMismatchedLinkName(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -361,7 +361,7 @@ func TestSessionNewSenderDuplicateLinks(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -388,15 +388,15 @@ func TestSessionNewSenderMaxHandles(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx, SessionMaxLinks(1))
+	session, err := client.NewSession(ctx, &SessionOptions{MaxLinks: 1})
 	cancel()
 	require.NoError(t, err)
-	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel = context.WithTimeout(context.Background(), 100000*time.Second)
 	snd, err := session.NewSender(ctx, LinkName("test1"))
 	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, snd)
-	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel = context.WithTimeout(context.Background(), 100000*time.Second)
 	snd, err = session.NewSender(ctx, LinkName("test2"))
 	cancel()
 	require.Error(t, err)
@@ -415,7 +415,7 @@ func TestSessionUnexpectedFrame(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 
@@ -438,7 +438,7 @@ func TestSessionInvalidFlowFrame(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 
@@ -496,7 +496,7 @@ func TestSessionFlowFrameWithEcho(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 
@@ -541,7 +541,7 @@ func TestSessionInvalidAttachDeadlock(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 

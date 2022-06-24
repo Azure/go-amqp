@@ -99,7 +99,7 @@ func TestIntegrationRoundTrip(t *testing.T) {
 			for i := uint16(0); i < tt.sessions; i++ {
 				// Open a session
 				ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-				session, err := client.NewSession(ctx)
+				session, err := client.NewSession(ctx, nil)
 				cancel()
 				if err != nil {
 					t.Fatal(err)
@@ -254,7 +254,7 @@ func TestIntegrationRoundTrip_Buffered(t *testing.T) {
 
 			// Open a session
 			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-			session, err := client.NewSession(ctx)
+			session, err := client.NewSession(ctx, nil)
 			cancel()
 			if err != nil {
 				t.Fatal(err)
@@ -371,7 +371,7 @@ func TestIntegrationReceiverModeSecond(t *testing.T) {
 			for i := 0; i < tt.sessions; i++ {
 				// Open a session
 				ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-				session, err := client.NewSession(ctx)
+				session, err := client.NewSession(ctx, nil)
 				cancel()
 				if err != nil {
 					t.Fatal(err)
@@ -473,7 +473,7 @@ func TestIntegrationSessionHandleMax(t *testing.T) {
 	}
 
 	tests := []struct {
-		maxLinks int
+		maxLinks uint32
 		links    int
 		close    int
 		error    *regexp.Regexp
@@ -524,7 +524,9 @@ func TestIntegrationSessionHandleMax(t *testing.T) {
 
 			// Open a session
 			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-			session, err := client.NewSession(ctx, amqp.SessionMaxLinks(tt.maxLinks))
+			session, err := client.NewSession(ctx, &amqp.SessionOptions{
+				MaxLinks: tt.maxLinks,
+			})
 			cancel()
 			if err != nil {
 				t.Fatal(err)
@@ -596,7 +598,7 @@ func TestIntegrationLinkName(t *testing.T) {
 
 			// Open a session
 			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-			session, err := client.NewSession(ctx)
+			session, err := client.NewSession(ctx, nil)
 			cancel()
 			if err != nil {
 				t.Fatal(err)
@@ -656,7 +658,7 @@ func TestIntegrationClose(t *testing.T) {
 
 		// Open a session
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		session, err := client.NewSession(ctx)
+		session, err := client.NewSession(ctx, nil)
 		cancel()
 		if err != nil {
 			t.Fatal(err)
@@ -702,7 +704,7 @@ func TestIntegrationClose(t *testing.T) {
 
 		// Open a session
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		session, err := client.NewSession(ctx)
+		session, err := client.NewSession(ctx, nil)
 		cancel()
 		if err != nil {
 			t.Fatal(err)
@@ -751,7 +753,7 @@ func TestIntegrationClose(t *testing.T) {
 
 		// Open a session
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		session, err := client.NewSession(ctx)
+		session, err := client.NewSession(ctx, nil)
 		cancel()
 		if err != nil {
 			t.Fatal(err)
@@ -805,7 +807,7 @@ func TestMultipleSessionsOpenClose(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		for j := 0; j < 10; j++ {
 			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-			session, err := client.NewSession(ctx)
+			session, err := client.NewSession(ctx, nil)
 			cancel()
 			if err != nil {
 				t.Fatalf("failed to create session: %v", err)
@@ -844,7 +846,7 @@ func TestConcurrentSessionsOpenClose(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-			session, err := client.NewSession(ctx)
+			session, err := client.NewSession(ctx, nil)
 			cancel()
 			if err != nil {
 				t.Errorf("failed to create session: %v", err)

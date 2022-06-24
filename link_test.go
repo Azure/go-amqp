@@ -350,7 +350,7 @@ func TestSessionFlowDisablesTransfer(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 
@@ -378,7 +378,7 @@ func TestExactlyOnceDoesntWork(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	session, err := client.NewSession(ctx)
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 

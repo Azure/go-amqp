@@ -163,7 +163,11 @@ func TestSessionNewReceiverBadOptionFails(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	recv, err := session.NewReceiver(ctx, LinkProperty("", "bad_key"))
+	recv, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
+		Properties: map[string]interface{}{
+			"": "bad_key",
+		},
+	})
 	cancel()
 	require.Error(t, err)
 	require.Nil(t, recv)
@@ -203,7 +207,9 @@ func TestSessionNewReceiverBatchingOneCredit(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	recv, err := session.NewReceiver(ctx, LinkBatching(true))
+	recv, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
+		Batching: true,
+	})
 	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, recv)
@@ -244,7 +250,10 @@ func TestSessionNewReceiverBatchingEnabled(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	recv, err := session.NewReceiver(ctx, LinkBatching(true), LinkCredit(10))
+	recv, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
+		Batching: true,
+		Credit:   10,
+	})
 	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, recv)
@@ -283,7 +292,10 @@ func TestSessionNewReceiverMismatchedLinkName(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	recv, err := session.NewReceiver(ctx, LinkBatching(true), LinkCredit(10))
+	recv, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
+		Batching: true,
+		Credit:   10,
+	})
 	cancel()
 	require.Error(t, err)
 	require.Nil(t, recv)
@@ -305,7 +317,11 @@ func TestSessionNewSenderBadOptionFails(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := session.NewSender(ctx, LinkProperty("", "bad_key"))
+	snd, err := session.NewSender(ctx, "target", &SenderOptions{
+		Properties: map[string]interface{}{
+			"": "bad_key",
+		},
+	})
 	cancel()
 	require.Error(t, err)
 	require.Nil(t, snd)
@@ -343,7 +359,7 @@ func TestSessionNewSenderMismatchedLinkName(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := session.NewSender(ctx)
+	snd, err := session.NewSender(ctx, "target", nil)
 	cancel()
 	require.Error(t, err)
 	require.Nil(t, snd)
@@ -365,12 +381,16 @@ func TestSessionNewSenderDuplicateLinks(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := session.NewSender(ctx, LinkName("test"))
+	snd, err := session.NewSender(ctx, "target", &SenderOptions{
+		Name: "test",
+	})
 	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, snd)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err = session.NewSender(ctx, LinkName("test"))
+	snd, err = session.NewSender(ctx, "target", &SenderOptions{
+		Name: "test",
+	})
 	cancel()
 	require.Error(t, err)
 	require.Nil(t, snd)
@@ -391,13 +411,17 @@ func TestSessionNewSenderMaxHandles(t *testing.T) {
 	session, err := client.NewSession(ctx, &SessionOptions{MaxLinks: 1})
 	cancel()
 	require.NoError(t, err)
-	ctx, cancel = context.WithTimeout(context.Background(), 100000*time.Second)
-	snd, err := session.NewSender(ctx, LinkName("test1"))
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx, "target", &SenderOptions{
+		Name: "test1",
+	})
 	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, snd)
-	ctx, cancel = context.WithTimeout(context.Background(), 100000*time.Second)
-	snd, err = session.NewSender(ctx, LinkName("test2"))
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err = session.NewSender(ctx, "target", &SenderOptions{
+		Name: "test2",
+	})
 	cancel()
 	require.Error(t, err)
 	require.Nil(t, snd)
@@ -564,7 +588,7 @@ func TestSessionInvalidAttachDeadlock(t *testing.T) {
 		netConn.SendFrame(b)
 	}
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := session.NewSender(ctx)
+	snd, err := session.NewSender(ctx, "target", nil)
 	cancel()
 	require.Error(t, err)
 	require.Nil(t, snd)

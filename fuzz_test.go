@@ -32,7 +32,9 @@ func fuzzConn(data []byte) int {
 		return 0
 	}
 
-	r, err := s.NewReceiver(context.Background(), LinkSourceAddress("source"), LinkCredit(2))
+	r, err := s.NewReceiver(context.Background(), "source", &ReceiverOptions{
+		Credit: 2,
+	})
 	if err != nil {
 		return 0
 	}
@@ -68,7 +70,7 @@ func fuzzConn(data []byte) int {
 		return 0
 	}
 
-	sender, err := s.NewSender(context.Background(), LinkTargetAddress("source"), LinkCredit(2))
+	sender, err := s.NewSender(context.Background(), "source", nil)
 	if err != nil {
 		return 0
 	}

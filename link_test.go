@@ -2,7 +2,6 @@ package amqp
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
 	"sync"
 	"testing"
@@ -102,7 +101,7 @@ func TestLinkFlowDrain(t *testing.T) {
 	l := newTestLink(t)
 
 	// now initialize it as a manual credit link
-	require.NoError(t, LinkWithManualCredits()(l))
+	l.receiver.manualCreditor = &manualCreditor{}
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)
@@ -117,7 +116,7 @@ func TestLinkFlowDrain(t *testing.T) {
 
 func TestLinkFlowWithManualCreditor(t *testing.T) {
 	l := newTestLink(t)
-	require.NoError(t, LinkWithManualCredits()(l))
+	l.receiver.manualCreditor = &manualCreditor{}
 
 	l.linkCredit = 1
 	require.NoError(t, l.IssueCredit(100))
@@ -140,7 +139,7 @@ func TestLinkFlowWithManualCreditor(t *testing.T) {
 
 func TestLinkFlowWithDrain(t *testing.T) {
 	l := newTestLink(t)
-	require.NoError(t, LinkWithManualCredits()(l))
+	l.receiver.manualCreditor = &manualCreditor{}
 
 	go func() {
 		<-l.ReceiverReady
@@ -176,7 +175,7 @@ func TestLinkFlowWithDrain(t *testing.T) {
 
 func TestLinkFlowWithManualCreditorAndNoFlowNeeded(t *testing.T) {
 	l := newTestLink(t)
-	require.NoError(t, LinkWithManualCredits()(l))
+	l.receiver.manualCreditor = &manualCreditor{}
 
 	l.linkCredit = 1
 
@@ -195,7 +194,7 @@ func TestLinkFlowWithManualCreditorAndNoFlowNeeded(t *testing.T) {
 
 func TestMuxFlowHandlesDrainProperly(t *testing.T) {
 	l := newTestLink(t)
-	require.NoError(t, LinkWithManualCredits()(l))
+	l.receiver.manualCreditor = &manualCreditor{}
 
 	l.linkCredit = 101
 
@@ -229,115 +228,184 @@ func newTestLink(t *testing.T) *link {
 	return l
 }
 
-func TestLinkOptions(t *testing.T) {
+func TestNewSendingLink(t *testing.T) {
+	const (
+		name       = "mysender"
+		targetAddr = "target"
+	)
 	tests := []struct {
-		label string
-		opts  []LinkOption
-
-		wantSource     *frames.Source
-		wantTarget     *frames.Target
-		wantProperties map[encoding.Symbol]interface{}
+		label    string
+		opts     SenderOptions
+		validate func(t *testing.T, l *link)
 	}{
 		{
-			label: "no options",
+			label: "default options",
+			validate: func(t *testing.T, l *link) {
+				require.Empty(t, l.Target.Capabilities)
+				require.Equal(t, DurabilityNone, l.Source.Durable)
+				require.False(t, l.dynamicAddr)
+				require.Empty(t, l.Source.ExpiryPolicy)
+				require.Zero(t, l.Source.Timeout)
+				require.True(t, l.detachOnDispositionError)
+				require.NotEmpty(t, l.Key.name)
+				require.Empty(t, l.properties)
+				require.Nil(t, l.SenderSettleMode)
+				require.Nil(t, l.ReceiverSettleMode)
+				require.Equal(t, targetAddr, l.Target.Address)
+			},
 		},
 		{
-			label: "link-filters",
-			opts: []LinkOption{
-				LinkSelectorFilter("amqp.annotation.x-opt-offset > '100'"),
-				LinkProperty("x-opt-test1", "test1"),
-				LinkProperty("x-opt-test2", "test2"),
-				LinkProperty("x-opt-test1", "test3"),
-				LinkPropertyInt64("x-opt-test4", 1),
-				LinkPropertyInt32("x-opt-test5", 2),
-				LinkSourceFilter("com.microsoft:session-filter", 0x00000137000000C, "123"),
-			},
-
-			wantSource: &frames.Source{
-				Filter: map[encoding.Symbol]*encoding.DescribedType{
-					"apache.org:selector-filter:string": {
-						Descriptor: binary.BigEndian.Uint64([]byte{0x00, 0x00, 0x46, 0x8C, 0x00, 0x00, 0x00, 0x04}),
-						Value:      "amqp.annotation.x-opt-offset > '100'",
-					},
-					"com.microsoft:session-filter": {
-						Descriptor: binary.BigEndian.Uint64([]byte{0x00, 0x00, 0x00, 0x13, 0x70, 0x00, 0x00, 0x0C}),
-						Value:      "123",
-					},
+			label: "with options",
+			opts: SenderOptions{
+				Capabilities:            []string{"foo", "bar"},
+				Durability:              DurabilityUnsettledState,
+				DynamicAddress:          true,
+				ExpiryPolicy:            ExpiryLinkDetach,
+				ExpiryTimeout:           5,
+				IgnoreDispositionErrors: true,
+				Name:                    name,
+				Properties: map[string]interface{}{
+					"property": 123,
 				},
+				RequestedReceiverSettleMode: ModeFirst.Ptr(),
+				SettlementMode:              ModeSettled.Ptr(),
 			},
-			wantProperties: map[encoding.Symbol]interface{}{
-				"x-opt-test1": "test3",
-				"x-opt-test2": "test2",
-				"x-opt-test4": int64(1),
-				"x-opt-test5": int32(2),
-			},
-		},
-		{
-			label: "more-link-filters",
-			opts: []LinkOption{
-				LinkSourceFilter("com.microsoft:session-filter", 0x00000137000000C, nil),
-			},
-
-			wantSource: &frames.Source{
-				Filter: map[encoding.Symbol]*encoding.DescribedType{
-					"com.microsoft:session-filter": {
-						Descriptor: binary.BigEndian.Uint64([]byte{0x00, 0x00, 0x00, 0x13, 0x70, 0x00, 0x00, 0x0C}),
-						Value:      nil,
-					},
-				},
-			},
-		},
-		{
-			label: "link-source-capabilities",
-			opts: []LinkOption{
-				LinkSourceCapabilities("cap1", "cap2", "cap3"),
-			},
-			wantSource: &frames.Source{
-				Capabilities: []encoding.Symbol{"cap1", "cap2", "cap3"},
-			},
-		},
-		{
-			label: "link-target-capabilities",
-			opts: []LinkOption{
-				LinkTargetCapabilities("cap1", "cap2", "cap3"),
-			},
-			wantTarget: &frames.Target{
-				Capabilities: []encoding.Symbol{"cap1", "cap2", "cap3"},
+			validate: func(t *testing.T, l *link) {
+				require.Equal(t, encoding.MultiSymbol{"foo", "bar"}, l.Source.Capabilities)
+				require.Equal(t, DurabilityUnsettledState, l.Source.Durable)
+				require.True(t, l.dynamicAddr)
+				require.Equal(t, ExpiryLinkDetach, l.Source.ExpiryPolicy)
+				require.Equal(t, uint32(5), l.Source.Timeout)
+				require.False(t, l.detachOnDispositionError)
+				require.Equal(t, name, l.Key.name)
+				require.Equal(t, map[encoding.Symbol]interface{}{
+					"property": 123,
+				}, l.properties)
+				require.NotNil(t, l.SenderSettleMode)
+				require.Equal(t, ModeSettled, *l.SenderSettleMode)
+				require.NotNil(t, l.ReceiverSettleMode)
+				require.Equal(t, ModeFirst, *l.ReceiverSettleMode)
+				require.Empty(t, l.Target.Address)
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			got, err := newLink(nil, nil, tt.opts)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			if !testEqual(got.Source, tt.wantSource) {
-				t.Errorf("Source properties don't match expected:\n %s", testDiff(got.Source, tt.wantSource))
-			}
-
-			if !testEqual(got.properties, tt.wantProperties) {
-				t.Errorf("Link properties don't match expected:\n %s", testDiff(got.properties, tt.wantProperties))
-			}
+			got, err := newSendingLink(targetAddr, nil, &tt.opts)
+			require.NoError(t, err)
+			require.NotNil(t, got)
+			tt.validate(t, got)
 		})
 	}
 }
 
-func TestSourceName(t *testing.T) {
-	expectedSourceName := "source-name"
-	opts := []LinkOption{
-		LinkName(expectedSourceName),
+func TestNewReceivingLink(t *testing.T) {
+	const (
+		name       = "myreceiver"
+		sourceAddr = "source"
+	)
+	// skip validating any fields on l.receiver as they are
+	// populated in Session.NewReceiver()
+
+	tests := []struct {
+		label    string
+		opts     ReceiverOptions
+		validate func(t *testing.T, l *link)
+
+		wantSource     *frames.Source
+		wantTarget     *frames.Target
+		wantProperties map[encoding.Symbol]interface{}
+	}{
+		{
+			label: "default options",
+			validate: func(t *testing.T, l *link) {
+				//require.False(t, l.receiver.batching)
+				//require.Equal(t, defaultLinkBatchMaxAge, l.receiver.batchMaxAge)
+				require.Empty(t, l.Target.Capabilities)
+				//require.Equal(t, defaultLinkCredit, l.receiver.maxCredit)
+				require.Equal(t, DurabilityNone, l.Target.Durable)
+				require.False(t, l.dynamicAddr)
+				require.Empty(t, l.Target.ExpiryPolicy)
+				require.Zero(t, l.Target.Timeout)
+				require.Empty(t, l.Source.Filter)
+				require.True(t, l.detachOnDispositionError)
+				//require.Nil(t, l.receiver.manualCreditor)
+				require.Zero(t, l.MaxMessageSize)
+				require.NotEmpty(t, l.Key.name)
+				require.Empty(t, l.properties)
+				require.Nil(t, l.SenderSettleMode)
+				require.Nil(t, l.ReceiverSettleMode)
+				require.Equal(t, sourceAddr, l.Source.Address)
+			},
+		},
+		{
+			label: "with options",
+			opts: ReceiverOptions{
+				//Batching:                  true,
+				//BatchMaxAge:               1 * time.Minute,
+				Capabilities: []string{"foo", "bar"},
+				//Credit:                    32,
+				Durability:     DurabilityConfiguration,
+				DynamicAddress: true,
+				ExpiryPolicy:   ExpiryNever,
+				ExpiryTimeout:  3,
+				Filters: []LinkFilter{
+					LinkFilterSelector("amqp.annotation.x-opt-offset > '100'"),
+					LinkFilterSource("com.microsoft:session-filter", 0x00000137000000C, "123"),
+				},
+				IgnoreDispositionErrors: true,
+				//ManualCredits:             true,
+				MaxMessageSize: 1024,
+				Name:           name,
+				Properties: map[string]interface{}{
+					"property": 123,
+				},
+				RequestedSenderSettleMode: ModeMixed.Ptr(),
+				SettlementMode:            ModeSecond.Ptr(),
+			},
+			validate: func(t *testing.T, l *link) {
+				//require.True(t, l.receiver.batching)
+				//require.Equal(t, 1*time.Minute, l.receiver.batchMaxAge)
+				require.Equal(t, encoding.MultiSymbol{"foo", "bar"}, l.Target.Capabilities)
+				//require.Equal(t, uint32(32), l.receiver.maxCredit)
+				require.Equal(t, DurabilityConfiguration, l.Target.Durable)
+				require.True(t, l.dynamicAddr)
+				require.Equal(t, ExpiryNever, l.Target.ExpiryPolicy)
+				require.Equal(t, uint32(3), l.Target.Timeout)
+				require.Equal(t, encoding.Filter{
+					selectorFilter: &encoding.DescribedType{
+						Descriptor: selectorFilterCode,
+						Value:      "amqp.annotation.x-opt-offset > '100'",
+					},
+					"com.microsoft:session-filter": &encoding.DescribedType{
+						Descriptor: uint64(0x00000137000000C),
+						Value:      "123",
+					},
+				}, l.Source.Filter)
+				require.False(t, l.detachOnDispositionError)
+				//require.NotNil(t, l.receiver.manualCreditor)
+				require.Equal(t, uint64(1024), l.MaxMessageSize)
+				require.Equal(t, name, l.Key.name)
+				require.Equal(t, map[encoding.Symbol]interface{}{
+					"property": 123,
+				}, l.properties)
+				require.NotNil(t, l.SenderSettleMode)
+				require.Equal(t, ModeMixed, *l.SenderSettleMode)
+				require.NotNil(t, l.ReceiverSettleMode)
+				require.Equal(t, ModeSecond, *l.ReceiverSettleMode)
+				require.Empty(t, l.Source.Address)
+			},
+		},
 	}
 
-	got, err := newLink(nil, nil, opts)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if got.Key.name != expectedSourceName {
-		t.Errorf("Link Source Name does not match expected: %v got: %v", expectedSourceName, got.Key.name)
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			got, err := newReceivingLink(sourceAddr, nil, &Receiver{}, &tt.opts)
+			require.NoError(t, err)
+			require.NotNil(t, got)
+			tt.validate(t, got)
+		})
 	}
 }
 
@@ -383,12 +451,10 @@ func TestExactlyOnceDoesntWork(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := session.NewSender(
-		ctx,
-		LinkSenderSettle(ModeMixed),
-		LinkReceiverSettle(ModeSecond),
-		LinkTargetAddress("doesntwork"),
-	)
+	snd, err := session.NewSender(ctx, "doesntwork", &SenderOptions{
+		SettlementMode:              ModeMixed.Ptr(),
+		RequestedReceiverSettleMode: ModeSecond.Ptr(),
+	})
 	cancel()
 	require.Error(t, err)
 	require.Nil(t, snd)

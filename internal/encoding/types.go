@@ -229,6 +229,10 @@ const (
 // SenderSettleMode specifies how the sender will settle messages.
 type SenderSettleMode uint8
 
+func (m SenderSettleMode) Ptr() *SenderSettleMode {
+	return &m
+}
+
 func (m *SenderSettleMode) String() string {
 	if m == nil {
 		return "<nil>"
@@ -272,6 +276,10 @@ const (
 
 // ReceiverSettleMode specifies how the receiver will settle messages.
 type ReceiverSettleMode uint8
+
+func (m ReceiverSettleMode) Ptr() *ReceiverSettleMode {
+	return &m
+}
 
 func (m *ReceiverSettleMode) String() string {
 	if m == nil {

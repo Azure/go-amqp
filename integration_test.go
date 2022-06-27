@@ -110,10 +110,7 @@ func TestIntegrationRoundTrip(t *testing.T) {
 
 				// Create a sender
 				ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-				sender, err := session.NewSender(
-					ctx,
-					amqp.LinkTargetAddress(targetName),
-				)
+				sender, err := session.NewSender(ctx, targetName, nil)
 				cancel()
 				if err != nil {
 					t.Fatal(err)
@@ -155,11 +152,9 @@ func TestIntegrationRoundTrip(t *testing.T) {
 
 					// Create a receiver
 					ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-					receiver, err := session.NewReceiver(
-						ctx,
-						amqp.LinkSourceAddress(targetName),
-						amqp.LinkCredit(10),
-					)
+					receiver, err := session.NewReceiver(ctx, targetName, &amqp.ReceiverOptions{
+						Credit: 10,
+					})
 					cancel()
 					if err != nil {
 						receiveErr.write(err)
@@ -264,10 +259,7 @@ func TestIntegrationRoundTrip_Buffered(t *testing.T) {
 			// add a random suffix to the link name so the test broker always creates a new node
 			targetName := fmt.Sprintf("%s %d", tt.label, rand.Uint64())
 			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-			sender, err := session.NewSender(
-				ctx,
-				amqp.LinkTargetAddress(targetName),
-			)
+			sender, err := session.NewSender(ctx, targetName, nil)
 			cancel()
 			if err != nil {
 				t.Fatal(err)
@@ -285,12 +277,10 @@ func TestIntegrationRoundTrip_Buffered(t *testing.T) {
 
 			// Create a receiver
 			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-			receiver, err := session.NewReceiver(
-				ctx,
-				amqp.LinkSourceAddress(targetName),
-				amqp.LinkCredit(uint32(len(tt.data))),   // enough credit to buffer all messages
-				amqp.LinkSenderSettle(amqp.ModeSettled), // don't require acknowledgment
-			)
+			receiver, err := session.NewReceiver(ctx, targetName, &amqp.ReceiverOptions{
+				Credit:                    uint32(len(tt.data)),
+				RequestedSenderSettleMode: amqp.ModeSettled.Ptr(),
+			})
 			cancel()
 			if err != nil {
 				t.Fatal(err)
@@ -382,10 +372,7 @@ func TestIntegrationReceiverModeSecond(t *testing.T) {
 
 				// Create a sender
 				ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-				sender, err := session.NewSender(
-					ctx,
-					amqp.LinkTargetAddress(targetName),
-				)
+				sender, err := session.NewSender(ctx, targetName, nil)
 				cancel()
 				if err != nil {
 					t.Fatal(err)
@@ -417,11 +404,9 @@ func TestIntegrationReceiverModeSecond(t *testing.T) {
 
 					// Create a receiver
 					ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-					receiver, err := session.NewReceiver(
-						ctx,
-						amqp.LinkSourceAddress(targetName),
-						amqp.LinkReceiverSettle(amqp.ModeSecond),
-					)
+					receiver, err := session.NewReceiver(ctx, targetName, &amqp.ReceiverOptions{
+						SettlementMode: amqp.ModeSecond.Ptr(),
+					})
 					cancel()
 					if err != nil {
 						receiveErr.write(err)
@@ -537,10 +522,7 @@ func TestIntegrationSessionHandleMax(t *testing.T) {
 			// Create a sender
 			for i := 0; i < tt.links; i++ {
 				ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-				sender, err := session.NewSender(
-					ctx,
-					amqp.LinkTargetAddress(fmt.Sprintf("TestIntegrationSessionHandleMax %d", rand.Uint64())),
-				)
+				sender, err := session.NewSender(ctx, fmt.Sprintf("TestIntegrationSessionHandleMax %d", rand.Uint64()), nil)
 				cancel()
 				switch {
 				case err == nil:
@@ -605,11 +587,9 @@ func TestIntegrationLinkName(t *testing.T) {
 			}
 
 			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-			senderOrigin, err := session.NewSender(
-				ctx,
-				amqp.LinkTargetAddress("TestIntegrationLinkName"),
-				amqp.LinkName(tt.name),
-			)
+			senderOrigin, err := session.NewSender(ctx, "TestIntegrationLinkName", &amqp.SenderOptions{
+				Name: tt.name,
+			})
 			cancel()
 			if err != nil {
 				t.Fatal(err)
@@ -618,11 +598,9 @@ func TestIntegrationLinkName(t *testing.T) {
 
 			// This one should fail
 			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-			sender, err := session.NewSender(
-				ctx,
-				amqp.LinkTargetAddress("TestIntegrationLinkName"),
-				amqp.LinkName(tt.name),
-			)
+			sender, err := session.NewSender(ctx, "TestIntegrationLinkName", &amqp.SenderOptions{
+				Name: tt.name,
+			})
 			cancel()
 			if err == nil {
 				testClose(t, sender.Close)
@@ -666,10 +644,7 @@ func TestIntegrationClose(t *testing.T) {
 
 		// Create a sender
 		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-		receiver, err := session.NewReceiver(
-			ctx,
-			amqp.LinkSourceAddress("TestIntegrationClose"),
-		)
+		receiver, err := session.NewReceiver(ctx, "TestIntegrationClose", nil)
 		cancel()
 		if err != nil {
 			t.Fatal(err)
@@ -712,10 +687,7 @@ func TestIntegrationClose(t *testing.T) {
 
 		// Create a sender
 		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-		receiver, err := session.NewReceiver(
-			ctx,
-			amqp.LinkSourceAddress("TestIntegrationClose"),
-		)
+		receiver, err := session.NewReceiver(ctx, "TestIntegrationClose", nil)
 		cancel()
 		if err != nil {
 			t.Fatal(err)
@@ -761,10 +733,7 @@ func TestIntegrationClose(t *testing.T) {
 
 		// Create a sender
 		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-		receiver, err := session.NewReceiver(
-			ctx,
-			amqp.LinkSourceAddress("TestIntegrationClose"),
-		)
+		receiver, err := session.NewReceiver(ctx, "TestIntegrationClose", nil)
 		cancel()
 		if err != nil {
 			t.Fatal(err)

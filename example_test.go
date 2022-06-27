@@ -30,7 +30,7 @@ func Example() {
 	// Send a message
 	{
 		// Create a sender
-		sender, err := session.NewSender(ctx, amqp.LinkTargetAddress("/queue-name"))
+		sender, err := session.NewSender(ctx, "/queue-name", nil)
 		if err != nil {
 			log.Fatal("Creating sender link:", err)
 		}
@@ -50,11 +50,9 @@ func Example() {
 	// Continuously read messages
 	{
 		// Create a receiver
-		receiver, err := session.NewReceiver(
-			ctx,
-			amqp.LinkSourceAddress("/queue-name"),
-			amqp.LinkCredit(10),
-		)
+		receiver, err := session.NewReceiver(ctx, "/queue-name", &amqp.ReceiverOptions{
+			Credit: 10,
+		})
 		if err != nil {
 			log.Fatal("Creating receiver link:", err)
 		}

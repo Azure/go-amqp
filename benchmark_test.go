@@ -31,14 +31,14 @@ func BenchmarkSimple(b *testing.B) {
 	targetName := fmt.Sprintf("BenchmarkSimple %d", rand.Uint64())
 
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	sender, err := session.NewSender(ctx, amqp.LinkTargetAddress(targetName))
+	sender, err := session.NewSender(ctx, targetName, nil)
 	cancel()
 	if err != nil {
 		b.Fatal(err)
 	}
 
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	receiver, err := session.NewReceiver(ctx, amqp.LinkSourceAddress(targetName))
+	receiver, err := session.NewReceiver(ctx, targetName, nil)
 	cancel()
 	if err != nil {
 		b.Fatal(err)

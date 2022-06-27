@@ -24,20 +24,11 @@ func TestSenderInvalidOptions(t *testing.T) {
 	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
-	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := session.NewSender(ctx, LinkCredit(3))
-	cancel()
-	require.Error(t, err)
-	require.Nil(t, snd)
 
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err = session.NewSender(ctx, LinkWithManualCredits())
-	cancel()
-	require.Error(t, err)
-	require.Nil(t, snd)
-
-	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err = session.NewSender(ctx, LinkSenderSettle(3))
+	snd, err := session.NewSender(ctx, "target", &SenderOptions{
+		SettlementMode: SenderSettleMode(3).Ptr(),
+	})
 	cancel()
 	require.Error(t, err)
 	require.Nil(t, snd)
@@ -75,26 +66,21 @@ func TestSenderMethodsNoSend(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	const (
-		linkAddr   = "addr1"
-		linkName   = "test1"
-		maxMsgSize = uint64(4096)
+		linkAddr = "addr1"
+		linkName = "test1"
 	)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := session.NewSender(
-		ctx,
-		LinkTargetAddress(linkAddr),
-		LinkName(linkName),
-		LinkMaxMessageSize(maxMsgSize),
-		LinkSourceDurability(DurabilityUnsettledState),
-		LinkSourceExpiryPolicy(ExpiryNever),
-		LinkSourceTimeout(300),
-	)
+	snd, err := session.NewSender(ctx, linkAddr, &SenderOptions{
+		Name:          linkName,
+		Durability:    DurabilityUnsettledState,
+		ExpiryPolicy:  ExpiryNever,
+		ExpiryTimeout: 300,
+	})
 	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, snd)
 	require.Equal(t, linkAddr, snd.Address())
 	require.Equal(t, linkName, snd.LinkName())
-	require.Equal(t, maxMsgSize, snd.MaxMessageSize())
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	require.NoError(t, snd.Close(ctx))
 	cancel()
@@ -112,7 +98,7 @@ func TestSenderSendOnClosed(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := session.NewSender(ctx)
+	snd, err := session.NewSender(ctx, "target", nil)
 	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, snd)
@@ -138,7 +124,7 @@ func TestSenderSendOnSessionClosed(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := session.NewSender(ctx)
+	snd, err := session.NewSender(ctx, "target", nil)
 	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, snd)
@@ -164,7 +150,7 @@ func TestSenderSendOnConnClosed(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := session.NewSender(ctx)
+	snd, err := session.NewSender(ctx, "target", nil)
 	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, snd)
@@ -190,7 +176,7 @@ func TestSenderSendOnDetached(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := session.NewSender(ctx)
+	snd, err := session.NewSender(ctx, "target", nil)
 	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, snd)
@@ -270,7 +256,7 @@ func TestSenderAttachError(t *testing.T) {
 		netConn.SendFrame(b)
 	}
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := session.NewSender(ctx)
+	snd, err := session.NewSender(ctx, "target", nil)
 	cancel()
 	var de *Error
 	if !errors.As(err, &de) {
@@ -294,7 +280,9 @@ func TestSenderSendMismatchedModes(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := session.NewSender(ctx, LinkSenderSettle(encoding.ModeSettled))
+	snd, err := session.NewSender(ctx, "target", &SenderOptions{
+		SettlementMode: ModeSettled.Ptr(),
+	})
 	cancel()
 	require.Error(t, err)
 	require.Equal(t, "amqp: sender settlement mode \"settled\" requested, received \"unsettled\" from server", err.Error())
@@ -337,7 +325,7 @@ func TestSenderSendSuccess(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := session.NewSender(ctx)
+	snd, err := session.NewSender(ctx, "target", nil)
 	cancel()
 	require.NoError(t, err)
 
@@ -382,7 +370,9 @@ func TestSenderSendSettled(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := session.NewSender(ctx, LinkSenderSettle(ModeSettled))
+	snd, err := session.NewSender(ctx, "target", &SenderOptions{
+		SettlementMode: ModeSettled.Ptr(),
+	})
 	cancel()
 	require.NoError(t, err)
 
@@ -423,7 +413,7 @@ func TestSenderSendRejected(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := session.NewSender(ctx)
+	snd, err := session.NewSender(ctx, "target", nil)
 	cancel()
 	require.NoError(t, err)
 
@@ -488,7 +478,9 @@ func TestSenderSendRejectedNoDetach(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := session.NewSender(ctx, LinkDetachOnDispositionError(false))
+	snd, err := session.NewSender(ctx, "target", &SenderOptions{
+		IgnoreDispositionErrors: true,
+	})
 	cancel()
 	require.NoError(t, err)
 
@@ -537,7 +529,7 @@ func TestSenderSendDetached(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := session.NewSender(ctx)
+	snd, err := session.NewSender(ctx, "target", nil)
 	cancel()
 	require.NoError(t, err)
 
@@ -566,7 +558,7 @@ func TestSenderSendTimeout(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := session.NewSender(ctx)
+	snd, err := session.NewSender(ctx, "target", nil)
 	cancel()
 	require.NoError(t, err)
 
@@ -621,7 +613,7 @@ func TestSenderSendMsgTooBig(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := session.NewSender(ctx)
+	snd, err := session.NewSender(ctx, "target", nil)
 	cancel()
 	require.NoError(t, err)
 
@@ -657,7 +649,7 @@ func TestSenderSendTagTooBig(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := session.NewSender(ctx)
+	snd, err := session.NewSender(ctx, "target", nil)
 	cancel()
 	require.NoError(t, err)
 
@@ -729,7 +721,7 @@ func TestSenderSendMultiTransfer(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := session.NewSender(ctx)
+	snd, err := session.NewSender(ctx, "target", nil)
 	cancel()
 	require.NoError(t, err)
 
@@ -760,7 +752,7 @@ func TestSenderConnReaderError(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := session.NewSender(ctx)
+	snd, err := session.NewSender(ctx, "target", nil)
 	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, snd)
@@ -793,7 +785,7 @@ func TestSenderConnWriterError(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := session.NewSender(ctx)
+	snd, err := session.NewSender(ctx, "target", nil)
 	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, snd)
@@ -850,7 +842,7 @@ func TestSenderFlowFrameWithEcho(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	sender, err := session.NewSender(ctx)
+	sender, err := session.NewSender(ctx, "target", nil)
 	cancel()
 	require.NoError(t, err)
 

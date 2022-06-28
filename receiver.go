@@ -46,7 +46,7 @@ func (r *Receiver) DrainCredit(ctx context.Context) error {
 // When using ModeSecond, you *must* take an action on the message by calling
 // one of the following: AcceptMessage, RejectMessage, ReleaseMessage, ModifyMessage.
 // When using ModeFirst, the message is spontaneously Accepted at reception.
-func (r *Receiver) Prefetched() (*Message, error) {
+func (r *Receiver) Prefetched() *Message {
 	select {
 	case r.link.ReceiverReady <- struct{}{}:
 	default:
@@ -58,10 +58,10 @@ func (r *Receiver) Prefetched() (*Message, error) {
 	case msg := <-r.link.Messages:
 		log.Debug(3, "Receive() non blocking %d", msg.deliveryID)
 		msg.link = r.link
-		return &msg, nil
+		return &msg
 	default:
 		// done draining messages
-		return nil, nil
+		return nil
 	}
 }
 
@@ -72,10 +72,8 @@ func (r *Receiver) Prefetched() (*Message, error) {
 // one of the following: AcceptMessage, RejectMessage, ReleaseMessage, ModifyMessage.
 // When using ModeFirst, the message is spontaneously Accepted at reception.
 func (r *Receiver) Receive(ctx context.Context) (*Message, error) {
-	msg, err := r.Prefetched()
-
-	if err != nil || msg != nil {
-		return msg, err
+	if msg := r.Prefetched(); msg != nil {
+		return msg, nil
 	}
 
 	// wait for the next message

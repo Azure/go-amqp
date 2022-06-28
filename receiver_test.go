@@ -750,9 +750,8 @@ func TestReceiverPrefetch(t *testing.T) {
 	}
 
 	// if there are no cached messages we just return immediately - no error, no message.
-	msg, err := receiver.Prefetched()
+	msg := receiver.Prefetched()
 	require.Nil(t, msg)
-	require.Nil(t, err)
 
 	messagesCh <- Message{
 		ApplicationProperties: map[string]interface{}{
@@ -762,10 +761,9 @@ func TestReceiverPrefetch(t *testing.T) {
 	}
 
 	require.NotEmpty(t, messagesCh)
-	msg, err = receiver.Prefetched()
+	msg = receiver.Prefetched()
 
 	require.EqualValues(t, "hello", msg.ApplicationProperties["prop"].(string))
-	require.Nil(t, err)
 	require.Empty(t, messagesCh)
 }
 

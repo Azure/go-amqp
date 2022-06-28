@@ -30,6 +30,7 @@
 ### Bugs Fixed
 * Fixed potential panic in `muxHandleFrame()` when checking for manual creditor.
 * Fixed potential panic in `attachLink()` when copying source filters.
+* `New()` will no longer return a broken `*Client` in some instances.
 
 ### Other Changes
 * Errors when reading/writing to the underlying `net.Conn` are now wrapped in a `ConnectionError` type.

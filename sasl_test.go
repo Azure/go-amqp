@@ -137,7 +137,7 @@ func TestConnSASLXOAUTH2AuthFail(t *testing.T) {
 		IdleTimeout: 10 * time.Minute,
 		SASLType:    SASLTypeXOAUTH2("someuser@example.com", "ya29.vF9dft4qmTc2Nvb3RlckBhdHRhdmlzdGEuY29tCg", 512),
 	})
-	if err != nil {
+	if err == nil {
 		defer client.Close()
 	}
 	switch {
@@ -177,7 +177,7 @@ func TestConnSASLXOAUTH2AuthFailWithErrorResponse(t *testing.T) {
 		IdleTimeout: 10 * time.Minute,
 		SASLType:    SASLTypeXOAUTH2("someuser@example.com", "ya29.vF9dft4qmTc2Nvb3RlckBhdHRhdmlzdGEuY29tCg", 512),
 	})
-	if err != nil {
+	if err == nil {
 		defer client.Close()
 	}
 	switch {
@@ -217,7 +217,7 @@ func TestConnSASLXOAUTH2AuthFailsAdditionalErrorResponse(t *testing.T) {
 		IdleTimeout: 10 * time.Minute,
 		SASLType:    SASLTypeXOAUTH2("someuser@example.com", "ya29.vF9dft4qmTc2Nvb3RlckBhdHRhdmlzdGEuY29tCg", 512),
 	})
-	if err != nil {
+	if err == nil {
 		defer client.Close()
 	}
 	switch {

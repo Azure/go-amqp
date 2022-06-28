@@ -1428,7 +1428,7 @@ func TestReceiverConnWriterError(t *testing.T) {
 		errChan <- err
 	}()
 
-	conn.WriteErr = errors.New("failed")
+	conn.WriteErr <- errors.New("failed")
 	// trigger the write error
 	conn.SendKeepAlive()
 

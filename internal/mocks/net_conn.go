@@ -17,8 +17,9 @@ import (
 // Return a non-nil error to simulate a write error.
 func NewNetConn(resp func(frames.FrameBody) ([]byte, error)) *NetConn {
 	return &NetConn{
-		ReadErr: make(chan error),
-		resp:    resp,
+		ReadErr:  make(chan error),
+		WriteErr: make(chan error, 1),
+		resp:     resp,
 		// during shutdown, connReader can close before connWriter as they both
 		// both return on c.Done being closed, so there is some non-determinism
 		// here.  this means that sometimes writes can still happen but there's
@@ -41,9 +42,9 @@ type NetConn struct {
 	ReadErr chan error
 
 	// WriteErr is used to simulate a connWriter error.
-	// The error set here is returned from the call to NetConn.Write.
-	// After the error is sent, its value is set to nil.
-	WriteErr error
+	// The error sent here is returned from the call to NetConn.Write.
+	// Has a buffer of one so setting a pending error won't block.
+	WriteErr chan error
 
 	resp      func(frames.FrameBody) ([]byte, error)
 	readDL    *time.Timer
@@ -120,9 +121,11 @@ func (n *NetConn) Write(b []byte) (int, error) {
 		// not closed yet
 	}
 
-	if n.WriteErr != nil {
-		defer func() { n.WriteErr = nil }()
-		return 0, n.WriteErr
+	select {
+	case err := <-n.WriteErr:
+		return 0, err
+	default:
+		// no fake write error
 	}
 
 	frame, err := decodeFrame(b)

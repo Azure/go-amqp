@@ -791,7 +791,7 @@ func TestSenderConnWriterError(t *testing.T) {
 	require.NotNil(t, snd)
 
 	// simulate some connWriter error
-	netConn.WriteErr = errors.New("failed")
+	netConn.WriteErr <- errors.New("failed")
 
 	err = snd.Send(context.Background(), NewMessage([]byte("failed")))
 	var connErr *ConnectionError

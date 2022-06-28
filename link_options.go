@@ -119,11 +119,6 @@ type ReceiverOptions struct {
 	// If the peer cannot fulfill the filters the link will be detached.
 	Filters []LinkFilter
 
-	// IgnoreDispositionErrors controls automatic detach on disposition errors.
-	//
-	// Default: false.
-	IgnoreDispositionErrors bool
-
 	// ManualCredits enables manual credit management for this link.
 	// Credits can be added with IssueCredit(), and links can also be
 	// drained with DrainCredit().

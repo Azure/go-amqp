@@ -71,7 +71,7 @@ type link struct {
 	msg                   Message             // current message being decoded
 }
 
-// newSendingLinkd creates a new sending link and attaches it to the session
+// newSendingLink creates a new sending link and attaches it to the session
 func newSendingLink(target string, s *Session, opts *SenderOptions) (*link, error) {
 	l := &link{
 		Key:                      linkKey{randString(40), encoding.RoleSender},
@@ -137,15 +137,14 @@ func newSendingLink(target string, s *Session, opts *SenderOptions) (*link, erro
 
 func newReceivingLink(source string, s *Session, r *Receiver, opts *ReceiverOptions) (*link, error) {
 	l := &link{
-		Key:                      linkKey{randString(40), encoding.RoleReceiver},
-		Session:                  s,
-		receiver:                 r,
-		close:                    make(chan struct{}),
-		Detached:                 make(chan struct{}),
-		ReceiverReady:            make(chan struct{}, 1),
-		detachOnDispositionError: true,
-		Source:                   &frames.Source{Address: source},
-		Target:                   new(frames.Target),
+		Key:           linkKey{randString(40), encoding.RoleReceiver},
+		Session:       s,
+		receiver:      r,
+		close:         make(chan struct{}),
+		Detached:      make(chan struct{}),
+		ReceiverReady: make(chan struct{}, 1),
+		Source:        &frames.Source{Address: source},
+		Target:        new(frames.Target),
 	}
 
 	if opts == nil {
@@ -183,7 +182,6 @@ func newReceivingLink(source string, s *Session, r *Receiver, opts *ReceiverOpti
 			f(l.Source.Filter)
 		}
 	}
-	l.detachOnDispositionError = !opts.IgnoreDispositionErrors
 	if opts.ManualCredits {
 		l.receiver.manualCreditor = &manualCreditor{}
 	}

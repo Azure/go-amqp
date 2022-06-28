@@ -329,7 +329,7 @@ func TestNewReceivingLink(t *testing.T) {
 				require.Empty(t, l.Target.ExpiryPolicy)
 				require.Zero(t, l.Target.Timeout)
 				require.Empty(t, l.Source.Filter)
-				require.True(t, l.detachOnDispositionError)
+				require.False(t, l.detachOnDispositionError)
 				//require.Nil(t, l.receiver.manualCreditor)
 				require.Zero(t, l.MaxMessageSize)
 				require.NotEmpty(t, l.Key.name)
@@ -354,7 +354,6 @@ func TestNewReceivingLink(t *testing.T) {
 					LinkFilterSelector("amqp.annotation.x-opt-offset > '100'"),
 					LinkFilterSource("com.microsoft:session-filter", 0x00000137000000C, "123"),
 				},
-				IgnoreDispositionErrors: true,
 				//ManualCredits:             true,
 				MaxMessageSize: 1024,
 				Name:           name,

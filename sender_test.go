@@ -790,19 +790,19 @@ func TestSenderConnWriterError(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, snd)
 
+	sendInitialFlowFrame(t, netConn, 0, 100)
+
 	// simulate some connWriter error
 	netConn.WriteErr <- errors.New("failed")
 
 	err = snd.Send(context.Background(), NewMessage([]byte("failed")))
 	var connErr *ConnectionError
-	if !errors.As(err, &connErr) {
-		t.Fatalf("unexpected error type %T", err)
-	}
+	require.ErrorAs(t, err, &connErr)
+	require.Equal(t, "failed", connErr.Error())
 
 	err = client.Close()
-	if !errors.As(err, &connErr) {
-		t.Fatalf("unexpected error type %T", err)
-	}
+	require.ErrorAs(t, err, &connErr)
+	require.Equal(t, "failed", connErr.Error())
 }
 
 func TestSenderFlowFrameWithEcho(t *testing.T) {

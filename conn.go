@@ -842,6 +842,7 @@ func (c *conn) startTLS() (stateFunc, error) {
 
 	// this function will be executed by connReader
 	c.connReaderRun <- func() {
+		defer close(done)
 		_ = c.net.SetReadDeadline(time.Time{}) // clear timeout
 
 		// wrap existing net.Conn and perform TLS handshake
@@ -849,16 +850,12 @@ func (c *conn) startTLS() (stateFunc, error) {
 		if c.connectTimeout != 0 {
 			_ = tlsConn.SetWriteDeadline(time.Now().Add(c.connectTimeout))
 		}
-		if err := tlsConn.Handshake(); err != nil {
-			done <- err
-			// TODO: return?
-		}
+		done <- tlsConn.Handshake()
+		// TODO: return?
 
 		// swap net.Conn
 		c.net = tlsConn
 		c.tlsComplete = true
-
-		close(done)
 	}
 
 	// set deadline to interrupt connReader

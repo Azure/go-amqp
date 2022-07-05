@@ -507,7 +507,7 @@ func TestReceiveSuccessModeSecondAccept(t *testing.T) {
 	require.NoError(t, client.Close())
 }
 
-func TestReceiveSuccessModeSecondAcceptHang(t *testing.T) {
+func TestReceiveSuccessModeSecondAcceptOnClosedLink(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {

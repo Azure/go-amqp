@@ -507,6 +507,66 @@ func TestReceiveSuccessModeSecondAccept(t *testing.T) {
 	require.NoError(t, client.Close())
 }
 
+func TestReceiveSuccessModeSecondAcceptHang(t *testing.T) {
+	const linkHandle = 0
+	deliveryID := uint32(1)
+	responder := func(req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(ModeSecond)(req)
+		if b != nil || err != nil {
+			return b, err
+		}
+		switch ff := req.(type) {
+		case *frames.PerformFlow:
+			if *ff.NextIncomingID == deliveryID {
+				// this is the first flow frame, send our payload
+				return mocks.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
+			}
+			// ignore future flow frames as we have no response
+			return nil, nil
+		case *frames.PerformDisposition:
+			if _, ok := ff.State.(*encoding.StateAccepted); !ok {
+				return nil, fmt.Errorf("unexpected State %T", ff.State)
+			}
+			return mocks.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
+		default:
+			return nil, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+	conn := mocks.NewNetConn(responder)
+	client, err := New(conn, nil)
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
+		SettlementMode: ModeSecond.Ptr(),
+	})
+	cancel()
+	require.NoError(t, err)
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+	msg, err := r.Receive(ctx)
+	cancel()
+	require.NoError(t, err)
+	if c := r.link.countUnsettled(); c != 1 {
+		t.Fatalf("unexpected unsettled count %d", c)
+	}
+	// wait for the link to pause as we've consumed all available credit
+	require.NoError(t, waitForLink(r.link, true))
+	// link credit must be zero since we only started with 1
+	if c := r.link.linkCredit; c != 0 {
+		t.Fatalf("unexpected link credit %d", c)
+	}
+
+	require.NoError(t, r.Close(context.Background()))
+
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+	err = r.AcceptMessage(ctx, msg)
+	cancel()
+	require.ErrorIs(t, err, ErrLinkClosed)
+}
+
 func TestReceiveSuccessModeSecondReject(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)

@@ -31,8 +31,10 @@
 * Fixed potential panic in `muxHandleFrame()` when checking for manual creditor.
 * Fixed potential panic in `attachLink()` when copying source filters.
 * `New()` will no longer return a broken `*Client` in some instances.
+* Incoming transfer frames received during initial link detach are no longer discarded.
 
 ### Other Changes
 * Errors when reading/writing to the underlying `net.Conn` are now wrapped in a `ConnectionError` type.
 * Disambiguate error message for distinct cases where a session wasn't found for the specified remote channel.
 * Removed `link.Paused` as it didn't add much value and was broken in some cases.
+* Only send one flow frame when a drain has been requested.

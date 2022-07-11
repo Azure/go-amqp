@@ -1421,10 +1421,6 @@ func TestReceiverCloseOnUnsettledWithPending(t *testing.T) {
 	b, err := mocks.PerformTransfer(0, 0, 1, []byte("message 1"))
 	require.NoError(t, err)
 	conn.SendFrame(b)
-	// this one will be pending until the first one is read
-	b, err = mocks.PerformTransfer(0, 0, 1, []byte("message 2"))
-	require.NoError(t, err)
-	conn.SendFrame(b)
 
 	// wait for the messages to "arrive"
 	time.Sleep(time.Second)

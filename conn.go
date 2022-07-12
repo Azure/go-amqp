@@ -795,8 +795,8 @@ func (c *conn) netWriteWithRetry(b []byte) (int, error) {
 			// slice off the portion that was written
 			b = b[written:]
 		}
-		// exponential back-off starting at 100ms
-		delay := (100 * time.Millisecond) * time.Duration(math.Pow(2, float64(i)))
+		// exponential back-off starting at 10ms
+		delay := (10 * time.Millisecond) * time.Duration(math.Pow(2, float64(i)))
 		debug(3, "netWriteWithRetry: %v; sleep for %s", err, delay)
 		time.Sleep(delay)
 	}

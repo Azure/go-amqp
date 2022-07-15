@@ -16,7 +16,7 @@ import (
 
 // Default session options
 const (
-	defaultWindow = 1000
+	defaultWindow = 5000
 )
 
 // Default link options
@@ -40,6 +40,7 @@ type Session struct {
 	// flow control
 	incomingWindow uint32
 	outgoingWindow uint32
+	needFlowCount  uint32
 
 	handleMax        uint32
 	allocateHandle   chan *link // link handles are allocated by sending a link on this channel, nil is sent on link.rx once allocated
@@ -389,6 +390,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				s.muxFrameToLink(link, fr.Body)
 
 			case *frames.PerformTransfer:
+				s.needFlowCount++
 				// "Upon receiving a transfer, the receiving endpoint will
 				// increment the next-incoming-id to match the implicit
 				// transfer-id of the incoming transfer plus one, as well
@@ -415,9 +417,10 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 					handlesByRemoteDeliveryID[*body.DeliveryID] = body.Handle
 				}
 
-				log.Debug(3, "TX(Session) Flow? remoteOutgoingWindow(%d) < s.incomingWindow(%d)/2\n", remoteOutgoingWindow, s.incomingWindow)
 				// Update peer's outgoing window if half has been consumed.
-				if remoteOutgoingWindow < s.incomingWindow/2 {
+				if s.needFlowCount >= s.incomingWindow/2 {
+					log.Debug(3, "TX(Session %d) Flow s.needFlowCount(%d) >= s.incomingWindow(%d)/2\n", s.channel, s.needFlowCount, s.incomingWindow)
+					s.needFlowCount = 0
 					nID := nextIncomingID
 					flow := &frames.PerformFlow{
 						NextIncomingID: &nID,

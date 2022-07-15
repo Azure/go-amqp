@@ -32,9 +32,11 @@
 * Fixed potential panic in `attachLink()` when copying source filters.
 * `New()` will no longer return a broken `*Client` in some instances.
 * Incoming transfer frames received during initial link detach are no longer discarded.
+* Session will no longer flood peer with flow frames when half its incoming window is consumed.
 
 ### Other Changes
 * Errors when reading/writing to the underlying `net.Conn` are now wrapped in a `ConnectionError` type.
 * Disambiguate error message for distinct cases where a session wasn't found for the specified remote channel.
 * Removed `link.Paused` as it didn't add much value and was broken in some cases.
 * Only send one flow frame when a drain has been requested.
+* Session window size increased to 5000.

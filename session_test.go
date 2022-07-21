@@ -33,10 +33,7 @@ func TestSessionClose(t *testing.T) {
 			if err != nil {
 				return nil, err
 			}
-			// channel 0 can never be deleted, however other channels can.
-			if channelNum > 1 {
-				channelNum = 0
-			}
+			channelNum--
 			return b, nil
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)

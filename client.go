@@ -63,20 +63,10 @@ func (c *Client) Close() error {
 // Returns ErrConnClosed if the underlying connection has been closed.
 // opts: pass nil to accept the default values.
 func (c *Client) NewSession(ctx context.Context, opts *SessionOptions) (*Session, error) {
-	// get a session allocated by Client.mux
-	var sResp newSessionResp
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-c.conn.Done:
-		return nil, c.conn.Err()
-	case sResp = <-c.conn.NewSession:
+	s, err := c.conn.NewSession()
+	if err != nil {
+		return nil, err
 	}
-
-	if sResp.err != nil {
-		return nil, sResp.err
-	}
-	s := sResp.session
 	s.init(opts)
 
 	// send Begin to server
@@ -87,13 +77,37 @@ func (c *Client) NewSession(ctx context.Context, opts *SessionOptions) (*Session
 		HandleMax:      s.handleMax,
 	}
 	log.Debug(1, "TX (NewSession): %s", begin)
-	_ = s.txFrame(begin, nil)
+
+	// we use send to have positive confirmation on transmission
+	send := make(chan encoding.DeliveryState)
+	_ = s.txFrame(begin, send)
 
 	// wait for response
 	var fr frames.Frame
 	select {
 	case <-ctx.Done():
-		// TODO: this will leak s
+		select {
+		case <-send:
+			// begin was written to the network.  assume it was
+			// received and that the ctx was too short to wait for
+			// the ack. in this case we must send an end before we
+			// can delete the session
+			go func() {
+				_ = s.txFrame(&frames.PerformEnd{}, nil)
+				select {
+				case <-c.conn.Done:
+					// conn has terminated
+				case <-time.After(5 * time.Second):
+					// timed out
+				case <-s.rx:
+					// received ack
+				}
+				c.conn.DeleteSession(s)
+			}()
+		default:
+			// begin wasn't written to the network, so delete session
+			c.conn.DeleteSession(s)
+		}
 		return nil, ctx.Err()
 	case <-c.conn.Done:
 		return nil, c.conn.Err()
@@ -109,12 +123,7 @@ func (c *Client) NewSession(ctx context.Context, opts *SessionOptions) (*Session
 		// either swallow the frame or blow up in some other way, both causing this call to hang.
 		// deallocate session on error.  we can't call
 		// s.Close() as the session mux hasn't started yet.
-		select {
-		case <-ctx.Done():
-			// TODO: this will leak s
-			return nil, ctx.Err()
-		case c.conn.DelSession <- s:
-		}
+		c.conn.DeleteSession(s)
 		return nil, fmt.Errorf("unexpected begin response: %+v", fr.Body)
 	}
 

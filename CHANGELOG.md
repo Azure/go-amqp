@@ -33,6 +33,7 @@
 * `New()` will no longer return a broken `*Client` in some instances.
 * Incoming transfer frames received during initial link detach are no longer discarded.
 * Session will no longer flood peer with flow frames when half its incoming window is consumed.
+* Newly created `Session` won't leak if the context passed to `Client.NewSession()` expires before exit.
 
 ### Other Changes
 * Errors when reading/writing to the underlying `net.Conn` are now wrapped in a `ConnectionError` type.
@@ -40,3 +41,4 @@
 * Removed `link.Paused` as it didn't add much value and was broken in some cases.
 * Only send one flow frame when a drain has been requested.
 * Session window size increased to 5000.
+* Creation and deletion of `Session` instances have been made deterministic.

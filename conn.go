@@ -126,11 +126,14 @@ type conn struct {
 	Done  chan struct{} // indicates the connection is done
 
 	// mux
-	NewSession   chan newSessionResp // new Sessions are requested from mux by reading off this channel
-	DelSession   chan *Session       // session completion is indicated to mux by sending the Session on this channel
-	connErr      chan error          // connReader/Writer notifications of an error
-	closeMux     chan struct{}       // indicates that the mux should stop
+	connErr      chan error    // connReader/Writer notifications of an error
+	closeMux     chan struct{} // indicates that the mux should stop
 	closeMuxOnce sync.Once
+
+	// session tracking
+	channels            *bitmap.Bitmap
+	sessionsByChannel   map[uint16]*Session
+	sessionsByChannelMu sync.RWMutex
 
 	// connReader
 	rxProto       chan protoHeader  // protoHeaders received by connReader
@@ -142,11 +145,6 @@ type conn struct {
 	txFrame chan frames.Frame // AMQP frames to be sent by connWriter
 	txBuf   buffer.Buffer     // buffer for marshaling frames before transmitting
 	txDone  chan struct{}
-}
-
-type newSessionResp struct {
-	session *Session
-	err     error
 }
 
 // implements the dialer interface
@@ -216,24 +214,23 @@ func dialConn(addr string, opts *ConnOptions) (*conn, error) {
 
 func newConn(netConn net.Conn, opts *ConnOptions) (*conn, error) {
 	c := &conn{
-		dialer:           defaultDialer{},
-		net:              netConn,
-		maxFrameSize:     defaultMaxFrameSize,
-		PeerMaxFrameSize: defaultMaxFrameSize,
-		channelMax:       defaultMaxSessions - 1, // -1 because channel-max starts at zero
-		idleTimeout:      defaultIdleTimeout,
-		containerID:      randString(40),
-		Done:             make(chan struct{}),
-		connErr:          make(chan error, 2), // buffered to ensure connReader/Writer won't leak
-		closeMux:         make(chan struct{}),
-		rxProto:          make(chan protoHeader),
-		rxFrame:          make(chan frames.Frame),
-		rxDone:           make(chan struct{}),
-		connReaderRun:    make(chan func(), 1), // buffered to allow queueing function before interrupt
-		NewSession:       make(chan newSessionResp),
-		DelSession:       make(chan *Session),
-		txFrame:          make(chan frames.Frame),
-		txDone:           make(chan struct{}),
+		dialer:            defaultDialer{},
+		net:               netConn,
+		maxFrameSize:      defaultMaxFrameSize,
+		PeerMaxFrameSize:  defaultMaxFrameSize,
+		channelMax:        defaultMaxSessions - 1, // -1 because channel-max starts at zero
+		idleTimeout:       defaultIdleTimeout,
+		containerID:       randString(40),
+		Done:              make(chan struct{}),
+		connErr:           make(chan error, 2), // buffered to ensure connReader/Writer won't leak
+		closeMux:          make(chan struct{}),
+		rxProto:           make(chan protoHeader),
+		rxFrame:           make(chan frames.Frame),
+		rxDone:            make(chan struct{}),
+		connReaderRun:     make(chan func(), 1), // buffered to allow queueing function before interrupt
+		txFrame:           make(chan frames.Frame),
+		txDone:            make(chan struct{}),
+		sessionsByChannel: map[uint16]*Session{},
 	}
 
 	// apply options
@@ -314,6 +311,10 @@ func (c *conn) Start() error {
 		}
 	}
 
+	// we can't create the channel bitmap until the connection has been established.
+	// this is because our peer can tell us the max channels they support.
+	c.channels = bitmap.New(uint32(c.channelMax))
+
 	// start multiplexor and writer
 	go c.mux()
 	go c.connWriter()
@@ -378,20 +379,35 @@ func (c *conn) Err() error {
 	return &ConnectionError{inner: c.err}
 }
 
+func (c *conn) NewSession() (*Session, error) {
+	c.sessionsByChannelMu.Lock()
+	defer c.sessionsByChannelMu.Unlock()
+
+	// create the next session to allocate
+	// note that channel always start at 0
+	channel, ok := c.channels.Next()
+	if !ok {
+		return nil, fmt.Errorf("reached connection channel max (%d)", c.channelMax)
+	}
+	session := newSession(c, uint16(channel))
+	ch := session.channel
+	c.sessionsByChannel[ch] = session
+	return session, nil
+}
+
+func (c *conn) DeleteSession(s *Session) {
+	c.sessionsByChannelMu.Lock()
+	defer c.sessionsByChannelMu.Unlock()
+
+	delete(c.sessionsByChannel, s.channel)
+	c.channels.Remove(uint32(s.channel))
+}
+
 // mux is started in it's own goroutine after initial connection establishment.
 // It handles muxing of sessions, keepalives, and connection errors.
 func (c *conn) mux() {
 	var (
-		// allocated channels
-		channels = bitmap.New(uint32(c.channelMax))
-
-		// create the next session to allocate
-		// note that channel always start at 0, and 0 is special and can't be deleted
-		nextChannel, _ = channels.Next()
-		nextSession    = newSessionResp{session: newSession(c, uint16(nextChannel))}
-
 		// map channels to sessions
-		sessionsByChannel       = make(map[uint16]*Session)
 		sessionsByRemoteChannel = make(map[uint16]*Session)
 	)
 
@@ -433,9 +449,11 @@ func (c *conn) mux() {
 					c.err = fmt.Errorf("%T: nil RemoteChannel", fr.Body)
 					break
 				}
-				session, ok = sessionsByChannel[*body.RemoteChannel]
+				c.sessionsByChannelMu.RLock()
+				session, ok = c.sessionsByChannel[*body.RemoteChannel]
+				c.sessionsByChannelMu.RUnlock()
 				if !ok {
-					c.err = fmt.Errorf("unexpected remote channel number %d, expected %d", *body.RemoteChannel, nextChannel)
+					c.err = fmt.Errorf("unexpected remote channel number %d", *body.RemoteChannel)
 					break
 				}
 
@@ -470,37 +488,6 @@ func (c *conn) mux() {
 			case <-c.closeMux:
 				return
 			}
-
-		// new session request
-		//
-		// Continually try to send the next session on the channel,
-		// then add it to the sessions map. This allows us to control ID
-		// allocation and prevents the need to have shared map. Since new
-		// sessions are far less frequent than frames being sent to sessions,
-		// this avoids the lock/unlock for session lookup.
-		case c.NewSession <- nextSession:
-			if nextSession.err != nil {
-				continue
-			}
-
-			// save session into map
-			ch := nextSession.session.channel
-			sessionsByChannel[ch] = nextSession.session
-
-			// get next available channel
-			next, ok := channels.Next()
-			if !ok {
-				nextSession = newSessionResp{err: fmt.Errorf("reached connection channel max (%d)", c.channelMax)}
-				continue
-			}
-
-			// create the next session to send
-			nextSession = newSessionResp{session: newSession(c, uint16(next))}
-
-		// session deletion
-		case s := <-c.DelSession:
-			delete(sessionsByChannel, s.channel)
-			channels.Remove(uint32(s.channel))
 
 		// connection is complete
 		case <-c.closeMux:

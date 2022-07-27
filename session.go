@@ -42,11 +42,14 @@ type Session struct {
 	outgoingWindow uint32
 	needFlowCount  uint32
 
-	handleMax        uint32
-	allocateHandle   chan *link // link handles are allocated by sending a link on this channel, nil is sent on link.rx once allocated
-	deallocateHandle chan *link // link handles are deallocated by sending a link on this channel
+	handleMax uint32
 
 	nextDeliveryID uint32 // atomically accessed sequence for deliveryIDs
+
+	// link management
+	linksMu    sync.RWMutex      // used to synchronize link handle allocation
+	linksByKey map[linkKey]*link // mapping of name+role link
+	handles    *bitmap.Bitmap    // allocated handles
 
 	// used for gracefully closing link
 	close     chan struct{}
@@ -57,18 +60,18 @@ type Session struct {
 
 func newSession(c *conn, channel uint16) *Session {
 	return &Session{
-		conn:             c,
-		channel:          channel,
-		rx:               make(chan frames.Frame),
-		tx:               make(chan frames.FrameBody),
-		txTransfer:       make(chan *frames.PerformTransfer),
-		incomingWindow:   defaultWindow,
-		outgoingWindow:   defaultWindow,
-		handleMax:        math.MaxUint32,
-		allocateHandle:   make(chan *link),
-		deallocateHandle: make(chan *link),
-		close:            make(chan struct{}),
-		done:             make(chan struct{}),
+		conn:           c,
+		channel:        channel,
+		rx:             make(chan frames.Frame),
+		tx:             make(chan frames.FrameBody),
+		txTransfer:     make(chan *frames.PerformTransfer),
+		incomingWindow: defaultWindow,
+		outgoingWindow: defaultWindow,
+		handleMax:      math.MaxUint32,
+		linksMu:        sync.RWMutex{},
+		linksByKey:     make(map[linkKey]*link),
+		close:          make(chan struct{}),
+		done:           make(chan struct{}),
 	}
 }
 
@@ -87,6 +90,8 @@ func (s *Session) init(opts *SessionOptions) {
 			s.outgoingWindow = opts.OutgoingWindow
 		}
 	}
+	// create handle map after options have been applied
+	s.handles = bitmap.New(s.handleMax)
 }
 
 // Close gracefully closes the session.
@@ -176,10 +181,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 	}()
 
 	var (
-		links      = make(map[uint32]*link)  // mapping of remote handles to links
-		linksByKey = make(map[linkKey]*link) // mapping of name+role link
-		handles    = bitmap.New(s.handleMax) // allocated handles
-
+		links                     = make(map[uint32]*link)  // mapping of remote handles to links
 		handlesByDeliveryID       = make(map[uint32]uint32) // mapping of deliveryIDs to handles
 		deliveryIDByHandle        = make(map[uint32]uint32) // mapping of handles to latest deliveryID
 		handlesByRemoteDeliveryID = make(map[uint32]uint32) // mapping of remote deliveryID to handles
@@ -230,35 +232,6 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				}
 			}
 			return
-
-		// handle allocation request
-		case l := <-s.allocateHandle:
-			// Check if link name already exists, if so then an error should be returned
-			if linksByKey[l.Key] != nil {
-				l.err = fmt.Errorf("link with name '%v' already exists", l.Key.name)
-				l.RX <- nil
-				continue
-			}
-
-			next, ok := handles.Next()
-			if !ok {
-				// handle numbers are zero-based, report the actual count
-				l.err = fmt.Errorf("reached session handle max (%d)", s.handleMax+1)
-				l.RX <- nil
-				continue
-			}
-
-			l.Handle = next       // allocate handle to the link
-			linksByKey[l.Key] = l // add to mapping
-			l.RX <- nil           // send nil on channel to indicate allocation complete
-
-		// handle deallocation request
-		case l := <-s.deallocateHandle:
-			delete(links, l.RemoteHandle)
-			delete(deliveryIDByHandle, l.Handle)
-			delete(linksByKey, l.Key)
-			handles.Remove(l.Handle)
-			close(l.RX) // close channel to indicate deallocation
 
 		// incoming frame for link
 		case fr := <-s.rx:
@@ -370,7 +343,9 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				// attach frame.
 				//
 				// Note body.Role is the remote peer's role, we reverse for the local key.
-				link, linkOk := linksByKey[linkKey{name: body.Name, role: !body.Role}]
+				s.linksMu.RLock()
+				link, linkOk := s.linksByKey[linkKey{name: body.Name, role: !body.Role}]
+				s.linksMu.RUnlock()
 				if !linkOk {
 					s.err = fmt.Errorf("protocol error: received mismatched attach frame %+v", body)
 					return
@@ -395,6 +370,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				}
 				link, ok := links[body.Handle]
 				if !ok {
+					// TODO: per section 2.8.17 I think this should return an error
 					continue
 				}
 
@@ -427,9 +403,18 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 			case *frames.PerformDetach:
 				link, ok := links[body.Handle]
 				if !ok {
+					// TODO: per section 2.8.17 I think this should return an error
 					continue
 				}
 				s.muxFrameToLink(link, fr.Body)
+
+				// we received a detach frame and sent it to the link.
+				// this was either the response to a client-side initiated
+				// detach or our peer detached us. either way, now that
+				// the link has processed the frame it's detached so we
+				// are safe to clean up its state.
+				delete(links, link.RemoteHandle)
+				delete(deliveryIDByHandle, link.Handle)
 
 			case *frames.PerformEnd:
 				_ = s.txFrame(&frames.PerformEnd{}, nil)
@@ -501,6 +486,37 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 			}
 		}
 	}
+}
+
+func (s *Session) allocateHandle(l *link) error {
+	s.linksMu.Lock()
+	defer s.linksMu.Unlock()
+
+	// Check if link name already exists, if so then an error should be returned
+	existing := s.linksByKey[l.Key]
+	if existing != nil {
+		return fmt.Errorf("link with name '%v' already exists", l.Key.name)
+	}
+
+	next, ok := s.handles.Next()
+	if !ok {
+		// handle numbers are zero-based, report the actual count
+		return fmt.Errorf("reached session handle max (%d)", s.handleMax+1)
+	}
+
+	l.Handle = next         // allocate handle to the link
+	s.linksByKey[l.Key] = l // add to mapping
+
+	return nil
+}
+
+func (s *Session) deallocateHandle(l *link) {
+	s.linksMu.Lock()
+	defer s.linksMu.Unlock()
+
+	delete(s.linksByKey, l.Key)
+	s.handles.Remove(l.Handle)
+	close(l.RX)
 }
 
 func (s *Session) muxFrameToLink(l *link, fr frames.FrameBody) {

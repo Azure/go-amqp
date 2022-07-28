@@ -40,3 +40,29 @@ func TestMarshalArrayInt64AsSmallLongArray(t *testing.T) {
 
 	require.EqualValues(t, arrayInt64([]int64{math.MaxInt8, math.MinInt8}), unmarshalled)
 }
+
+func TestDecodeSmallInts(t *testing.T) {
+	t.Run("smallong", func(t *testing.T) {
+		buff := &buffer.Buffer{}
+
+		v := int8(-1)
+		buff.AppendByte(byte(TypeCodeSmalllong))
+		buff.AppendByte(byte(v))
+
+		val, err := readLong(buff)
+		require.NoError(t, err)
+		require.Equal(t, int64(-1), val)
+	})
+
+	t.Run("smallint", func(t *testing.T) {
+		buff := &buffer.Buffer{}
+
+		v := int8(-1)
+		buff.AppendByte(byte(TypeCodeSmallint))
+		buff.AppendByte(byte(v))
+
+		val, err := readInt32(buff)
+		require.NoError(t, err)
+		require.Equal(t, int32(-1), val)
+	})
+}

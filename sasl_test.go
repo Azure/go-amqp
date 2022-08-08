@@ -34,7 +34,7 @@ func TestSaslXOAUTH2InitialResponse(t *testing.T) {
 	}
 }
 
-//RFC6749 defines the OAUTH2 as comprising VSCHAR elements (\x20-7E)
+// RFC6749 defines the OAUTH2 as comprising VSCHAR elements (\x20-7E)
 func TestSaslXOAUTH2InvalidBearer(t *testing.T) {
 	tests := []struct {
 		label   string

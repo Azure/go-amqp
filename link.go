@@ -292,7 +292,7 @@ func (l *link) attach(ctx context.Context, s *Session) error {
 				}, nil)
 				select {
 				case <-s.done:
-					// session has terminated
+					// session has terminated, no need to deallocate in this case
 				case <-time.After(5 * time.Second):
 					log.Debug(3, "link.attach() clean-up timed out waiting for ack")
 				case <-l.RX:
@@ -306,6 +306,7 @@ func (l *link) attach(ctx context.Context, s *Session) error {
 		}
 		return ctx.Err()
 	case <-s.done:
+		// session has terminated, no need to deallocate in this case
 		return s.err
 	case fr = <-l.RX:
 	}

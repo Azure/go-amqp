@@ -294,11 +294,11 @@ func (l *link) attach(ctx context.Context, s *Session) error {
 				case <-s.done:
 					// session has terminated
 				case <-time.After(5 * time.Second):
-					// timed out
+					log.Debug(3, "link.attach() clean-up timed out waiting for ack")
 				case <-l.RX:
-					// received ack
+					// received ack, safe to delete handle
+					s.deallocateHandle(l)
 				}
-				s.deallocateHandle(l)
 			}()
 		default:
 			// attach wasn't written to the network, so delete the handle

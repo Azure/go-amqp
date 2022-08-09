@@ -390,8 +390,7 @@ func (c *conn) NewSession() (*Session, error) {
 		return nil, fmt.Errorf("reached connection channel max (%d)", c.channelMax)
 	}
 	session := newSession(c, uint16(channel))
-	ch := session.channel
-	c.sessionsByChannel[ch] = session
+	c.sessionsByChannel[session.channel] = session
 	return session, nil
 }
 

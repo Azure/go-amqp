@@ -100,7 +100,7 @@ func (c *Client) NewSession(ctx context.Context, opts *SessionOptions) (*Session
 				case <-time.After(5 * time.Second):
 					// timed out
 				case <-s.rx:
-					// received ack
+					// received ack that session was closed
 				}
 				c.conn.DeleteSession(s)
 			}()
@@ -112,6 +112,7 @@ func (c *Client) NewSession(ctx context.Context, opts *SessionOptions) (*Session
 	case <-c.conn.Done:
 		return nil, c.conn.Err()
 	case fr = <-s.rx:
+		// received ack that session was created
 	}
 	log.Debug(1, "RX (NewSession): %s", fr.Body)
 

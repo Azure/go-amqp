@@ -34,6 +34,7 @@
 * Incoming transfer frames received during initial link detach are no longer discarded.
 * Session will no longer flood peer with flow frames when half its incoming window is consumed.
 * Newly created `Session` won't leak if the context passed to `Client.NewSession()` expires before exit.
+* Fixed an issue causing dispositions to hang indefinitely with batching enabled when the receiver link is disconnected.
 
 ### Other Changes
 * Errors when reading/writing to the underlying `net.Conn` are now wrapped in a `ConnectionError` type.

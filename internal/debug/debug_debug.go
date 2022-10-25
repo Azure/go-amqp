@@ -3,9 +3,12 @@
 
 package debug
 
-import "log"
-import "os"
-import "strconv"
+import (
+	"fmt"
+	"log"
+	"os"
+	"strconv"
+)
 
 var (
 	debugLevel = 1
@@ -27,5 +30,19 @@ func init() {
 func Log(level int, format string, v ...interface{}) {
 	if level <= debugLevel {
 		logger.Printf(format, v...)
+	}
+}
+
+// Assert panics if the specified condition is false.
+func Assert(condition bool) {
+	if !condition {
+		panic("assertion failed!")
+	}
+}
+
+// Assert panics with the provided message if the specified condition is false.
+func Assertf(condition bool, msg string, v ...interface{}) {
+	if !condition {
+		panic(fmt.Sprintf(msg, v...))
 	}
 }

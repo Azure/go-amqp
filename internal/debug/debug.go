@@ -9,3 +9,9 @@ package debug
 // Level indicates the verbosity of the messages to log.
 // The greater the value, the more verbose messages will be logged.
 func Log(_ int, _ string, _ ...interface{}) {}
+
+// Assert panics if the specified condition is false.
+func Assert(bool) {}
+
+// Assert panics with the provided message if the specified condition is false.
+func Assertf(bool, string, ...interface{}) {}

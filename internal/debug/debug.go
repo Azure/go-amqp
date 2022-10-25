@@ -1,8 +1,8 @@
 //go:build !debug
 // +build !debug
 
-package log
+package debug
 
 // dummy functions used when debugging is not enabled
 
-func Debug(_ int, _ string, _ ...interface{}) {}
+func Log(_ int, _ string, _ ...interface{}) {}

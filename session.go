@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/Azure/go-amqp/internal/bitmap"
+	"github.com/Azure/go-amqp/internal/debug"
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/frames"
-	"github.com/Azure/go-amqp/internal/log"
 )
 
 // Default session options
@@ -197,7 +197,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 		txTransfer := s.txTransfer
 		// disable txTransfer if flow control windows have been exceeded
 		if remoteIncomingWindow == 0 || s.outgoingWindow == 0 {
-			log.Debug(1, "TX(Session): Disabling txTransfer - window exceeded. remoteIncomingWindow: %d outgoingWindow:%d",
+			debug.Log(1, "TX(Session): Disabling txTransfer - window exceeded. remoteIncomingWindow: %d outgoingWindow:%d",
 				remoteIncomingWindow,
 				s.outgoingWindow)
 			txTransfer = nil
@@ -262,7 +262,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 		// incoming frame for link
 		case fr := <-s.rx:
-			log.Debug(1, "RX(Session): %s", fr.Body)
+			debug.Log(1, "RX(Session): %s", fr.Body)
 
 			switch body := fr.Body.(type) {
 			// Disposition frames can reference transfers from more than one
@@ -281,7 +281,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 					handle, ok := handles[deliveryID]
 					if !ok {
-						log.Debug(2, "role %s: didn't find deliveryID %d in handles map", body.Role, deliveryID)
+						debug.Log(2, "role %s: didn't find deliveryID %d in handles map", body.Role, deliveryID)
 						continue
 					}
 					delete(handles, deliveryID)
@@ -339,7 +339,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				// initial-outgoing-id(endpoint) + incoming-window(flow) - next-outgoing-id(endpoint)"
 				remoteIncomingWindow = body.IncomingWindow - nextOutgoingID
 				remoteIncomingWindow += *body.NextIncomingID
-				log.Debug(3, "RX(Session) Flow - remoteOutgoingWindow: %d remoteIncomingWindow: %d nextOutgoingID: %d", remoteOutgoingWindow, remoteIncomingWindow, nextOutgoingID)
+				debug.Log(3, "RX(Session) Flow - remoteOutgoingWindow: %d remoteIncomingWindow: %d nextOutgoingID: %d", remoteOutgoingWindow, remoteIncomingWindow, nextOutgoingID)
 
 				// Send to link if handle is set
 				if body.Handle != nil {
@@ -360,7 +360,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 						NextOutgoingID: nextOutgoingID,
 						OutgoingWindow: s.outgoingWindow,
 					}
-					log.Debug(1, "TX (session.mux): %s", resp)
+					debug.Log(1, "TX (session.mux): %s", resp)
 					_ = s.txFrame(resp, nil)
 				}
 
@@ -405,13 +405,13 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 				// if this message is received unsettled and link rcv-settle-mode == second, add to handlesByRemoteDeliveryID
 				if !body.Settled && body.DeliveryID != nil && link.ReceiverSettleMode != nil && *link.ReceiverSettleMode == ModeSecond {
-					log.Debug(1, "TX(Session): adding handle to handlesByRemoteDeliveryID. delivery ID: %d", *body.DeliveryID)
+					debug.Log(1, "TX(Session): adding handle to handlesByRemoteDeliveryID. delivery ID: %d", *body.DeliveryID)
 					handlesByRemoteDeliveryID[*body.DeliveryID] = body.Handle
 				}
 
 				// Update peer's outgoing window if half has been consumed.
 				if s.needFlowCount >= s.incomingWindow/2 {
-					log.Debug(3, "TX(Session %d) Flow s.needFlowCount(%d) >= s.incomingWindow(%d)/2\n", s.channel, s.needFlowCount, s.incomingWindow)
+					debug.Log(3, "TX(Session %d) Flow s.needFlowCount(%d) >= s.incomingWindow(%d)/2\n", s.channel, s.needFlowCount, s.incomingWindow)
 					s.needFlowCount = 0
 					nID := nextIncomingID
 					flow := &frames.PerformFlow{
@@ -420,7 +420,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 						NextOutgoingID: nextOutgoingID,
 						OutgoingWindow: s.outgoingWindow,
 					}
-					log.Debug(1, "TX(Session): %s", flow)
+					debug.Log(1, "TX(Session): %s", flow)
 					_ = s.txFrame(flow, nil)
 				}
 
@@ -438,7 +438,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 			default:
 				// TODO: evaluate
-				log.Debug(1, "session mux: unexpected frame: %s\n", body)
+				debug.Log(1, "session mux: unexpected frame: %s\n", body)
 			}
 
 		case fr := <-txTransfer:
@@ -471,7 +471,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				fr.Done = nil
 			}
 
-			log.Debug(2, "TX(Session) - txtransfer: %s", fr)
+			debug.Log(2, "TX(Session) - txtransfer: %s", fr)
 			_ = s.txFrame(fr, fr.Done)
 
 			// "Upon sending a transfer, the sending endpoint will increment
@@ -491,12 +491,12 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				fr.IncomingWindow = s.incomingWindow
 				fr.NextOutgoingID = nextOutgoingID
 				fr.OutgoingWindow = s.outgoingWindow
-				log.Debug(1, "TX(Session) - tx: %s", fr)
+				debug.Log(1, "TX(Session) - tx: %s", fr)
 				_ = s.txFrame(fr, nil)
 			case *frames.PerformTransfer:
 				panic("transfer frames must use txTransfer")
 			default:
-				log.Debug(1, "TX(Session) - default: %s", fr)
+				debug.Log(1, "TX(Session) - default: %s", fr)
 				_ = s.txFrame(fr, nil)
 			}
 		}

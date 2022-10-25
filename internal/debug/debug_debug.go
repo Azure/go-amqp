@@ -1,7 +1,7 @@
 //go:build debug
 // +build debug
 
-package log
+package debug
 
 import "log"
 import "os"
@@ -21,7 +21,7 @@ func init() {
 	debugLevel = level
 }
 
-func Debug(level int, format string, v ...interface{}) {
+func Log(level int, format string, v ...interface{}) {
 	if level <= debugLevel {
 		logger.Printf(format, v...)
 	}

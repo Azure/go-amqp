@@ -3,9 +3,9 @@ package amqp
 import (
 	"fmt"
 
+	"github.com/Azure/go-amqp/internal/debug"
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/frames"
-	"github.com/Azure/go-amqp/internal/log"
 )
 
 // SASL Mechanisms
@@ -44,7 +44,7 @@ func SASLTypePlain(username, password string) SASLType {
 				InitialResponse: []byte("\x00" + username + "\x00" + password),
 				Hostname:        "",
 			}
-			log.Debug(1, "TX (ConnSASLPlain): %s", init)
+			debug.Log(1, "TX (ConnSASLPlain): %s", init)
 			err := c.writeFrame(frames.Frame{
 				Type: frameTypeSASL,
 				Body: init,
@@ -74,7 +74,7 @@ func SASLTypeAnonymous() SASLType {
 				Mechanism:       saslMechanismANONYMOUS,
 				InitialResponse: []byte("anonymous"),
 			}
-			log.Debug(1, "TX (ConnSASLAnonymous): %s", init)
+			debug.Log(1, "TX (ConnSASLAnonymous): %s", init)
 			err := c.writeFrame(frames.Frame{
 				Type: frameTypeSASL,
 				Body: init,
@@ -106,7 +106,7 @@ func SASLTypeExternal(resp string) SASLType {
 				Mechanism:       saslMechanismEXTERNAL,
 				InitialResponse: []byte(resp),
 			}
-			log.Debug(1, "TX (ConnSASLExternal): %s", init)
+			debug.Log(1, "TX (ConnSASLExternal): %s", init)
 			err := c.writeFrame(frames.Frame{
 				Type: frameTypeSASL,
 				Body: init,

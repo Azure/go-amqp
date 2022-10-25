@@ -5,9 +5,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Azure/go-amqp/internal/debug"
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/frames"
-	"github.com/Azure/go-amqp/internal/log"
 )
 
 type messageDisposition struct {
@@ -56,7 +56,7 @@ func (r *Receiver) Prefetched() *Message {
 	// delivered regardless of whether the link has been closed.
 	select {
 	case msg := <-r.link.Messages:
-		log.Debug(3, "Receive() non blocking %d", msg.deliveryID)
+		debug.Log(3, "Receive() non blocking %d", msg.deliveryID)
 		msg.link = r.link
 		return &msg
 	default:
@@ -79,7 +79,7 @@ func (r *Receiver) Receive(ctx context.Context) (*Message, error) {
 	// wait for the next message
 	select {
 	case msg := <-r.link.Messages:
-		log.Debug(3, "Receive() blocking %d", msg.deliveryID)
+		debug.Log(3, "Receive() blocking %d", msg.deliveryID)
 		msg.link = r.link
 		return &msg, nil
 	case <-r.link.Detached:
@@ -281,7 +281,7 @@ func (r *Receiver) sendDisposition(first uint32, last *uint32, state encoding.De
 	case <-r.link.Detached:
 		return r.link.err
 	default:
-		log.Debug(1, "TX (sendDisposition): %s", fr)
+		debug.Log(1, "TX (sendDisposition): %s", fr)
 		return r.link.Session.txFrame(fr, nil)
 	}
 }
@@ -289,7 +289,7 @@ func (r *Receiver) sendDisposition(first uint32, last *uint32, state encoding.De
 func (r *Receiver) messageDisposition(ctx context.Context, msg *Message, state encoding.DeliveryState) error {
 	var wait chan error
 	if r.link.ReceiverSettleMode != nil && *r.link.ReceiverSettleMode == ModeSecond {
-		log.Debug(3, "RX (messageDisposition): add %d to inflight", msg.deliveryID)
+		debug.Log(3, "RX (messageDisposition): add %d to inflight", msg.deliveryID)
 		wait = r.inFlight.add(msg.deliveryID)
 	}
 

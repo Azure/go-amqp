@@ -294,7 +294,7 @@ func (l *link) attach(ctx context.Context, s *Session) error {
 				case <-s.done:
 					// session has terminated, no need to deallocate in this case
 				case <-time.After(5 * time.Second):
-					log.Debug(3, "link.attach() clean-up timed out waiting for ack")
+					debug.Log(3, "link.attach() clean-up timed out waiting for ack")
 				case <-l.RX:
 					// received ack, safe to delete handle
 					s.deallocateHandle(l)

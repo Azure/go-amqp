@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Azure/go-amqp/internal/debug"
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/frames"
-	"github.com/Azure/go-amqp/internal/log"
 )
 
 // Client is an AMQP client connection.
@@ -76,7 +76,7 @@ func (c *Client) NewSession(ctx context.Context, opts *SessionOptions) (*Session
 		OutgoingWindow: s.outgoingWindow,
 		HandleMax:      s.handleMax,
 	}
-	log.Debug(1, "TX (NewSession): %s", begin)
+	debug.Log(1, "TX (NewSession): %s", begin)
 
 	// we use send to have positive confirmation on transmission
 	send := make(chan encoding.DeliveryState)
@@ -98,7 +98,7 @@ func (c *Client) NewSession(ctx context.Context, opts *SessionOptions) (*Session
 				case <-c.conn.Done:
 					// conn has terminated, no need to delete the session
 				case <-time.After(5 * time.Second):
-					log.Debug(3, "NewSession clean-up timed out waiting for PerformEnd ack")
+					debug.Log(3, "NewSession clean-up timed out waiting for PerformEnd ack")
 				case <-s.rx:
 					// received ack that session was closed, safe to delete session
 					c.conn.DeleteSession(s)
@@ -114,7 +114,7 @@ func (c *Client) NewSession(ctx context.Context, opts *SessionOptions) (*Session
 	case fr = <-s.rx:
 		// received ack that session was created
 	}
-	log.Debug(1, "RX (NewSession): %s", fr.Body)
+	debug.Log(1, "RX (NewSession): %s", fr.Body)
 
 	begin, ok := fr.Body.(*frames.PerformBegin)
 	if !ok {

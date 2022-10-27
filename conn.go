@@ -14,9 +14,9 @@ import (
 
 	"github.com/Azure/go-amqp/internal/bitmap"
 	"github.com/Azure/go-amqp/internal/buffer"
+	"github.com/Azure/go-amqp/internal/debug"
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/frames"
-	"github.com/Azure/go-amqp/internal/log"
 )
 
 // Default connection options
@@ -527,7 +527,7 @@ func (c *conn) connReader() {
 			}
 			err := buf.ReadFromOnce(c.net)
 			if err != nil {
-				log.Debug(1, "connReader error: %v", err)
+				debug.Log(1, "connReader error: %v", err)
 				select {
 				// check if error was due to close in progress
 				case <-c.Done:
@@ -653,7 +653,7 @@ func (c *conn) connWriter() {
 	var err error
 	for {
 		if err != nil {
-			log.Debug(1, "connWriter error: %v", err)
+			debug.Log(1, "connWriter error: %v", err)
 			c.connErr <- err
 			return
 		}
@@ -668,7 +668,7 @@ func (c *conn) connWriter() {
 
 		// keepalive timer
 		case <-keepalive:
-			log.Debug(3, "sending keep-alive frame")
+			debug.Log(3, "sending keep-alive frame")
 			_, err = c.net.Write(keepaliveFrame)
 			// It would be slightly more efficient in terms of network
 			// resources to reset the timer each time a frame is sent.
@@ -682,7 +682,7 @@ func (c *conn) connWriter() {
 		case <-c.Done:
 			// send close
 			cls := &frames.PerformClose{}
-			log.Debug(1, "TX (connWriter): %s", cls)
+			debug.Log(1, "TX (connWriter): %s", cls)
 			_ = c.writeFrame(frames.Frame{
 				Type: frameTypeAMQP,
 				Body: cls,
@@ -866,7 +866,7 @@ func (c *conn) openAMQP() (stateFunc, error) {
 		IdleTimeout:  c.idleTimeout / 2, // per spec, advertise half our idle timeout
 		Properties:   c.properties,
 	}
-	log.Debug(1, "TX (openAMQP): %s", open)
+	debug.Log(1, "TX (openAMQP): %s", open)
 	err := c.writeFrame(frames.Frame{
 		Type:    frameTypeAMQP,
 		Body:    open,
@@ -885,7 +885,7 @@ func (c *conn) openAMQP() (stateFunc, error) {
 	if !ok {
 		return nil, fmt.Errorf("openAMQP: unexpected frame type %T", fr.Body)
 	}
-	log.Debug(1, "RX (openAMQP): %s", o)
+	debug.Log(1, "RX (openAMQP): %s", o)
 
 	// update peer settings
 	if o.MaxFrameSize > 0 {
@@ -915,7 +915,7 @@ func (c *conn) negotiateSASL() (stateFunc, error) {
 	if !ok {
 		return nil, fmt.Errorf("negotiateSASL: unexpected frame type %T", fr.Body)
 	}
-	log.Debug(1, "RX (negotiateSASL): %s", sm)
+	debug.Log(1, "RX (negotiateSASL): %s", sm)
 
 	// return first match in c.saslHandlers based on order received
 	for _, mech := range sm.Mechanisms {
@@ -944,7 +944,7 @@ func (c *conn) saslOutcome() (stateFunc, error) {
 	if !ok {
 		return nil, fmt.Errorf("saslOutcome: unexpected frame type %T", fr.Body)
 	}
-	log.Debug(1, "RX (saslOutcome): %s", so)
+	debug.Log(1, "RX (saslOutcome): %s", so)
 
 	// check if auth succeeded
 	if so.Code != encoding.CodeSASLOK {

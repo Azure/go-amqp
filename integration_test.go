@@ -759,15 +759,14 @@ func TestMultipleSessionsOpenClose(t *testing.T) {
 	if localBrokerAddr == "" {
 		t.Skip()
 	}
-	// TODO: connReader and connWriter goroutines will leak
-	//checkLeaks := leaktest.Check(t)
+
+	checkLeaks := leaktest.Check(t)
 
 	// Create client
 	client, err := amqp.Dial(localBrokerAddr, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer client.Close()
 
 	sessions := [10]*amqp.Session{}
 	for i := 0; i < 10; i++ {
@@ -790,22 +789,24 @@ func TestMultipleSessionsOpenClose(t *testing.T) {
 			}
 		}
 	}
-	//checkLeaks()
+
+	client.Close()
+	checkLeaks()
 }
 
 func TestConcurrentSessionsOpenClose(t *testing.T) {
 	if localBrokerAddr == "" {
 		t.Skip()
 	}
-	// TODO: connReader and connWriter goroutines will leak
-	//checkLeaks := leaktest.Check(t)
+
+	checkLeaks := leaktest.Check(t)
 
 	// Create client
 	client, err := amqp.Dial(localBrokerAddr, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer client.Close()
+
 	wg := sync.WaitGroup{}
 	for i := 0; i < 100; i++ {
 		wg.Add(1)
@@ -827,7 +828,9 @@ func TestConcurrentSessionsOpenClose(t *testing.T) {
 		}()
 	}
 	wg.Wait()
-	//checkLeaks()
+
+	client.Close()
+	checkLeaks()
 }
 
 func repeatStrings(count int, strs ...string) []string {

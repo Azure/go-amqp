@@ -35,7 +35,12 @@ func (c *Conn) Read(b []byte) (int, error) {
 	}
 	time.Sleep(1 * time.Millisecond)
 	n := copy(b, c.data[0])
-	c.data = c.data[1:]
+	// only move on to the next chunk if this one was entirely consumed
+	if n == len(c.data[0]) {
+		c.data = c.data[1:]
+	} else {
+		c.data[0] = c.data[0][n:]
+	}
 	return n, nil
 }
 

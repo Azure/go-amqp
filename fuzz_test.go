@@ -13,11 +13,13 @@ import (
 	"github.com/Azure/go-amqp/internal/frames"
 	"github.com/Azure/go-amqp/internal/testconn"
 	"github.com/fortytw2/leaktest"
+	"github.com/stretchr/testify/require"
 )
 
 func fuzzConn(data []byte) int {
 	// Receive
 	client, err := NewConn(testconn.New(data), &ConnOptions{
+		Timeout:     10 * time.Millisecond,
 		IdleTimeout: 10 * time.Millisecond,
 		SASLType:    SASLTypePlain("listen", "3aCXZYFcuZA89xe6lZkfYJvOPnTGipA3ap7NvPruBhI="),
 	})
@@ -464,8 +466,9 @@ func TestFuzzConnCrashers(t *testing.T) {
 
 	for i, tt := range tests {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			defer leaktest.Check(t)()
-			fuzzConn([]byte(tt))
+			end := leaktest.Check(t)
+			require.Zero(t, fuzzConn([]byte(tt)))
+			end()
 		})
 	}
 }

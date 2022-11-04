@@ -27,6 +27,7 @@ func NewNetConn(resp func(frames.FrameBody) ([]byte, error)) *NetConn {
 		// writes from blocking shutdown. the size was arbitrarily picked.
 		readData:  make(chan []byte, 10),
 		readClose: make(chan struct{}),
+		readDL:    newNopTimer(), // default, no deadline
 	}
 }
 
@@ -47,7 +48,7 @@ type NetConn struct {
 	WriteErr chan error
 
 	resp      func(frames.FrameBody) ([]byte, error)
-	readDL    *time.Timer
+	readDL    readTimer
 	readData  chan []byte
 	readClose chan struct{}
 	closed    bool
@@ -90,15 +91,15 @@ func (n *NetConn) SendMultiFrameTransfer(remoteChannel uint16, linkHandle, deliv
 func (n *NetConn) Read(b []byte) (int, error) {
 	select {
 	case <-n.readClose:
-		return 0, errors.New("mock connection was closed")
+		return 0, net.ErrClosed
 	default:
 		// not closed yet
 	}
 
 	select {
 	case <-n.readClose:
-		return 0, errors.New("mock connection was closed")
-	case <-n.readDL.C:
+		return 0, net.ErrClosed
+	case <-n.readDL.C():
 		return 0, errors.New("mock connection read deadline exceeded")
 	case rd := <-n.readData:
 		return copy(b, rd), nil
@@ -116,7 +117,7 @@ func (n *NetConn) Read(b []byte) (int, error) {
 func (n *NetConn) Write(b []byte) (int, error) {
 	select {
 	case <-n.readClose:
-		return 0, errors.New("mock connection was closed")
+		return 0, net.ErrClosed
 	default:
 		// not closed yet
 	}
@@ -142,7 +143,7 @@ func (n *NetConn) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-// Close is called by conn.close when conn.mux unwinds.
+// Close is called by conn.close.
 func (n *NetConn) Close() error {
 	if n.closed {
 		return errors.New("double close")
@@ -175,9 +176,9 @@ func (n *NetConn) SetReadDeadline(t time.Time) error {
 	// called by conn.connReader before calling Read
 	// stop the last timer if available
 	if n.readDL != nil && !n.readDL.Stop() {
-		<-n.readDL.C
+		<-n.readDL.C()
 	}
-	n.readDL = time.NewTimer(time.Until(t))
+	n.readDL = timer{t: time.NewTimer(time.Until(t))}
 	return nil
 }
 
@@ -436,4 +437,38 @@ func encodeMultiFrameTransfer(remoteChannel uint16, linkHandle, deliveryID uint3
 		frameData = append(frameData, b)
 	}
 	return frameData, nil
+}
+
+type readTimer interface {
+	C() <-chan time.Time
+	Stop() bool
+}
+
+func newNopTimer() nopTimer {
+	return nopTimer{t: make(chan time.Time)}
+}
+
+type nopTimer struct {
+	t chan time.Time
+}
+
+func (n nopTimer) C() <-chan time.Time {
+	return n.t
+}
+
+func (n nopTimer) Stop() bool {
+	close(n.t)
+	return true
+}
+
+type timer struct {
+	t *time.Timer
+}
+
+func (t timer) C() <-chan time.Time {
+	return t.t.C
+}
+
+func (t timer) Stop() bool {
+	return t.t.Stop()
 }

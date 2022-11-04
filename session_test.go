@@ -35,6 +35,8 @@ func TestSessionClose(t *testing.T) {
 			}
 			channelNum--
 			return b, nil
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -48,8 +50,9 @@ func TestSessionClose(t *testing.T) {
 		session, err := client.NewSession(ctx, nil)
 		cancel()
 		require.NoErrorf(t, err, "iteration %d", i)
-		require.Equalf(t, channelNum-1, session.channel, "iteration %d", i)
-		ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+		require.Equalf(t, uint16(0), session.channel, "iteration %d", i)
+		require.Equalf(t, channelNum-1, session.remoteChannel, "iteration %d", i)
+		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 		err = session.Close(ctx)
 		cancel()
 		require.NoErrorf(t, err, "iteration %d", i)
@@ -67,6 +70,8 @@ func TestSessionServerClose(t *testing.T) {
 		case *frames.PerformBegin:
 			return mocks.PerformBegin(0)
 		case *frames.PerformEnd:
+			return nil, nil // swallow
+		case *frames.PerformClose:
 			return nil, nil // swallow
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
@@ -112,6 +117,8 @@ func TestSessionCloseTimeout(t *testing.T) {
 			// sleep to trigger session close timeout
 			time.Sleep(1 * time.Second)
 			return mocks.PerformEnd(0, nil)
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -199,6 +206,8 @@ func TestSessionNewReceiverBatchingOneCredit(t *testing.T) {
 			return mocks.ReceiverAttach(0, tt.Name, 0, ReceiverSettleModeFirst, nil)
 		case *frames.PerformFlow:
 			return nil, nil
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -242,6 +251,8 @@ func TestSessionNewReceiverBatchingEnabled(t *testing.T) {
 			return mocks.ReceiverAttach(0, tt.Name, 0, ReceiverSettleModeFirst, nil)
 		case *frames.PerformFlow:
 			return nil, nil
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -284,6 +295,8 @@ func TestSessionNewReceiverMismatchedLinkName(t *testing.T) {
 			return mocks.PerformEnd(0, nil)
 		case *frames.PerformAttach:
 			return mocks.ReceiverAttach(0, "wrong_name", 0, ReceiverSettleModeFirst, nil)
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -351,6 +364,8 @@ func TestSessionNewSenderMismatchedLinkName(t *testing.T) {
 			return mocks.PerformEnd(0, nil)
 		case *frames.PerformAttach:
 			return mocks.SenderAttach(0, "wrong_name", 0, SenderSettleModeUnsettled)
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -516,6 +531,8 @@ func TestSessionFlowFrameWithEcho(t *testing.T) {
 			return nil, nil
 		case *frames.PerformEnd:
 			return mocks.PerformEnd(0, nil)
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -562,6 +579,8 @@ func TestSessionInvalidAttachDeadlock(t *testing.T) {
 		case *frames.PerformAttach:
 			enqueueFrames(tt.Name)
 			return nil, nil
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}

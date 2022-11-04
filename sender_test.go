@@ -52,6 +52,8 @@ func TestSenderMethodsNoSend(t *testing.T) {
 			return mocks.SenderAttach(0, tt.Name, 0, SenderSettleModeUnsettled)
 		case *frames.PerformDetach:
 			return mocks.PerformDetach(0, 0, nil)
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -222,6 +224,8 @@ func TestSenderAttachError(t *testing.T) {
 			// we don't need to respond to the ack
 			detachAck <- true
 			return nil, nil
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -466,6 +470,8 @@ func TestSenderSendRejectedNoDetach(t *testing.T) {
 			return mocks.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, nil, &encoding.StateAccepted{})
 		case *frames.PerformDetach:
 			return mocks.PerformDetach(0, 0, nil)
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -602,6 +608,8 @@ func TestSenderSendMsgTooBig(t *testing.T) {
 			return mocks.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, nil, &encoding.StateAccepted{})
 		case *frames.PerformDetach:
 			return mocks.PerformDetach(0, 0, nil)
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -710,6 +718,8 @@ func TestSenderSendMultiTransfer(t *testing.T) {
 			return mocks.PerformDisposition(encoding.RoleReceiver, 0, deliveryID, nil, &encoding.StateAccepted{})
 		case *frames.PerformDetach:
 			return mocks.PerformDetach(0, 0, nil)
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -730,7 +740,7 @@ func TestSenderSendMultiTransfer(t *testing.T) {
 
 	sendInitialFlowFrame(t, netConn, 0, 100)
 
-	ctx, cancel = context.WithTimeout(context.Background(), 100000*time.Millisecond)
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	payload := make([]byte, maxReceiverFrameSize*4)
 	for i := 0; i < maxReceiverFrameSize*4; i++ {
 		payload[i] = byte(i % 256)

@@ -150,7 +150,7 @@ type Conn struct {
 
 	// conn state
 	done    chan struct{} // indicates the connection has terminated
-	doneErr error         // contains the error state returned from Close()
+	doneErr error         // contains the error state returned from Close(); DO NOT TOUCH outside of conn.go until Done has been closed!
 
 	// connReader and connWriter management
 	rxtxExit  chan struct{} // signals connReader and connWriter to exit
@@ -164,14 +164,14 @@ type Conn struct {
 	// connReader
 	rxBuf         buffer.Buffer // incomes bytes buffer
 	rxDone        chan struct{} // closed when connReader exits
-	rxErr         chan error    // contains last error reading from c.net
+	rxErr         error         // contains last error reading from c.net; DO NOT TOUCH outside of connReader until rxDone has been closed!
 	connReaderRun chan func()   // functions to be run by conn reader (set deadline on conn to run)
 
 	// connWriter
 	txFrame chan frames.Frame // AMQP frames to be sent by connWriter
 	txBuf   buffer.Buffer     // buffer for marshaling frames before transmitting
 	txDone  chan struct{}     // closed when connWriter exits
-	txErr   chan error        // contains last error writing to c.net
+	txErr   error             // contains last error writing to c.net; DO NOT TOUCH outside of connWriter until txDone has been closed!
 }
 
 // used to abstract the underlying dialer for testing purposes
@@ -256,8 +256,6 @@ func newConn(netConn net.Conn, opts *ConnOptions) (*Conn, error) {
 		containerID:       shared.RandString(40),
 		done:              make(chan struct{}),
 		rxtxExit:          make(chan struct{}),
-		rxErr:             make(chan error, 1), // buffered to ensure connReader won't block
-		txErr:             make(chan error, 1), // buffered to ensure connWriter won't block
 		rxDone:            make(chan struct{}),
 		connReaderRun:     make(chan func(), 1), // buffered to allow queueing function before interrupt
 		txFrame:           make(chan frames.Frame),
@@ -374,44 +372,27 @@ func (c *Conn) close() {
 	// wait for writing to stop, allows it to send the final close frame
 	<-c.txDone
 
-	// drain pending TX error
-	var txErr error
-	select {
-	case txErr = <-c.txErr:
-		// there was an error in connWriter
-	default:
-		// no pending write error
-	}
-
 	closeErr := c.net.Close()
 
 	// check rxDone after closing net, otherwise may block
 	// for up to c.idleTimeout
 	<-c.rxDone
 
-	// drain pending RX error
-	var rxErr error
-	select {
-	case rxErr = <-c.rxErr:
-		// there was an error in connReader
-		if errors.Is(rxErr, net.ErrClosed) {
-			// this is the expected error when the connection is closed, swallow it
-			rxErr = nil
-		}
-	default:
-		// no pending read error
+	if errors.Is(c.rxErr, net.ErrClosed) {
+		// this is the expected error when the connection is closed, swallow it
+		c.rxErr = nil
 	}
 
-	if txErr == nil && rxErr == nil && closeErr == nil {
+	if c.txErr == nil && c.rxErr == nil && closeErr == nil {
 		// if there are no errors, it means user initiated close() and we shut down cleanly
 		c.doneErr = &ConnError{}
-	} else if amqpErr, ok := rxErr.(*Error); ok {
+	} else if amqpErr, ok := c.rxErr.(*Error); ok {
 		// we experienced a peer-initiated close that contained an Error.  return it
 		c.doneErr = &ConnError{inner: amqpErr}
-	} else if txErr != nil {
-		c.doneErr = &ConnError{inner: txErr}
-	} else if rxErr != nil {
-		c.doneErr = &ConnError{inner: rxErr}
+	} else if c.txErr != nil {
+		c.doneErr = &ConnError{inner: c.txErr}
+	} else if c.rxErr != nil {
+		c.doneErr = &ConnError{inner: c.rxErr}
 	} else {
 		c.doneErr = &ConnError{inner: closeErr}
 	}
@@ -467,7 +448,7 @@ func (c *Conn) connReader() {
 	for {
 		if err != nil {
 			debug.Log(1, "connReader terminal error: %v", err)
-			c.rxErr <- err
+			c.rxErr = err
 			return
 		}
 
@@ -663,7 +644,7 @@ func (c *Conn) connWriter() {
 	for {
 		if err != nil {
 			debug.Log(1, "connWriter terminal error: %v", err)
-			c.txErr <- err
+			c.txErr = err
 			return
 		}
 
@@ -695,7 +676,7 @@ func (c *Conn) connWriter() {
 			// the close performative and exit.
 			cls := &frames.PerformClose{}
 			debug.Log(1, "TX (connWriter): %s", cls)
-			c.txErr <- c.writeFrame(frames.Frame{
+			c.txErr = c.writeFrame(frames.Frame{
 				Type: frames.TypeAMQP,
 				Body: cls,
 			})

@@ -297,7 +297,7 @@ func (r *Receiver) messageDisposition(ctx context.Context, msg *Message, state e
 		select {
 		case r.dispositions <- messageDisposition{id: msg.deliveryID, state: state}:
 		case <-r.link.Detached:
-			return ErrLinkClosed
+			return r.link.err
 		}
 	} else {
 		err := r.sendDisposition(msg.deliveryID, nil, state)

@@ -10,6 +10,11 @@ import (
 	"github.com/Azure/go-amqp/internal/encoding"
 )
 
+const (
+	TypeAMQP = 0x0
+	TypeSASL = 0x1
+)
+
 /*
 <type name="source" class="composite" source="list" provides="source">
 

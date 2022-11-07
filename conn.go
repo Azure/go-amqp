@@ -17,6 +17,7 @@ import (
 	"github.com/Azure/go-amqp/internal/debug"
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/frames"
+	"github.com/Azure/go-amqp/internal/shared"
 )
 
 // Default connection options
@@ -220,7 +221,7 @@ func newConn(netConn net.Conn, opts *ConnOptions) (*conn, error) {
 		PeerMaxFrameSize:  defaultMaxFrameSize,
 		channelMax:        defaultMaxSessions - 1, // -1 because channel-max starts at zero
 		idleTimeout:       defaultIdleTimeout,
-		containerID:       randString(40),
+		containerID:       shared.RandString(40),
 		Done:              make(chan struct{}),
 		connErr:           make(chan error, 2), // buffered to ensure connReader/Writer won't leak
 		closeMux:          make(chan struct{}),
@@ -684,7 +685,7 @@ func (c *conn) connWriter() {
 			cls := &frames.PerformClose{}
 			debug.Log(1, "TX (connWriter): %s", cls)
 			_ = c.writeFrame(frames.Frame{
-				Type: frameTypeAMQP,
+				Type: frames.TypeAMQP,
 				Body: cls,
 			})
 			return
@@ -868,7 +869,7 @@ func (c *conn) openAMQP() (stateFunc, error) {
 	}
 	debug.Log(1, "TX (openAMQP): %s", open)
 	err := c.writeFrame(frames.Frame{
-		Type:    frameTypeAMQP,
+		Type:    frames.TypeAMQP,
 		Body:    open,
 		Channel: 0,
 	})

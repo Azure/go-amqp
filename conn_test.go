@@ -11,6 +11,7 @@ import (
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/frames"
 	"github.com/Azure/go-amqp/internal/mocks"
+	"github.com/Azure/go-amqp/internal/test"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,7 +39,7 @@ func TestConnOptions(t *testing.T) {
 					"x-opt-test1": "test3",
 					"x-opt-test2": "test2",
 				}
-				if !testEqual(c.properties, wantProperties) {
+				if !test.Equal(c.properties, wantProperties) {
 					require.Equal(t, wantProperties, c.properties)
 				}
 			},
@@ -401,7 +402,7 @@ func TestConnWriterError(t *testing.T) {
 	require.NoError(t, conn.Start())
 	// send a frame that our responder doesn't handle to simulate a conn.connWriter error
 	require.NoError(t, conn.SendFrame(frames.Frame{
-		Type: frameTypeAMQP,
+		Type: frames.TypeAMQP,
 		Body: &frames.PerformFlow{},
 	}))
 	// wait a bit for connReader to read from the mock

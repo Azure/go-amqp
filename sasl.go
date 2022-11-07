@@ -16,11 +16,6 @@ const (
 	saslMechanismXOAUTH2   encoding.Symbol = "XOAUTH2"
 )
 
-const (
-	frameTypeAMQP = 0x0
-	frameTypeSASL = 0x1
-)
-
 // SASLType represents a SASL configuration to use during authentication.
 type SASLType func(c *conn) error
 
@@ -46,7 +41,7 @@ func SASLTypePlain(username, password string) SASLType {
 			}
 			debug.Log(1, "TX (ConnSASLPlain): %s", init)
 			err := c.writeFrame(frames.Frame{
-				Type: frameTypeSASL,
+				Type: frames.TypeSASL,
 				Body: init,
 			})
 			if err != nil {
@@ -76,7 +71,7 @@ func SASLTypeAnonymous() SASLType {
 			}
 			debug.Log(1, "TX (ConnSASLAnonymous): %s", init)
 			err := c.writeFrame(frames.Frame{
-				Type: frameTypeSASL,
+				Type: frames.TypeSASL,
 				Body: init,
 			})
 			if err != nil {
@@ -108,7 +103,7 @@ func SASLTypeExternal(resp string) SASLType {
 			}
 			debug.Log(1, "TX (ConnSASLExternal): %s", init)
 			err := c.writeFrame(frames.Frame{
-				Type: frameTypeSASL,
+				Type: frames.TypeSASL,
 				Body: init,
 			})
 			if err != nil {
@@ -168,7 +163,7 @@ func (s saslXOAUTH2Handler) init() (stateFunc, error) {
 		s.conn.PeerMaxFrameSize = s.maxFrameSizeOverride
 	}
 	err := s.conn.writeFrame(frames.Frame{
-		Type: frameTypeSASL,
+		Type: frames.TypeSASL,
 		Body: &frames.SASLInit{
 			Mechanism:       saslMechanismXOAUTH2,
 			InitialResponse: s.response,
@@ -206,7 +201,7 @@ func (s saslXOAUTH2Handler) step() (stateFunc, error) {
 
 			// The SASL protocol requires clients to send an empty response to this challenge.
 			err := s.conn.writeFrame(frames.Frame{
-				Type: frameTypeSASL,
+				Type: frames.TypeSASL,
 				Body: &frames.SASLResponse{
 					Response: []byte{},
 				},

@@ -115,7 +115,7 @@ func (s *Session) Close(ctx context.Context) error {
 // it returns an error if the connection has been closed.
 func (s *Session) txFrame(p frames.FrameBody, done chan encoding.DeliveryState) error {
 	return s.conn.SendFrame(frames.Frame{
-		Type:    frameTypeAMQP,
+		Type:    frames.TypeAMQP,
 		Channel: s.channel,
 		Body:    p,
 		Done:    done,

@@ -866,3 +866,138 @@ func TestSenderFlowFrameWithEcho(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, client.Close())
 }
+
+func TestNewSenderTimedOut(t *testing.T) {
+	detachAck := make(chan struct{})
+	responder := func(req frames.FrameBody) ([]byte, error) {
+		switch req.(type) {
+		case *mocks.AMQPProto:
+			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
+		case *frames.PerformOpen:
+			return mocks.PerformOpen("container")
+		case *frames.PerformBegin:
+			return mocks.PerformBegin(0)
+		case *frames.PerformAttach:
+			// swallow the frame so attach never gets an ack
+			return nil, nil
+		case *frames.PerformDetach:
+			close(detachAck)
+			return mocks.PerformEnd(0, nil)
+		default:
+			return nil, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+	netConn := mocks.NewNetConn(responder)
+
+	client, err := New(netConn, nil)
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx, "target", nil)
+	cancel()
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Nil(t, snd)
+
+	select {
+	case <-time.After(time.Second):
+		t.Fatal("didn't receive end ack")
+	case <-detachAck:
+		// expected
+	}
+
+	// cannot check handle count in this case as detach is asynchronous
+}
+
+func TestNewSenderWriteError(t *testing.T) {
+	detachAck := make(chan struct{})
+	responder := func(req frames.FrameBody) ([]byte, error) {
+		switch req.(type) {
+		case *mocks.AMQPProto:
+			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
+		case *frames.PerformOpen:
+			return mocks.PerformOpen("container")
+		case *frames.PerformBegin:
+			return mocks.PerformBegin(0)
+		case *frames.PerformAttach:
+			return nil, errors.New("write error")
+		case *frames.PerformDetach:
+			close(detachAck)
+			return mocks.PerformEnd(0, nil)
+		default:
+			return nil, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+	netConn := mocks.NewNetConn(responder)
+
+	client, err := New(netConn, nil)
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx, "target", nil)
+	cancel()
+	var connErr *ConnectionError
+	require.ErrorAs(t, err, &connErr)
+	require.Equal(t, "write error", connErr.Error())
+	require.Nil(t, snd)
+
+	select {
+	case <-time.After(time.Second):
+		// expected
+	case <-detachAck:
+		t.Fatal("unexpected ack")
+	}
+
+	// cannot check handle count as this kills the connection
+}
+
+func TestNewSenderTimedOutAckTimedOut(t *testing.T) {
+	detachAck := make(chan struct{})
+	responder := func(req frames.FrameBody) ([]byte, error) {
+		switch req.(type) {
+		case *mocks.AMQPProto:
+			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
+		case *frames.PerformOpen:
+			return mocks.PerformOpen("container")
+		case *frames.PerformBegin:
+			return mocks.PerformBegin(0)
+		case *frames.PerformAttach:
+			// swallow the frame so attach never gets an ack
+			return nil, nil
+		case *frames.PerformDetach:
+			close(detachAck)
+			// swallow the frame so the closing goroutine never gets an ack
+			return nil, nil
+		default:
+			return nil, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+	netConn := mocks.NewNetConn(responder)
+
+	client, err := New(netConn, nil)
+	require.NoError(t, err)
+	// fisrt session succeeds
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx, "target", nil)
+	cancel()
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Nil(t, snd)
+
+	select {
+	case <-time.After(time.Second):
+		t.Fatal("didn't receive end ack")
+	case <-detachAck:
+		// expected
+	}
+
+	// cannot check handle count in this case as detach is asynchronous
+}

@@ -34,6 +34,7 @@
 * Incoming transfer frames received during initial link detach are no longer discarded.
 * Session will no longer flood peer with flow frames when half its incoming window is consumed.
 * Newly created `Session` won't leak if the context passed to `Client.NewSession()` expires before exit.
+* Newly created `link` won't leak if the context passed to `link.attach()` expires before exit.
 * Fixed an issue causing dispositions to hang indefinitely with batching enabled when the receiver link is disconnected.
 
 ### Other Changes
@@ -43,3 +44,4 @@
 * Only send one flow frame when a drain has been requested.
 * Session window size increased to 5000.
 * Creation and deletion of `Session` instances have been made deterministic.
+* Allocation and deallocation of link handles has been made deterministic.

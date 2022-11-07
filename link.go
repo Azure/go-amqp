@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/Azure/go-amqp/internal/buffer"
 	"github.com/Azure/go-amqp/internal/debug"
@@ -239,28 +240,8 @@ func (l *link) attach(ctx context.Context, s *Session) error {
 		l.RX = make(chan frames.FrameBody, 1)
 	}
 
-	// request handle from Session.mux
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-s.done:
-		return s.err
-	case s.allocateHandle <- l:
-	}
-
-	// wait for handle allocation
-	select {
-	case <-ctx.Done():
-		// TODO: this _might_ leak l's handle
-		return ctx.Err()
-	case <-s.done:
-		return s.err
-	case <-l.RX:
-	}
-
-	// check for link request error
-	if l.err != nil {
-		return l.err
+	if err := s.allocateHandle(l); err != nil {
+		return err
 	}
 
 	attach := &frames.PerformAttach{
@@ -290,15 +271,42 @@ func (l *link) attach(ctx context.Context, s *Session) error {
 
 	// send Attach frame
 	debug.Log(1, "TX (attachLink): %s", attach)
-	_ = s.txFrame(attach, nil)
+
+	// we use send to have positive confirmation on transmission
+	send := make(chan encoding.DeliveryState)
+	_ = s.txFrame(attach, send)
 
 	// wait for response
 	var fr frames.FrameBody
 	select {
 	case <-ctx.Done():
-		// TODO: this leaks l's handle
+		select {
+		case <-send:
+			// attach was written to the network. assume it was received
+			// and that the ctx was too short to wait for the ack. in this
+			// case we must send a detach before deallocation
+			go func() {
+				_ = s.txFrame(&frames.PerformDetach{
+					Handle: l.Handle,
+					Closed: true,
+				}, nil)
+				select {
+				case <-s.done:
+					// session has terminated, no need to deallocate in this case
+				case <-time.After(5 * time.Second):
+					debug.Log(3, "link.attach() clean-up timed out waiting for ack")
+				case <-l.RX:
+					// received ack, safe to delete handle
+					s.deallocateHandle(l)
+				}
+			}()
+		default:
+			// attach wasn't written to the network, so delete the handle
+			s.deallocateHandle(l)
+		}
 		return ctx.Err()
 	case <-s.done:
+		// session has terminated, no need to deallocate in this case
 		return s.err
 	case fr = <-l.RX:
 	}
@@ -321,11 +329,19 @@ func (l *link) attach(ctx context.Context, s *Session) error {
 		// wait for detach
 		select {
 		case <-ctx.Done():
-			// TODO: this leaks l's handle
+			// if we don't send an ack then we're in violation of the protocol
+			go func() {
+				_ = s.txFrame(&frames.PerformDetach{
+					Handle: l.Handle,
+					Closed: true,
+				}, nil)
+				s.deallocateHandle(l)
+			}()
 			return ctx.Err()
 		case <-s.done:
 			return s.err
 		case fr = <-l.RX:
+			s.deallocateHandle(l)
 		}
 
 		detach, ok := fr.(*frames.PerformDetach)
@@ -927,22 +943,7 @@ func (l *link) muxDetach() {
 		// final cleanup and signaling
 
 		// deallocate handle
-	Loop:
-		for {
-			select {
-			case <-l.RX:
-				// at this point we shouldn't be receiving any more frames for
-				// this link. however, if we do, we need to keep the session mux
-				// unblocked else we deadlock.  so just read and discard them.
-			case l.Session.deallocateHandle <- l:
-				break Loop
-			case <-l.Session.done:
-				if l.err == nil {
-					l.err = l.Session.err
-				}
-				break Loop
-			}
-		}
+		l.Session.deallocateHandle(l)
 
 		// unblock any in flight message dispositions
 		if l.receiver != nil {
@@ -1003,9 +1004,8 @@ Loop:
 		}
 	}
 
-	// don't wait for remote to detach when already
-	// received or closing due to error
-	if l.detachReceived || detachError != nil {
+	// don't wait for remote to detach when already received
+	if l.detachReceived {
 		return
 	}
 

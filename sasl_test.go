@@ -271,7 +271,7 @@ func peerResponse(items ...interface{}) ([]byte, error) {
 		switch v := item.(type) {
 		case frames.Frame:
 			b := &buffer.Buffer{}
-			e := writeFrame(b, v)
+			e := frames.Write(b, v)
 			if e != nil {
 				return buf, e
 			}

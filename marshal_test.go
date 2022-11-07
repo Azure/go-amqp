@@ -50,7 +50,7 @@ func TestFrameMarshalUnmarshal(t *testing.T) {
 		t.Run(tt.label, func(t *testing.T) {
 			var buf buffer.Buffer
 
-			err := writeFrame(&buf, tt.frame)
+			err := frames.Write(&buf, tt.frame)
 			if err != nil {
 				t.Fatalf("%+v", err)
 			}
@@ -86,7 +86,7 @@ func BenchmarkFrameMarshal(b *testing.B) {
 			var buf buffer.Buffer
 
 			for i := 0; i < b.N; i++ {
-				err := writeFrame(&buf, tt.frame)
+				err := frames.Write(&buf, tt.frame)
 				if err != nil {
 					b.Errorf("%+v", err)
 				}
@@ -101,7 +101,7 @@ func BenchmarkFrameUnmarshal(b *testing.B) {
 		b.Run(tt.label, func(b *testing.B) {
 			b.ReportAllocs()
 			var buf buffer.Buffer
-			err := writeFrame(&buf, tt.frame)
+			err := frames.Write(&buf, tt.frame)
 			if err != nil {
 				b.Errorf("%+v", err)
 			}

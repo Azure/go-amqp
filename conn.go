@@ -3,7 +3,6 @@ package amqp
 import (
 	"bytes"
 	"crypto/tls"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"math"
@@ -554,9 +553,28 @@ func (c *conn) connReader() {
 
 		// during negotiation, check for proto frames
 		if negotiating && bytes.Equal(buf.Bytes()[:4], []byte{'A', 'M', 'Q', 'P'}) {
-			p, err := parseProtoHeader(buf)
-			if err != nil {
-				c.connErr <- err
+			const protoHeaderSize = 8
+			buf, ok := buf.Next(protoHeaderSize)
+			if !ok {
+				c.connErr <- errors.New("invalid protoHeader")
+				return
+			}
+			_ = buf[7]
+
+			if !bytes.Equal(buf[:4], []byte{'A', 'M', 'Q', 'P'}) {
+				c.connErr <- fmt.Errorf("unexpected protocol %q", buf[:4])
+				return
+			}
+
+			p := protoHeader{
+				ProtoID:  protoID(buf[4]),
+				Major:    buf[5],
+				Minor:    buf[6],
+				Revision: buf[7],
+			}
+
+			if p.Major != 1 || p.Minor != 0 || p.Revision != 0 {
+				c.connErr <- fmt.Errorf("unexpected protocol version %d.%d.%d", p.Major, p.Minor, p.Revision)
 				return
 			}
 
@@ -702,7 +720,7 @@ func (c *conn) writeFrame(fr frames.Frame) error {
 
 	// writeFrame into txBuf
 	c.txBuf.Reset()
-	err := writeFrame(&c.txBuf, fr)
+	err := frames.Write(&c.txBuf, fr)
 	if err != nil {
 		return err
 	}
@@ -985,62 +1003,4 @@ type protoHeader struct {
 	Major    uint8
 	Minor    uint8
 	Revision uint8
-}
-
-// parseProtoHeader reads the proto header from r and returns the results
-//
-// An error is returned if the protocol is not "AMQP" or if the version is not 1.0.0.
-func parseProtoHeader(r *buffer.Buffer) (protoHeader, error) {
-	const protoHeaderSize = 8
-	buf, ok := r.Next(protoHeaderSize)
-	if !ok {
-		return protoHeader{}, errors.New("invalid protoHeader")
-	}
-	_ = buf[7]
-
-	if !bytes.Equal(buf[:4], []byte{'A', 'M', 'Q', 'P'}) {
-		return protoHeader{}, fmt.Errorf("unexpected protocol %q", buf[:4])
-	}
-
-	p := protoHeader{
-		ProtoID:  protoID(buf[4]),
-		Major:    buf[5],
-		Minor:    buf[6],
-		Revision: buf[7],
-	}
-
-	if p.Major != 1 || p.Minor != 0 || p.Revision != 0 {
-		return p, fmt.Errorf("unexpected protocol version %d.%d.%d", p.Major, p.Minor, p.Revision)
-	}
-	return p, nil
-}
-
-// writesFrame encodes fr into buf.
-// split out from conn.WriteFrame for testing purposes.
-func writeFrame(buf *buffer.Buffer, fr frames.Frame) error {
-	// write header
-	buf.Append([]byte{
-		0, 0, 0, 0, // size, overwrite later
-		2,       // doff, see frameHeader.DataOffset comment
-		fr.Type, // frame type
-	})
-	buf.AppendUint16(fr.Channel) // channel
-
-	// write AMQP frame body
-	err := encoding.Marshal(buf, fr.Body)
-	if err != nil {
-		return err
-	}
-
-	// validate size
-	if uint(buf.Len()) > math.MaxUint32 {
-		return errors.New("frame too large")
-	}
-
-	// retrieve raw bytes
-	bufBytes := buf.Bytes()
-
-	// write correct size
-	binary.BigEndian.PutUint32(bufBytes, uint32(len(bufBytes)))
-	return nil
 }

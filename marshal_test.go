@@ -15,6 +15,7 @@ import (
 	"github.com/Azure/go-amqp/internal/buffer"
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/frames"
+	"github.com/Azure/go-amqp/internal/test"
 )
 
 var exampleFrames = []struct {
@@ -24,7 +25,7 @@ var exampleFrames = []struct {
 	{
 		label: "transfer",
 		frame: frames.Frame{
-			Type:    frameTypeAMQP,
+			Type:    frames.TypeAMQP,
 			Channel: 10,
 			Body: &frames.PerformTransfer{
 				Handle:             34983,
@@ -49,7 +50,7 @@ func TestFrameMarshalUnmarshal(t *testing.T) {
 		t.Run(tt.label, func(t *testing.T) {
 			var buf buffer.Buffer
 
-			err := writeFrame(&buf, tt.frame)
+			err := frames.Write(&buf, tt.frame)
 			if err != nil {
 				t.Fatalf("%+v", err)
 			}
@@ -71,8 +72,8 @@ func TestFrameMarshalUnmarshal(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%+v", err)
 			}
-			if !testEqual(want.Body, payload) {
-				t.Errorf("Roundtrip produced different results:\n %s", testDiff(want.Body, payload))
+			if !test.Equal(want.Body, payload) {
+				t.Errorf("Roundtrip produced different results:\n %s", test.Diff(want.Body, payload))
 			}
 		})
 	}
@@ -85,7 +86,7 @@ func BenchmarkFrameMarshal(b *testing.B) {
 			var buf buffer.Buffer
 
 			for i := 0; i < b.N; i++ {
-				err := writeFrame(&buf, tt.frame)
+				err := frames.Write(&buf, tt.frame)
 				if err != nil {
 					b.Errorf("%+v", err)
 				}
@@ -100,7 +101,7 @@ func BenchmarkFrameUnmarshal(b *testing.B) {
 		b.Run(tt.label, func(b *testing.B) {
 			b.ReportAllocs()
 			var buf buffer.Buffer
-			err := writeFrame(&buf, tt.frame)
+			err := frames.Write(&buf, tt.frame)
 			if err != nil {
 				b.Errorf("%+v", err)
 			}
@@ -209,8 +210,8 @@ func TestMarshalUnmarshal(t *testing.T) {
 				return
 			}
 			cmpType := reflect.Indirect(newType).Interface()
-			if !testEqual(type_, cmpType) {
-				t.Errorf("Roundtrip produced different results:\n %s", testDiff(type_, cmpType))
+			if !test.Equal(type_, cmpType) {
+				t.Errorf("Roundtrip produced different results:\n %s", test.Diff(type_, cmpType))
 			}
 		})
 	}
@@ -232,7 +233,7 @@ func TestIssue173(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d := testDiff(want, got); d != "" {
+	if d := test.Diff(want, got); d != "" {
 		t.Fatal(d)
 	}
 }
@@ -251,8 +252,8 @@ func TestReadAny(t *testing.T) {
 				t.Fatalf("%+v", err)
 			}
 
-			if !testEqual(type_, got) {
-				t.Errorf("Roundtrip produced different results:\n %s", testDiff(type_, got))
+			if !test.Equal(type_, got) {
+				t.Errorf("Roundtrip produced different results:\n %s", test.Diff(type_, got))
 			}
 		})
 	}

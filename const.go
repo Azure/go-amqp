@@ -5,13 +5,13 @@ import "github.com/Azure/go-amqp/internal/encoding"
 // Sender Settlement Modes
 const (
 	// Sender will send all deliveries initially unsettled to the receiver.
-	ModeUnsettled = encoding.ModeUnsettled
+	ModeUnsettled SenderSettleMode = encoding.ModeUnsettled
 
 	// Sender will send all deliveries settled to the receiver.
-	ModeSettled = encoding.ModeSettled
+	ModeSettled SenderSettleMode = encoding.ModeSettled
 
 	// Sender MAY send a mixture of settled and unsettled deliveries to the receiver.
-	ModeMixed = encoding.ModeMixed
+	ModeMixed SenderSettleMode = encoding.ModeMixed
 )
 
 // SenderSettleMode specifies how the sender will settle messages.
@@ -27,12 +27,12 @@ func senderSettleModeValue(m *SenderSettleMode) SenderSettleMode {
 // Receiver Settlement Modes
 const (
 	// Receiver will spontaneously settle all incoming transfers.
-	ModeFirst = encoding.ModeFirst
+	ModeFirst ReceiverSettleMode = encoding.ModeFirst
 
 	// Receiver will only settle after sending the disposition to the
 	// sender and receiving a disposition indicating settlement of
 	// the delivery from the sender.
-	ModeSecond = encoding.ModeSecond
+	ModeSecond ReceiverSettleMode = encoding.ModeSecond
 )
 
 // ReceiverSettleMode specifies how the receiver will settle messages.
@@ -48,16 +48,16 @@ func receiverSettleModeValue(m *ReceiverSettleMode) ReceiverSettleMode {
 // Durability Policies
 const (
 	// No terminus state is retained durably.
-	DurabilityNone = encoding.DurabilityNone
+	DurabilityNone Durability = encoding.DurabilityNone
 
 	// Only the existence and configuration of the terminus is
 	// retained durably.
-	DurabilityConfiguration = encoding.DurabilityConfiguration
+	DurabilityConfiguration Durability = encoding.DurabilityConfiguration
 
 	// In addition to the existence and configuration of the
 	// terminus, the unsettled state for durable messages is
 	// retained durably.
-	DurabilityUnsettledState = encoding.DurabilityUnsettledState
+	DurabilityUnsettledState Durability = encoding.DurabilityUnsettledState
 )
 
 // Durability specifies the durability of a link.
@@ -66,18 +66,18 @@ type Durability = encoding.Durability
 // Expiry Policies
 const (
 	// The expiry timer starts when terminus is detached.
-	ExpiryLinkDetach = encoding.ExpiryLinkDetach
+	ExpiryLinkDetach ExpiryPolicy = encoding.ExpiryLinkDetach
 
 	// The expiry timer starts when the most recently
 	// associated session is ended.
-	ExpirySessionEnd = encoding.ExpirySessionEnd
+	ExpirySessionEnd ExpiryPolicy = encoding.ExpirySessionEnd
 
 	// The expiry timer starts when most recently associated
 	// connection is closed.
-	ExpiryConnectionClose = encoding.ExpiryConnectionClose
+	ExpiryConnectionClose ExpiryPolicy = encoding.ExpiryConnectionClose
 
 	// The terminus never expires.
-	ExpiryNever = encoding.ExpiryNever
+	ExpiryNever ExpiryPolicy = encoding.ExpiryNever
 )
 
 // ExpiryPolicy specifies when the expiry timer of a terminus

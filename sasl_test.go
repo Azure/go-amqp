@@ -11,6 +11,7 @@ import (
 	"github.com/Azure/go-amqp/internal/buffer"
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/frames"
+	"github.com/Azure/go-amqp/internal/test"
 	"github.com/Azure/go-amqp/internal/testconn"
 )
 
@@ -30,7 +31,7 @@ func TestSaslXOAUTH2InitialResponse(t *testing.T) {
 	}
 
 	if !bytes.Equal(wantedResp, gotResp) {
-		t.Errorf("Initial response does not match expected:\n %s", testDiff(gotResp, wantedResp))
+		t.Errorf("Initial response does not match expected:\n %s", test.Diff(gotResp, wantedResp))
 	}
 }
 
@@ -81,18 +82,18 @@ func TestConnSASLXOAUTH2AuthSuccess(t *testing.T) {
 	buf, err := peerResponse(
 		[]byte("AMQP\x03\x01\x00\x00"),
 		frames.Frame{
-			Type:    frameTypeSASL,
+			Type:    frames.TypeSASL,
 			Channel: 0,
 			Body:    &frames.SASLMechanisms{Mechanisms: []encoding.Symbol{saslMechanismXOAUTH2}},
 		},
 		frames.Frame{
-			Type:    frameTypeSASL,
+			Type:    frames.TypeSASL,
 			Channel: 0,
 			Body:    &frames.SASLOutcome{Code: encoding.CodeSASLOK},
 		},
 		[]byte("AMQP\x00\x01\x00\x00"),
 		frames.Frame{
-			Type:    frameTypeAMQP,
+			Type:    frames.TypeAMQP,
 			Channel: 0,
 			Body:    &frames.PerformOpen{},
 		},
@@ -117,12 +118,12 @@ func TestConnSASLXOAUTH2AuthFail(t *testing.T) {
 	buf, err := peerResponse(
 		[]byte("AMQP\x03\x01\x00\x00"),
 		frames.Frame{
-			Type:    frameTypeSASL,
+			Type:    frames.TypeSASL,
 			Channel: 0,
 			Body:    &frames.SASLMechanisms{Mechanisms: []encoding.Symbol{saslMechanismXOAUTH2}},
 		},
 		frames.Frame{
-			Type:    frameTypeSASL,
+			Type:    frames.TypeSASL,
 			Channel: 0,
 			Body:    &frames.SASLOutcome{Code: encoding.CodeSASLAuth},
 		},
@@ -152,17 +153,17 @@ func TestConnSASLXOAUTH2AuthFailWithErrorResponse(t *testing.T) {
 	buf, err := peerResponse(
 		[]byte("AMQP\x03\x01\x00\x00"),
 		frames.Frame{
-			Type:    frameTypeSASL,
+			Type:    frames.TypeSASL,
 			Channel: 0,
 			Body:    &frames.SASLMechanisms{Mechanisms: []encoding.Symbol{saslMechanismXOAUTH2}},
 		},
 		frames.Frame{
-			Type:    frameTypeSASL,
+			Type:    frames.TypeSASL,
 			Channel: 0,
 			Body:    &frames.SASLChallenge{Challenge: []byte("{ \"status\":\"401\", \"schemes\":\"bearer\", \"scope\":\"https://mail.google.com/\" }")},
 		},
 		frames.Frame{
-			Type:    frameTypeSASL,
+			Type:    frames.TypeSASL,
 			Channel: 0,
 			Body:    &frames.SASLOutcome{Code: encoding.CodeSASLAuth},
 		},
@@ -192,17 +193,17 @@ func TestConnSASLXOAUTH2AuthFailsAdditionalErrorResponse(t *testing.T) {
 	buf, err := peerResponse(
 		[]byte("AMQP\x03\x01\x00\x00"),
 		frames.Frame{
-			Type:    frameTypeSASL,
+			Type:    frames.TypeSASL,
 			Channel: 0,
 			Body:    &frames.SASLMechanisms{Mechanisms: []encoding.Symbol{saslMechanismXOAUTH2}},
 		},
 		frames.Frame{
-			Type:    frameTypeSASL,
+			Type:    frames.TypeSASL,
 			Channel: 0,
 			Body:    &frames.SASLChallenge{Challenge: []byte("fail1")},
 		},
 		frames.Frame{
-			Type:    frameTypeSASL,
+			Type:    frames.TypeSASL,
 			Channel: 0,
 			Body:    &frames.SASLChallenge{Challenge: []byte("fail2")},
 		},
@@ -232,18 +233,18 @@ func TestConnSASLExternal(t *testing.T) {
 	buf, err := peerResponse(
 		[]byte("AMQP\x03\x01\x00\x00"),
 		frames.Frame{
-			Type:    frameTypeSASL,
+			Type:    frames.TypeSASL,
 			Channel: 0,
 			Body:    &frames.SASLMechanisms{Mechanisms: []encoding.Symbol{saslMechanismEXTERNAL}},
 		},
 		frames.Frame{
-			Type:    frameTypeSASL,
+			Type:    frames.TypeSASL,
 			Channel: 0,
 			Body:    &frames.SASLOutcome{Code: encoding.CodeSASLOK},
 		},
 		[]byte("AMQP\x00\x01\x00\x00"),
 		frames.Frame{
-			Type:    frameTypeAMQP,
+			Type:    frames.TypeAMQP,
 			Channel: 0,
 			Body:    &frames.PerformOpen{},
 		},
@@ -270,7 +271,7 @@ func peerResponse(items ...interface{}) ([]byte, error) {
 		switch v := item.(type) {
 		case frames.Frame:
 			b := &buffer.Buffer{}
-			e := writeFrame(b, v)
+			e := frames.Write(b, v)
 			if e != nil {
 				return buf, e
 			}

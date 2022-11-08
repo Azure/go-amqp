@@ -12,6 +12,7 @@ import (
 	"github.com/Azure/go-amqp/internal/debug"
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/frames"
+	"github.com/Azure/go-amqp/internal/shared"
 )
 
 // link is a unidirectional route.
@@ -75,7 +76,7 @@ type link struct {
 // newSendingLink creates a new sending link and attaches it to the session
 func newSendingLink(target string, s *Session, opts *SenderOptions) (*link, error) {
 	l := &link{
-		Key:                      linkKey{randString(40), encoding.RoleSender},
+		Key:                      linkKey{shared.RandString(40), encoding.RoleSender},
 		Session:                  s,
 		close:                    make(chan struct{}),
 		Detached:                 make(chan struct{}),
@@ -138,7 +139,7 @@ func newSendingLink(target string, s *Session, opts *SenderOptions) (*link, erro
 
 func newReceivingLink(source string, s *Session, r *Receiver, opts *ReceiverOptions) (*link, error) {
 	l := &link{
-		Key:           linkKey{randString(40), encoding.RoleReceiver},
+		Key:           linkKey{shared.RandString(40), encoding.RoleReceiver},
 		Session:       s,
 		receiver:      r,
 		close:         make(chan struct{}),

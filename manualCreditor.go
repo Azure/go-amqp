@@ -85,8 +85,8 @@ func (mc *manualCreditor) Drain(ctx context.Context, r *Receiver) error {
 	select {
 	case <-drained:
 		return nil
-	case <-r.detached:
-		return &DetachError{RemoteError: r.detachError}
+	case <-r.l.detached:
+		return &DetachError{RemoteError: r.l.detachError}
 	case <-ctx.Done():
 		return ctx.Err()
 	}

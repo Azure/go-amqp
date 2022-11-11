@@ -17,7 +17,7 @@ import (
 
 // Sender sends messages on a single AMQP link.
 type Sender struct {
-	link
+	l         link
 	transfers chan frames.PerformTransfer // sender uses to send transfer frames
 
 	// Indicates whether we should allow detaches on disposition errors or not.
@@ -33,12 +33,12 @@ type Sender struct {
 
 // LinkName() is the name of the link used for this Sender.
 func (s *Sender) LinkName() string {
-	return s.key.name
+	return s.l.key.name
 }
 
 // MaxMessageSize is the maximum size of a single message.
 func (s *Sender) MaxMessageSize() uint64 {
-	return s.maxMessageSize
+	return s.l.maxMessageSize
 }
 
 // Send sends a Message.
@@ -54,8 +54,8 @@ func (s *Sender) Send(ctx context.Context, msg *Message) error {
 	// check if the link is dead.  while it's safe to call s.send
 	// in this case, this will avoid some allocations etc.
 	select {
-	case <-s.detached:
-		return s.err
+	case <-s.l.detached:
+		return s.l.err
 	default:
 		// link is still active
 	}
@@ -74,8 +74,8 @@ func (s *Sender) Send(ctx context.Context, msg *Message) error {
 			return state.Error
 		}
 		return nil
-	case <-s.detached:
-		return s.err
+	case <-s.l.detached:
+		return s.l.err
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -98,15 +98,15 @@ func (s *Sender) send(ctx context.Context, msg *Message) (chan encoding.Delivery
 		return nil, err
 	}
 
-	if s.maxMessageSize != 0 && uint64(s.buf.Len()) > s.maxMessageSize {
-		return nil, fmt.Errorf("encoded message size exceeds max of %d", s.maxMessageSize)
+	if s.l.maxMessageSize != 0 && uint64(s.buf.Len()) > s.l.maxMessageSize {
+		return nil, fmt.Errorf("encoded message size exceeds max of %d", s.l.maxMessageSize)
 	}
 
 	var (
-		maxPayloadSize = int64(s.session.conn.PeerMaxFrameSize) - maxTransferFrameHeader
-		sndSettleMode  = s.senderSettleMode
+		maxPayloadSize = int64(s.l.session.conn.PeerMaxFrameSize) - maxTransferFrameHeader
+		sndSettleMode  = s.l.senderSettleMode
 		senderSettled  = sndSettleMode != nil && (*sndSettleMode == ModeSettled || (*sndSettleMode == ModeMixed && msg.SendSettled))
-		deliveryID     = atomic.AddUint32(&s.session.nextDeliveryID, 1)
+		deliveryID     = atomic.AddUint32(&s.l.session.nextDeliveryID, 1)
 	)
 
 	deliveryTag := msg.DeliveryTag
@@ -118,7 +118,7 @@ func (s *Sender) send(ctx context.Context, msg *Message) (chan encoding.Delivery
 	}
 
 	fr := frames.PerformTransfer{
-		Handle:        s.handle,
+		Handle:        s.l.handle,
 		DeliveryID:    &deliveryID,
 		DeliveryTag:   deliveryTag,
 		MessageFormat: &msg.Format,
@@ -144,8 +144,8 @@ func (s *Sender) send(ctx context.Context, msg *Message) (chan encoding.Delivery
 
 		select {
 		case s.transfers <- fr:
-		case <-s.detached:
-			return nil, s.err
+		case <-s.l.detached:
+			return nil, s.l.err
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
@@ -161,21 +161,21 @@ func (s *Sender) send(ctx context.Context, msg *Message) (chan encoding.Delivery
 
 // Address returns the link's address.
 func (s *Sender) Address() string {
-	if s.target == nil {
+	if s.l.target == nil {
 		return ""
 	}
-	return s.target.Address
+	return s.l.target.Address
 }
 
 // Close closes the Sender and AMQP link.
 func (s *Sender) Close(ctx context.Context) error {
-	return s.closeLink(ctx)
+	return s.l.closeLink(ctx)
 }
 
 // newSendingLink creates a new sending link and attaches it to the session
 func newSender(target string, s *Session, opts *SenderOptions) (*Sender, error) {
 	l := &Sender{
-		link: link{
+		l: link{
 			key:      linkKey{shared.RandString(40), encoding.RoleSender},
 			session:  s,
 			close:    make(chan struct{}),
@@ -191,75 +191,75 @@ func newSender(target string, s *Session, opts *SenderOptions) (*Sender, error) 
 	}
 
 	for _, v := range opts.Capabilities {
-		l.source.Capabilities = append(l.source.Capabilities, encoding.Symbol(v))
+		l.l.source.Capabilities = append(l.l.source.Capabilities, encoding.Symbol(v))
 	}
 	if opts.Durability > DurabilityUnsettledState {
 		return nil, fmt.Errorf("invalid Durability %d", opts.Durability)
 	}
-	l.source.Durable = opts.Durability
+	l.l.source.Durable = opts.Durability
 	if opts.DynamicAddress {
-		l.target.Address = ""
-		l.dynamicAddr = opts.DynamicAddress
+		l.l.target.Address = ""
+		l.l.dynamicAddr = opts.DynamicAddress
 	}
 	if opts.ExpiryPolicy != "" {
 		if err := encoding.ValidateExpiryPolicy(opts.ExpiryPolicy); err != nil {
 			return nil, err
 		}
-		l.source.ExpiryPolicy = opts.ExpiryPolicy
+		l.l.source.ExpiryPolicy = opts.ExpiryPolicy
 	}
-	l.source.Timeout = opts.ExpiryTimeout
+	l.l.source.Timeout = opts.ExpiryTimeout
 	l.detachOnDispositionError = !opts.IgnoreDispositionErrors
 	if opts.Name != "" {
-		l.key.name = opts.Name
+		l.l.key.name = opts.Name
 	}
 	if opts.Properties != nil {
-		l.properties = make(map[encoding.Symbol]interface{})
+		l.l.properties = make(map[encoding.Symbol]interface{})
 		for k, v := range opts.Properties {
 			if k == "" {
 				return nil, errors.New("link property key must not be empty")
 			}
-			l.properties[encoding.Symbol(k)] = v
+			l.l.properties[encoding.Symbol(k)] = v
 		}
 	}
 	if opts.RequestedReceiverSettleMode != nil {
 		if rsm := *opts.RequestedReceiverSettleMode; rsm > ModeSecond {
 			return nil, fmt.Errorf("invalid RequestedReceiverSettleMode %d", rsm)
 		}
-		l.receiverSettleMode = opts.RequestedReceiverSettleMode
+		l.l.receiverSettleMode = opts.RequestedReceiverSettleMode
 	}
 	if opts.SettlementMode != nil {
 		if ssm := *opts.SettlementMode; ssm > ModeMixed {
 			return nil, fmt.Errorf("invalid SettlementMode %d", ssm)
 		}
-		l.senderSettleMode = opts.SettlementMode
+		l.l.senderSettleMode = opts.SettlementMode
 	}
-	l.source.Address = opts.SourceAddress
+	l.l.source.Address = opts.SourceAddress
 	return l, nil
 }
 
 func (s *Sender) attach(ctx context.Context, session *Session) error {
 	// sending unsettled messages when the receiver is in mode-second is currently
 	// broken and causes a hang after sending, so just disallow it for now.
-	if senderSettleModeValue(s.senderSettleMode) != ModeSettled && receiverSettleModeValue(s.receiverSettleMode) == ModeSecond {
+	if senderSettleModeValue(s.l.senderSettleMode) != ModeSettled && receiverSettleModeValue(s.l.receiverSettleMode) == ModeSecond {
 		return errors.New("sender does not support exactly-once guarantee")
 	}
 
-	s.rx = make(chan frames.FrameBody, 1)
+	s.l.rx = make(chan frames.FrameBody, 1)
 
-	if err := s.attachLink(ctx, session, func(pa *frames.PerformAttach) {
+	if err := s.l.attach(ctx, session, func(pa *frames.PerformAttach) {
 		pa.Role = encoding.RoleSender
 		if pa.Target == nil {
 			pa.Target = new(frames.Target)
 		}
-		pa.Target.Dynamic = s.dynamicAddr
+		pa.Target.Dynamic = s.l.dynamicAddr
 	}, func(pa *frames.PerformAttach) {
-		if s.target == nil {
-			s.target = new(frames.Target)
+		if s.l.target == nil {
+			s.l.target = new(frames.Target)
 		}
 
 		// if dynamic address requested, copy assigned name to address
-		if s.dynamicAddr && pa.Target != nil {
-			s.target.Address = pa.Target.Address
+		if s.l.dynamicAddr && pa.Target != nil {
+			s.l.target.Address = pa.Target.Address
 		}
 	}); err != nil {
 		return err
@@ -273,21 +273,21 @@ func (s *Sender) attach(ctx context.Context, session *Session) error {
 }
 
 func (s *Sender) mux() {
-	defer s.muxDetach(nil, nil)
+	defer s.l.muxDetach(nil, nil)
 
 Loop:
 	for {
 		var outgoingTransfers chan frames.PerformTransfer
-		if s.linkCredit > 0 {
-			debug.Log(1, "sender: credit: %d, deliveryCount: %d", s.linkCredit, s.deliveryCount)
+		if s.l.linkCredit > 0 {
+			debug.Log(1, "sender: credit: %d, deliveryCount: %d", s.l.linkCredit, s.l.deliveryCount)
 			outgoingTransfers = s.transfers
 		}
 
 		select {
 		// received frame
-		case fr := <-s.rx:
-			s.err = s.muxHandleFrame(fr)
-			if s.err != nil {
+		case fr := <-s.l.rx:
+			s.l.err = s.muxHandleFrame(fr)
+			if s.l.err != nil {
 				return
 			}
 
@@ -298,34 +298,34 @@ Loop:
 			// Ensure the session mux is not blocked
 			for {
 				select {
-				case s.session.txTransfer <- &tr:
+				case s.l.session.txTransfer <- &tr:
 					// decrement link-credit after entire message transferred
 					if !tr.More {
-						s.deliveryCount++
-						s.linkCredit--
+						s.l.deliveryCount++
+						s.l.linkCredit--
 						// we are the sender and we keep track of the peer's link credit
-						debug.Log(3, "TX (sender): key:%s, decremented linkCredit: %d", s.key.name, s.linkCredit)
+						debug.Log(3, "TX (sender): key:%s, decremented linkCredit: %d", s.l.key.name, s.l.linkCredit)
 					}
 					continue Loop
-				case fr := <-s.rx:
-					s.err = s.muxHandleFrame(fr)
-					if s.err != nil {
+				case fr := <-s.l.rx:
+					s.l.err = s.muxHandleFrame(fr)
+					if s.l.err != nil {
 						return
 					}
-				case <-s.close:
-					s.err = ErrLinkClosed
+				case <-s.l.close:
+					s.l.err = ErrLinkClosed
 					return
-				case <-s.session.done:
-					s.err = s.session.err
+				case <-s.l.session.done:
+					s.l.err = s.l.session.err
 					return
 				}
 			}
 
-		case <-s.close:
-			s.err = ErrLinkClosed
+		case <-s.l.close:
+			s.l.err = ErrLinkClosed
 			return
-		case <-s.session.done:
-			s.err = s.session.err
+		case <-s.l.session.done:
+			s.l.err = s.l.session.err
 			return
 		}
 	}
@@ -337,14 +337,14 @@ func (s *Sender) muxHandleFrame(fr frames.FrameBody) error {
 	// flow control frame
 	case *frames.PerformFlow:
 		debug.Log(3, "RX (sender): %s", fr)
-		linkCredit := *fr.LinkCredit - s.deliveryCount
+		linkCredit := *fr.LinkCredit - s.l.deliveryCount
 		if fr.DeliveryCount != nil {
 			// DeliveryCount can be nil if the receiver hasn't processed
 			// the attach. That shouldn't be the case here, but it's
 			// what ActiveMQ does.
 			linkCredit += *fr.DeliveryCount
 		}
-		s.linkCredit = linkCredit
+		s.l.linkCredit = linkCredit
 
 		if !fr.Echo {
 			return nil
@@ -352,18 +352,18 @@ func (s *Sender) muxHandleFrame(fr frames.FrameBody) error {
 
 		var (
 			// copy because sent by pointer below; prevent race
-			deliveryCount = s.deliveryCount
+			deliveryCount = s.l.deliveryCount
 		)
 
 		// send flow
 		// TODO: missing Available and session info
 		resp := &frames.PerformFlow{
-			Handle:        &s.handle,
+			Handle:        &s.l.handle,
 			DeliveryCount: &deliveryCount,
 			LinkCredit:    &linkCredit, // max number of messages
 		}
 		debug.Log(1, "TX (sender): %s", resp)
-		_ = s.session.txFrame(resp, nil)
+		_ = s.l.session.txFrame(resp, nil)
 
 	case *frames.PerformDisposition:
 		debug.Log(3, "RX (sender): %s", fr)
@@ -385,10 +385,10 @@ func (s *Sender) muxHandleFrame(fr frames.FrameBody) error {
 			Settled: true,
 		}
 		debug.Log(1, "TX (sender): %s", resp)
-		_ = s.session.txFrame(resp, nil)
+		_ = s.l.session.txFrame(resp, nil)
 
 	default:
-		return s.link.muxHandleFrame(fr)
+		return s.l.muxHandleFrame(fr)
 	}
 
 	return nil
@@ -398,7 +398,7 @@ func (s *Sender) detachOnRejectDisp() bool {
 	// only detach on rejection when no RSM was requested or in ModeFirst.
 	// if the receiver is in ModeSecond, it will send an explicit rejection disposition
 	// that we'll have to ack. so in that case, we don't treat it as a link error.
-	if s.detachOnDispositionError && (s.receiverSettleMode == nil || *s.receiverSettleMode == ModeFirst) {
+	if s.detachOnDispositionError && (s.l.receiverSettleMode == nil || *s.l.receiverSettleMode == ModeFirst) {
 		return true
 	}
 	return false

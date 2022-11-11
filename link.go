@@ -54,7 +54,7 @@ type link struct {
 
 // attach sends the Attach performative to establish the link with its parent session.
 // this is automatically called by the new*Link constructors.
-func (l *link) attachLink(ctx context.Context, s *Session, beforeAttach func(*frames.PerformAttach), afterAttach func(*frames.PerformAttach)) error {
+func (l *link) attach(ctx context.Context, s *Session, beforeAttach func(*frames.PerformAttach), afterAttach func(*frames.PerformAttach)) error {
 	if err := s.allocateHandle(l); err != nil {
 		return err
 	}

@@ -132,7 +132,7 @@ func (m *Message) GetData() []byte {
 // LinkName returns the receiving link name or the empty string.
 func (m *Message) LinkName() string {
 	if m.rcvr != nil {
-		return m.rcvr.key.name
+		return m.rcvr.l.key.name
 	}
 	return ""
 }

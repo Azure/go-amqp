@@ -131,8 +131,8 @@ func TestManualCreditorDrainReturnsProperError(t *testing.T) {
 			mc := manualCreditor{}
 			link := newTestLink(t)
 
-			link.detachError = err
-			close(link.detached)
+			link.l.detachError = err
+			close(link.l.detached)
 
 			detachErr := mc.Drain(ctx, link)
 			require.Equal(t, detachErr, &DetachError{RemoteError: err})

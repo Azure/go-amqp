@@ -518,7 +518,17 @@ func (r *Receiver) attach(ctx context.Context, s *Session) error {
 }
 
 func (r *Receiver) mux() {
-	defer r.muxDetach(r.muxDetachDeferred, func(fr frames.PerformTransfer) { _ = r.muxReceive(fr) })
+	defer r.muxDetach(func() {
+		// unblock any in flight message dispositions
+		r.inFlight.clear(r.err)
+
+		// unblock any pending drain requests
+		if r.manualCreditor != nil {
+			r.manualCreditor.EndDrain()
+		}
+	}, func(fr frames.PerformTransfer) {
+		_ = r.muxReceive(fr)
+	})
 
 	for {
 		switch {
@@ -801,17 +811,6 @@ func (r *Receiver) muxReceive(fr frames.PerformTransfer) error {
 	r.linkCredit--
 	debug.Log(1, "deliveryID %d before exit - deliveryCount : %d - linkCredit: %d, len(messages): %d", r.msg.deliveryID, r.deliveryCount, r.linkCredit, len(r.messages))
 	return nil
-}
-
-// to be called during detachment
-func (r *Receiver) muxDetachDeferred() {
-	// unblock any in flight message dispositions
-	r.inFlight.clear(r.err)
-
-	// unblock any pending drain requests
-	if r.manualCreditor != nil {
-		r.manualCreditor.EndDrain()
-	}
 }
 
 // inFlight tracks in-flight message dispositions allowing receivers

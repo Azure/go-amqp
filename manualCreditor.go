@@ -66,7 +66,7 @@ func (mc *manualCreditor) FlowBits(currentCredits uint32) (bool, uint32) {
 }
 
 // Drain initiates a drain and blocks until EndDrain is called.
-func (mc *manualCreditor) Drain(ctx context.Context, l *link) error {
+func (mc *manualCreditor) Drain(ctx context.Context, r *Receiver) error {
 	mc.mu.Lock()
 
 	if mc.drained != nil {
@@ -85,8 +85,8 @@ func (mc *manualCreditor) Drain(ctx context.Context, l *link) error {
 	select {
 	case <-drained:
 		return nil
-	case <-l.Detached:
-		return &DetachError{RemoteError: l.detachError}
+	case <-r.detached:
+		return &DetachError{RemoteError: r.detachError}
 	case <-ctx.Done():
 		return ctx.Err()
 	}

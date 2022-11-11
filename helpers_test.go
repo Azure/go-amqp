@@ -111,11 +111,11 @@ func receiverFrameHandlerNoUnhandled(rsm encoding.ReceiverSettleMode) func(frame
 
 // helper to wait for a link to pause/resume
 // returns an error if it times out waiting
-func waitForLink(l *link, paused bool) error {
+func waitForReceiver(r *Receiver, paused bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	for {
-		credit := atomic.LoadUint32(&l.linkCredit)
+		credit := atomic.LoadUint32(&r.linkCredit)
 		// waiting for the link to pause means its credit has been consumed
 		if (paused && credit == 0) || (!paused && credit > 0) {
 			return nil
@@ -123,8 +123,8 @@ func waitForLink(l *link, paused bool) error {
 			return err
 		}
 		select {
-		case <-l.Detached:
-			return fmt.Errorf("link detached: detachErr %v, error %v", l.detachError, l.err)
+		case <-r.detached:
+			return fmt.Errorf("link detached: detachErr %v, error %v", r.detachError, r.err)
 		case <-time.After(50 * time.Millisecond):
 			// try again
 		}

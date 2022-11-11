@@ -1,13 +1,18 @@
 package amqp
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 	"time"
 
+	"github.com/Azure/go-amqp/internal/buffer"
 	"github.com/Azure/go-amqp/internal/debug"
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/frames"
+	"github.com/Azure/go-amqp/internal/shared"
 )
 
 type messageDisposition struct {
@@ -17,7 +22,16 @@ type messageDisposition struct {
 
 // Receiver receives messages on a single AMQP link.
 type Receiver struct {
-	link           *link                   // underlying link
+	link
+	// message receiving
+	receiverReady         chan struct{}       // receiver sends on this when mux is paused to indicate it can handle more messages
+	messages              chan Message        // used to send completed messages to receiver
+	unsettledMessages     map[string]struct{} // used to keep track of messages being handled downstream
+	unsettledMessagesLock sync.RWMutex        // lock to protect concurrent access to unsettledMessages
+	msgBuf                buffer.Buffer       // buffered bytes for current message
+	more                  bool                // if true, buf contains a partial message
+	msg                   Message             // current message being decoded
+
 	batching       bool                    // enable batching of message dispositions
 	batchMaxAge    time.Duration           // maximum time between the start n batch and sending the batch to the server
 	dispositions   chan messageDisposition // message dispositions are sent on this channel when batching is enabled
@@ -29,13 +43,37 @@ type Receiver struct {
 // IssueCredit adds credits to be requested in the next flow
 // request.
 func (r *Receiver) IssueCredit(credit uint32) error {
-	return r.link.IssueCredit(credit)
+	if r.manualCreditor == nil {
+		return errors.New("issueCredit can only be used with receiver links using manual credit management")
+	}
+
+	if err := r.manualCreditor.IssueCredit(credit); err != nil {
+		return err
+	}
+
+	// cause mux() to check our flow conditions.
+	select {
+	case r.receiverReady <- struct{}{}:
+	default:
+	}
+
+	return nil
 }
 
 // DrainCredit sets the drain flag on the next flow frame and
 // waits for the drain to be acknowledged.
 func (r *Receiver) DrainCredit(ctx context.Context) error {
-	return r.link.DrainCredit(ctx)
+	if r.manualCreditor == nil {
+		return errors.New("drain can only be used with receiver links using manual credit management")
+	}
+
+	// cause mux() to check our flow conditions.
+	select {
+	case r.receiverReady <- struct{}{}:
+	default:
+	}
+
+	return r.manualCreditor.Drain(ctx, r)
 }
 
 // Prefetched returns the next message that is stored in the Receiver's
@@ -48,16 +86,16 @@ func (r *Receiver) DrainCredit(ctx context.Context) error {
 // When using ModeFirst, the message is spontaneously Accepted at reception.
 func (r *Receiver) Prefetched() *Message {
 	select {
-	case r.link.ReceiverReady <- struct{}{}:
+	case r.receiverReady <- struct{}{}:
 	default:
 	}
 
 	// non-blocking receive to ensure buffered messages are
 	// delivered regardless of whether the link has been closed.
 	select {
-	case msg := <-r.link.Messages:
+	case msg := <-r.messages:
 		debug.Log(3, "Receive() non blocking %d", msg.deliveryID)
-		msg.link = r.link
+		msg.rcvr = r
 		return &msg
 	default:
 		// done draining messages
@@ -78,12 +116,12 @@ func (r *Receiver) Receive(ctx context.Context) (*Message, error) {
 
 	// wait for the next message
 	select {
-	case msg := <-r.link.Messages:
+	case msg := <-r.messages:
 		debug.Log(3, "Receive() blocking %d", msg.deliveryID)
-		msg.link = r.link
+		msg.rcvr = r
 		return &msg, nil
-	case <-r.link.Detached:
-		return nil, r.link.err
+	case <-r.detached:
+		return nil, r.err
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
@@ -151,23 +189,23 @@ type ModifyMessageOptions struct {
 
 // Address returns the link's address.
 func (r *Receiver) Address() string {
-	if r.link.Source == nil {
+	if r.source == nil {
 		return ""
 	}
-	return r.link.Source.Address
+	return r.source.Address
 }
 
 // LinkName returns associated link name or an empty string if link is not defined.
 func (r *Receiver) LinkName() string {
-	return r.link.Key.name
+	return r.key.name
 }
 
 // LinkSourceFilterValue retrieves the specified link source filter value or nil if it doesn't exist.
 func (r *Receiver) LinkSourceFilterValue(name string) interface{} {
-	if r.link.Source == nil {
+	if r.source == nil {
 		return nil
 	}
-	filter, ok := r.link.Source.Filter[encoding.Symbol(name)]
+	filter, ok := r.source.Filter[encoding.Symbol(name)]
 	if !ok {
 		return nil
 	}
@@ -180,7 +218,18 @@ func (r *Receiver) LinkSourceFilterValue(name string) interface{} {
 // The session will continue to wait for the response until the Session or Client
 // is closed.
 func (r *Receiver) Close(ctx context.Context) error {
-	return r.link.Close(ctx)
+	return r.closeLink(ctx)
+}
+
+// returns the error passed in
+func (r *Receiver) closeWithError(de *Error) error {
+	r.closeOnce.Do(func() {
+		r.detachErrorMu.Lock()
+		r.detachError = de
+		r.detachErrorMu.Unlock()
+		close(r.close)
+	})
+	return de
 }
 
 func (r *Receiver) dispositionBatcher() {
@@ -261,7 +310,7 @@ func (r *Receiver) dispositionBatcher() {
 			batchStarted = false
 			batchTimer.Stop()
 
-		case <-r.link.Detached:
+		case <-r.detached:
 			return
 		}
 	}
@@ -273,22 +322,22 @@ func (r *Receiver) sendDisposition(first uint32, last *uint32, state encoding.De
 		Role:    encoding.RoleReceiver,
 		First:   first,
 		Last:    last,
-		Settled: r.link.ReceiverSettleMode == nil || *r.link.ReceiverSettleMode == ModeFirst,
+		Settled: r.receiverSettleMode == nil || *r.receiverSettleMode == ModeFirst,
 		State:   state,
 	}
 
 	select {
-	case <-r.link.Detached:
-		return r.link.err
+	case <-r.detached:
+		return r.err
 	default:
 		debug.Log(1, "TX (sendDisposition): %s", fr)
-		return r.link.Session.txFrame(fr, nil)
+		return r.session.txFrame(fr, nil)
 	}
 }
 
 func (r *Receiver) messageDisposition(ctx context.Context, msg *Message, state encoding.DeliveryState) error {
 	var wait chan error
-	if r.link.ReceiverSettleMode != nil && *r.link.ReceiverSettleMode == ModeSecond {
+	if r.receiverSettleMode != nil && *r.receiverSettleMode == ModeSecond {
 		debug.Log(3, "RX (messageDisposition): add %d to inflight", msg.deliveryID)
 		wait = r.inFlight.add(msg.deliveryID)
 	}
@@ -296,8 +345,8 @@ func (r *Receiver) messageDisposition(ctx context.Context, msg *Message, state e
 	if r.batching {
 		select {
 		case r.dispositions <- messageDisposition{id: msg.deliveryID, state: state}:
-		case <-r.link.Detached:
-			return r.link.err
+		case <-r.detached:
+			return r.err
 		}
 	} else {
 		err := r.sendDisposition(msg.deliveryID, nil, state)
@@ -313,11 +362,455 @@ func (r *Receiver) messageDisposition(ctx context.Context, msg *Message, state e
 	select {
 	case err := <-wait:
 		// we've received confirmation of disposition
-		r.link.DeleteUnsettled(msg)
+		r.deleteUnsettled(msg)
 		msg.settled = true
 		return err
 	case <-ctx.Done():
 		return ctx.Err()
+	}
+}
+
+func (r *Receiver) addUnsettled(msg *Message) {
+	r.unsettledMessagesLock.Lock()
+	r.unsettledMessages[string(msg.DeliveryTag)] = struct{}{}
+	r.unsettledMessagesLock.Unlock()
+}
+
+func (r *Receiver) deleteUnsettled(msg *Message) {
+	r.unsettledMessagesLock.Lock()
+	delete(r.unsettledMessages, string(msg.DeliveryTag))
+	r.unsettledMessagesLock.Unlock()
+}
+
+func (r *Receiver) countUnsettled() int {
+	r.unsettledMessagesLock.RLock()
+	count := len(r.unsettledMessages)
+	r.unsettledMessagesLock.RUnlock()
+	return count
+}
+
+func newReceiver(source string, s *Session, opts *ReceiverOptions) (*Receiver, error) {
+	l := &Receiver{
+		link: link{
+			key:      linkKey{shared.RandString(40), encoding.RoleReceiver},
+			session:  s,
+			close:    make(chan struct{}),
+			detached: make(chan struct{}),
+			source:   &frames.Source{Address: source},
+			target:   new(frames.Target),
+		},
+		receiverReady: make(chan struct{}, 1),
+		batching:      defaultLinkBatching,
+		batchMaxAge:   defaultLinkBatchMaxAge,
+		maxCredit:     defaultLinkCredit,
+	}
+
+	if opts == nil {
+		return l, nil
+	}
+
+	l.batching = opts.Batching
+	if opts.BatchMaxAge > 0 {
+		l.batchMaxAge = opts.BatchMaxAge
+	}
+	for _, v := range opts.Capabilities {
+		l.target.Capabilities = append(l.target.Capabilities, encoding.Symbol(v))
+	}
+	if opts.Credit > 0 {
+		l.maxCredit = opts.Credit
+	}
+	if opts.Durability > DurabilityUnsettledState {
+		return nil, fmt.Errorf("invalid Durability %d", opts.Durability)
+	}
+	l.target.Durable = opts.Durability
+	if opts.DynamicAddress {
+		l.source.Address = ""
+		l.dynamicAddr = opts.DynamicAddress
+	}
+	if opts.ExpiryPolicy != "" {
+		if err := encoding.ValidateExpiryPolicy(opts.ExpiryPolicy); err != nil {
+			return nil, err
+		}
+		l.target.ExpiryPolicy = opts.ExpiryPolicy
+	}
+	l.target.Timeout = opts.ExpiryTimeout
+	if opts.Filters != nil {
+		l.source.Filter = make(encoding.Filter)
+		for _, f := range opts.Filters {
+			f(l.source.Filter)
+		}
+	}
+	if opts.ManualCredits {
+		l.manualCreditor = &manualCreditor{}
+	}
+	if opts.MaxMessageSize > 0 {
+		l.maxMessageSize = opts.MaxMessageSize
+	}
+	if opts.Name != "" {
+		l.key.name = opts.Name
+	}
+	if opts.Properties != nil {
+		l.properties = make(map[encoding.Symbol]interface{})
+		for k, v := range opts.Properties {
+			if k == "" {
+				return nil, errors.New("link property key must not be empty")
+			}
+			l.properties[encoding.Symbol(k)] = v
+		}
+	}
+	if opts.RequestedSenderSettleMode != nil {
+		if rsm := *opts.RequestedSenderSettleMode; rsm > ModeMixed {
+			return nil, fmt.Errorf("invalid RequestedSenderSettleMode %d", rsm)
+		}
+		l.senderSettleMode = opts.RequestedSenderSettleMode
+	}
+	if opts.SettlementMode != nil {
+		if rsm := *opts.SettlementMode; rsm > ModeSecond {
+			return nil, fmt.Errorf("invalid SettlementMode %d", rsm)
+		}
+		l.receiverSettleMode = opts.SettlementMode
+	}
+	l.target.Address = opts.TargetAddress
+	return l, nil
+}
+
+// attach sends the Attach performative to establish the link with its parent session.
+// this is automatically called by the new*Link constructors.
+func (r *Receiver) attach(ctx context.Context, s *Session) error {
+	// buffer rx to linkCredit so that conn.mux won't block
+	// attempting to send to a slow reader
+	if r.manualCreditor != nil {
+		r.rx = make(chan frames.FrameBody, r.maxCredit)
+	} else {
+		r.rx = make(chan frames.FrameBody, r.linkCredit)
+	}
+
+	if err := r.attachLink(ctx, s, func(pa *frames.PerformAttach) {
+		pa.Role = encoding.RoleReceiver
+		if pa.Source == nil {
+			pa.Source = new(frames.Source)
+		}
+		pa.Source.Dynamic = r.dynamicAddr
+	}, func(pa *frames.PerformAttach) {
+		if r.source == nil {
+			r.source = new(frames.Source)
+		}
+		// if dynamic address requested, copy assigned name to address
+		if r.dynamicAddr && pa.Source != nil {
+			r.source.Address = pa.Source.Address
+		}
+		// deliveryCount is a sequence number, must initialize to sender's initial sequence number
+		r.deliveryCount = pa.InitialDeliveryCount
+		// buffer receiver so that link.mux doesn't block
+		r.messages = make(chan Message, r.maxCredit)
+		r.unsettledMessages = map[string]struct{}{}
+		// copy the received filter values
+		if pa.Source != nil {
+			r.source.Filter = pa.Source.Filter
+		}
+	}); err != nil {
+		return err
+	}
+
+	go r.mux()
+
+	return nil
+}
+
+func (r *Receiver) mux() {
+	defer r.muxDetach(r.muxDetachDeferred, func(fr frames.PerformTransfer) { _ = r.muxReceive(fr) })
+
+	for {
+		switch {
+		case r.manualCreditor != nil:
+			drain, credits := r.manualCreditor.FlowBits(r.linkCredit)
+
+			if drain || credits > 0 {
+				debug.Log(1, "receiver (manual): source: %s, inflight: %d, credit: %d, creditsToAdd: %d, drain: %v, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s",
+					r.source.Address, r.inFlight.len(), r.linkCredit, credits, drain, r.deliveryCount, len(r.messages), r.countUnsettled(), r.maxCredit, r.receiverSettleMode.String())
+
+				// send a flow frame.
+				r.err = r.muxFlow(credits, drain)
+			}
+
+		// if receiver && half maxCredits have been processed, send more credits
+		case r.linkCredit+uint32(r.countUnsettled()) <= r.maxCredit/2:
+			debug.Log(1, "receiver (half): source: %s, inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s", r.source.Address, r.inFlight.len(), r.linkCredit, r.deliveryCount, len(r.messages), r.countUnsettled(), r.maxCredit, r.receiverSettleMode.String())
+
+			linkCredit := r.maxCredit - uint32(r.countUnsettled())
+			r.err = r.muxFlow(linkCredit, false)
+
+		case r.linkCredit == 0:
+			debug.Log(1, "receiver (pause): inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s", r.inFlight.len(), r.linkCredit, r.deliveryCount, len(r.messages), r.countUnsettled(), r.maxCredit, r.receiverSettleMode.String())
+		}
+
+		if r.err != nil {
+			return
+		}
+
+		select {
+		// received frame
+		case fr := <-r.rx:
+			r.err = r.muxHandleFrame(fr)
+			if r.err != nil {
+				return
+			}
+
+		case <-r.receiverReady:
+			continue
+		case <-r.close:
+			r.err = ErrLinkClosed
+			return
+		case <-r.session.done:
+			r.err = r.session.err
+			return
+		}
+	}
+}
+
+// muxFlow sends tr to the session mux.
+// l.linkCredit will also be updated to `linkCredit`
+func (r *Receiver) muxFlow(linkCredit uint32, drain bool) error {
+	var (
+		deliveryCount = r.deliveryCount
+	)
+
+	debug.Log(3, "muxFlow: len(l.Messages):%d - linkCredit: %d - deliveryCount: %d, inFlight: %d", len(r.messages), linkCredit, deliveryCount, r.inFlight.len())
+
+	fr := &frames.PerformFlow{
+		Handle:        &r.handle,
+		DeliveryCount: &deliveryCount,
+		LinkCredit:    &linkCredit, // max number of messages,
+		Drain:         drain,
+	}
+	debug.Log(3, "TX (muxFlow): %s", fr)
+
+	// Update credit. This must happen before entering loop below
+	// because incoming messages handled while waiting to transmit
+	// flow increment deliveryCount. This causes the credit to become
+	// out of sync with the server.
+
+	if !drain {
+		// if we're draining we don't want to touch our internal credit - we're not changing it so any issued credits
+		// are still valid until drain completes, at which point they will be naturally zeroed.
+		r.linkCredit = linkCredit
+	}
+
+	// Ensure the session mux is not blocked
+	for {
+		select {
+		case r.session.tx <- fr:
+			return nil
+		case fr := <-r.rx:
+			err := r.muxHandleFrame(fr)
+			if err != nil {
+				return err
+			}
+		case <-r.close:
+			return ErrLinkClosed
+		case <-r.session.done:
+			return r.session.err
+		}
+	}
+}
+
+// muxHandleFrame processes fr based on type.
+func (r *Receiver) muxHandleFrame(fr frames.FrameBody) error {
+	switch fr := fr.(type) {
+	// message frame
+	case *frames.PerformTransfer:
+		return r.muxReceive(*fr)
+
+	// flow control frame
+	case *frames.PerformFlow:
+		debug.Log(3, "RX (receiver): %s", fr)
+		if !fr.Echo {
+			// if the 'drain' flag has been set in the frame sent to the _receiver_ then
+			// we signal whomever is waiting (the service has seen and acknowledged our drain)
+			if fr.Drain && r.manualCreditor != nil {
+				r.linkCredit = 0 // we have no active credits at this point.
+				r.manualCreditor.EndDrain()
+			}
+			return nil
+		}
+
+		var (
+			// copy because sent by pointer below; prevent race
+			linkCredit    = r.linkCredit
+			deliveryCount = r.deliveryCount
+		)
+
+		// send flow
+		// TODO: missing Available and session info
+		resp := &frames.PerformFlow{
+			Handle:        &r.handle,
+			DeliveryCount: &deliveryCount,
+			LinkCredit:    &linkCredit, // max number of messages
+		}
+		debug.Log(1, "TX (receiver): %s", resp)
+		_ = r.session.txFrame(resp, nil)
+
+	case *frames.PerformDisposition:
+		debug.Log(3, "RX (receiver): %s", fr)
+
+		// Unblock receivers waiting for message disposition
+		// bubble disposition error up to the receiver
+		var dispositionError error
+		if state, ok := fr.State.(*encoding.StateRejected); ok {
+			// state.Error isn't required to be filled out. For instance if you dead letter a message
+			// you will get a rejected response that doesn't contain an error.
+			if state.Error != nil {
+				dispositionError = state.Error
+			}
+		}
+		// removal from the in-flight map will also remove the message from the unsettled map
+		r.inFlight.remove(fr.First, fr.Last, dispositionError)
+
+	default:
+		return r.link.muxHandleFrame(fr)
+	}
+
+	return nil
+}
+
+func (r *Receiver) muxReceive(fr frames.PerformTransfer) error {
+	if !r.more {
+		// this is the first transfer of a message,
+		// record the delivery ID, message format,
+		// and delivery Tag
+		if fr.DeliveryID != nil {
+			r.msg.deliveryID = *fr.DeliveryID
+		}
+		if fr.MessageFormat != nil {
+			r.msg.Format = *fr.MessageFormat
+		}
+		r.msg.DeliveryTag = fr.DeliveryTag
+
+		// these fields are required on first transfer of a message
+		if fr.DeliveryID == nil {
+			return r.closeWithError(&Error{
+				Condition:   ErrorNotAllowed,
+				Description: "received message without a delivery-id",
+			})
+		}
+		if fr.MessageFormat == nil {
+			return r.closeWithError(&Error{
+				Condition:   ErrorNotAllowed,
+				Description: "received message without a message-format",
+			})
+		}
+		if fr.DeliveryTag == nil {
+			return r.closeWithError(&Error{
+				Condition:   ErrorNotAllowed,
+				Description: "received message without a delivery-tag",
+			})
+		}
+	} else {
+		// this is a continuation of a multipart message
+		// some fields may be omitted on continuation transfers,
+		// but if they are included they must be consistent
+		// with the first.
+
+		if fr.DeliveryID != nil && *fr.DeliveryID != r.msg.deliveryID {
+			msg := fmt.Sprintf(
+				"received continuation transfer with inconsistent delivery-id: %d != %d",
+				*fr.DeliveryID, r.msg.deliveryID,
+			)
+			return r.closeWithError(&Error{
+				Condition:   ErrorNotAllowed,
+				Description: msg,
+			})
+		}
+		if fr.MessageFormat != nil && *fr.MessageFormat != r.msg.Format {
+			msg := fmt.Sprintf(
+				"received continuation transfer with inconsistent message-format: %d != %d",
+				*fr.MessageFormat, r.msg.Format,
+			)
+			return r.closeWithError(&Error{
+				Condition:   ErrorNotAllowed,
+				Description: msg,
+			})
+		}
+		if fr.DeliveryTag != nil && !bytes.Equal(fr.DeliveryTag, r.msg.DeliveryTag) {
+			msg := fmt.Sprintf(
+				"received continuation transfer with inconsistent delivery-tag: %q != %q",
+				fr.DeliveryTag, r.msg.DeliveryTag,
+			)
+			return r.closeWithError(&Error{
+				Condition:   ErrorNotAllowed,
+				Description: msg,
+			})
+		}
+	}
+
+	// discard message if it's been aborted
+	if fr.Aborted {
+		r.msgBuf.Reset()
+		r.msg = Message{}
+		r.more = false
+		return nil
+	}
+
+	// ensure maxMessageSize will not be exceeded
+	if r.maxMessageSize != 0 && uint64(r.msgBuf.Len())+uint64(len(fr.Payload)) > r.maxMessageSize {
+		return r.closeWithError(&Error{
+			Condition:   ErrorMessageSizeExceeded,
+			Description: fmt.Sprintf("received message larger than max size of %d", r.maxMessageSize),
+		})
+	}
+
+	// add the payload the the buffer
+	r.msgBuf.Append(fr.Payload)
+
+	// mark as settled if at least one frame is settled
+	r.msg.settled = r.msg.settled || fr.Settled
+
+	// save in-progress status
+	r.more = fr.More
+
+	if fr.More {
+		return nil
+	}
+
+	// last frame in message
+	err := r.msg.Unmarshal(&r.msgBuf)
+	if err != nil {
+		return err
+	}
+	debug.Log(1, "deliveryID %d before push to receiver - deliveryCount : %d - linkCredit: %d, len(messages): %d, len(inflight): %d", r.msg.deliveryID, r.deliveryCount, r.linkCredit, len(r.messages), r.inFlight.len())
+	// send to receiver
+	if receiverSettleModeValue(r.receiverSettleMode) == ModeSecond {
+		r.addUnsettled(&r.msg)
+	}
+	select {
+	case r.messages <- r.msg:
+		// message received
+	case <-r.detached:
+		// link has been detached
+		return r.err
+	}
+
+	debug.Log(1, "deliveryID %d after push to receiver - deliveryCount : %d - linkCredit: %d, len(messages): %d, len(inflight): %d", r.msg.deliveryID, r.deliveryCount, r.linkCredit, len(r.messages), r.inFlight.len())
+
+	// reset progress
+	r.msgBuf.Reset()
+	r.msg = Message{}
+
+	// decrement link-credit after entire message received
+	r.deliveryCount++
+	r.linkCredit--
+	debug.Log(1, "deliveryID %d before exit - deliveryCount : %d - linkCredit: %d, len(messages): %d", r.msg.deliveryID, r.deliveryCount, r.linkCredit, len(r.messages))
+	return nil
+}
+
+// to be called during detachment
+func (r *Receiver) muxDetachDeferred() {
+	// unblock any in flight message dispositions
+	r.inFlight.clear(r.err)
+
+	// unblock any pending drain requests
+	if r.manualCreditor != nil {
+		r.manualCreditor.EndDrain()
 	}
 }
 

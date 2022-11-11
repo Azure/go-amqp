@@ -2,8 +2,8 @@ package amqp
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
@@ -13,32 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLinkFlowForSender(t *testing.T) {
-	// senders don't actually send flow frames but they do enable require tranfers to be
-	// assigned. We should refactor, this is just fallout from my "lift and shift" of the
-	// flow logic in `mux`
-	l := newTestLink(t)
-	l.receiver = nil
-
-	err := l.DrainCredit(context.Background())
-	require.Error(t, err, "drain can only be used with receiver links using manual credit management")
-
-	err = l.IssueCredit(1)
-	require.Error(t, err, "issueCredit can only be used with receiver links using manual credit management")
-
-	// and flow goes through the non-manual credit path
-	require.EqualValues(t, 0, l.linkCredit, "No link credits have been added")
-
-	// if we have link credit we can enable outgoing transfers
-	l.linkCredit = 1
-	ok, enableOutgoingTransfers := l.doFlow()
-
-	require.True(t, ok, "no errors, should continue to process")
-	require.True(t, enableOutgoingTransfers, "outgoing transfers needed for senders")
-}
-
 func TestLinkFlowThatNeedsToReplenishCredits(t *testing.T) {
 	l := newTestLink(t)
+	go l.mux()
+	defer close(l.close)
 
 	err := l.DrainCredit(context.Background())
 	require.Error(t, err, "drain can only be used with receiver links using manual credit management")
@@ -50,17 +28,19 @@ func TestLinkFlowThatNeedsToReplenishCredits(t *testing.T) {
 	require.EqualValues(t, 0, l.linkCredit, "No link credits have been added")
 
 	// we've consumed half of the maximum credit we're allowed to have - reflow!
-	l.receiver.maxCredit = 2
+	l.maxCredit = 2
 	l.linkCredit = 1
 	l.unsettledMessages = map[string]struct{}{}
 
-	ok, enableOutgoingTransfers := l.doFlow()
-
-	require.True(t, ok, "no errors, should continue to process")
-	require.False(t, enableOutgoingTransfers, "outgoing transfers only needed for senders")
+	select {
+	case l.receiverReady <- struct{}{}:
+		// woke up mux
+	default:
+		t.Fatal("failed to wake up mux")
+	}
 
 	// flow happens immmediately in 'mux'
-	txFrame := <-l.Session.tx
+	txFrame := <-l.session.tx
 
 	switch frame := txFrame.(type) {
 	case *frames.PerformFlow:
@@ -74,6 +54,8 @@ func TestLinkFlowThatNeedsToReplenishCredits(t *testing.T) {
 
 func TestLinkFlowWithZeroCredits(t *testing.T) {
 	l := newTestLink(t)
+	go l.mux()
+	defer close(l.close)
 
 	err := l.DrainCredit(context.Background())
 	require.Error(t, err, "drain can only be used with receiver links using manual credit management")
@@ -84,31 +66,33 @@ func TestLinkFlowWithZeroCredits(t *testing.T) {
 	// and flow goes through the non-manual credit path
 	require.EqualValues(t, 0, l.linkCredit, "No link credits have been added")
 
-	l.receiver.maxCredit = 2
+	l.maxCredit = 2
 	l.linkCredit = 0
 	l.unsettledMessages = map[string]struct{}{
 		"hello":  {},
 		"hello2": {},
 	}
 
-	ok, enableOutgoingTransfers := l.doFlow()
+	select {
+	case l.receiverReady <- struct{}{}:
+		// woke up mux
+	default:
+		t.Fatal("failed to wake up mux")
+	}
 
-	require.True(t, ok)
-	require.False(t, enableOutgoingTransfers)
+	require.Zero(t, l.linkCredit)
 }
 
 func TestLinkFlowDrain(t *testing.T) {
 	l := newTestLink(t)
-
 	// now initialize it as a manual credit link
-	l.receiver.manualCreditor = &manualCreditor{}
-
-	wg := sync.WaitGroup{}
-	wg.Add(1)
+	l.manualCreditor = &manualCreditor{}
+	go l.mux()
+	defer close(l.close)
 
 	go func() {
-		<-l.ReceiverReady
-		l.receiver.manualCreditor.EndDrain()
+		<-l.receiverReady
+		l.manualCreditor.EndDrain()
 	}()
 
 	require.NoError(t, l.DrainCredit(context.Background()))
@@ -116,17 +100,15 @@ func TestLinkFlowDrain(t *testing.T) {
 
 func TestLinkFlowWithManualCreditor(t *testing.T) {
 	l := newTestLink(t)
-	l.receiver.manualCreditor = &manualCreditor{}
-
+	l.manualCreditor = &manualCreditor{}
 	l.linkCredit = 1
+	go l.mux()
+	defer close(l.close)
+
 	require.NoError(t, l.IssueCredit(100))
 
-	ok, enableOutgoingTransfers := l.doFlow()
-	require.True(t, ok)
-	require.False(t, enableOutgoingTransfers, "sender related state is not enabled")
-
 	// flow happens immmediately in 'mux'
-	txFrame := <-l.Session.tx
+	txFrame := <-l.session.tx
 
 	switch frame := txFrame.(type) {
 	case *frames.PerformFlow:
@@ -138,54 +120,78 @@ func TestLinkFlowWithManualCreditor(t *testing.T) {
 }
 
 func TestLinkFlowWithDrain(t *testing.T) {
+	t.Skip("for now")
 	l := newTestLink(t)
-	l.receiver.manualCreditor = &manualCreditor{}
+	l.manualCreditor = &manualCreditor{}
+	go l.mux()
+	defer close(l.close)
 
-	go func() {
-		<-l.ReceiverReady
+	errChan := make(chan error)
 
-		ok, enableOutgoingTransfers := l.doFlow()
-		require.True(t, ok)
-		require.False(t, enableOutgoingTransfers, "sender related state is not enabled")
+	go func(errChan chan error) {
+		<-l.receiverReady
+
+		select {
+		case l.receiverReady <- struct{}{}:
+			// woke up mux
+		default:
+			errChan <- errors.New("failed to wake up mux")
+			return
+		}
 
 		// flow happens immmediately in 'mux'
-		txFrame := <-l.Session.tx
+		txFrame := <-l.session.tx
 
 		switch frame := txFrame.(type) {
 		case *frames.PerformFlow:
-			require.True(t, frame.Drain)
+			if !frame.Drain {
+				errChan <- errors.New("expected drain to be true")
+				return
+			}
+
 			// When we're draining we just automatically set the flow link credit to 0.
 			// This should allow any outstanding messages to get flushed.
-			require.EqualValues(t, 0, *frame.LinkCredit)
+			if lc := *frame.LinkCredit; lc != 0 {
+				errChan <- fmt.Errorf("unepxected LinkCredit: %d", lc)
+				return
+			}
+
 		default:
-			require.Fail(t, fmt.Sprintf("Unexpected frame was transferred: %+v", txFrame))
+			errChan <- fmt.Errorf("Unexpected frame was transferred: %+v", txFrame)
+			return
 		}
 
 		// simulate the return of the flow from the service
-		err := l.muxHandleFrame(&frames.PerformFlow{
-			Drain: true,
-		})
+		if err := l.muxHandleFrame(&frames.PerformFlow{Drain: true}); err != nil {
+			errChan <- err
+			return
+		}
 
-		require.NoError(t, err)
-	}()
+		close(errChan)
+	}(errChan)
 
 	l.linkCredit = 1
 	require.NoError(t, l.DrainCredit(context.Background()))
+	require.NoError(t, <-errChan)
 }
 
 func TestLinkFlowWithManualCreditorAndNoFlowNeeded(t *testing.T) {
 	l := newTestLink(t)
-	l.receiver.manualCreditor = &manualCreditor{}
-
+	l.manualCreditor = &manualCreditor{}
 	l.linkCredit = 1
+	go l.mux()
+	defer close(l.close)
 
-	ok, enableOutgoingTransfers := l.doFlow()
-	require.True(t, ok)
-	require.False(t, enableOutgoingTransfers, "sender related state is not enabled")
+	select {
+	case l.receiverReady <- struct{}{}:
+		// woke up mux
+	default:
+		t.Fatal("failed to wake up mux")
+	}
 
 	// flow happens immmediately in 'mux'
 	select {
-	case fr := <-l.Session.tx: // there won't be a flow this time.
+	case fr := <-l.session.tx: // there won't be a flow this time.
 		require.Failf(t, "No flow frame would be needed since no link credits were added and drain was not requested", "Frame was %+v", fr)
 	case <-time.After(time.Second * 2):
 		// this is the expected case since no frame will be sent.
@@ -194,9 +200,10 @@ func TestLinkFlowWithManualCreditorAndNoFlowNeeded(t *testing.T) {
 
 func TestMuxFlowHandlesDrainProperly(t *testing.T) {
 	l := newTestLink(t)
-	l.receiver.manualCreditor = &manualCreditor{}
-
+	l.manualCreditor = &manualCreditor{}
 	l.linkCredit = 101
+	go l.mux()
+	defer close(l.close)
 
 	// simulate what our 'drain' call to muxFlow would look like
 	// when draining
@@ -208,21 +215,22 @@ func TestMuxFlowHandlesDrainProperly(t *testing.T) {
 	require.EqualValues(t, 501, l.linkCredit, "credits are untouched when draining")
 }
 
-func newTestLink(t *testing.T) *link {
-	l := &link{
-		Source: &frames.Source{},
-		receiver: &Receiver{
+func newTestLink(t *testing.T) *Receiver {
+	l := &Receiver{
+		link: link{
+			source: &frames.Source{},
 			// adding just enough so the debug() print will still work...
 			// debug(1, "FLOW Link Mux half: source: %s, inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s", l.source.Address, l.receiver.inFlight.len(), l.linkCredit, l.deliveryCount, len(l.messages), l.countUnsettled(), l.receiver.maxCredit, l.receiverSettleMode.String())
-			inFlight: inFlight{},
+			detached: make(chan struct{}),
+			session: &Session{
+				tx:   make(chan frames.FrameBody, 100),
+				done: make(chan struct{}),
+			},
+			rx:    make(chan frames.FrameBody, 100),
+			close: make(chan struct{}),
 		},
-		Detached: make(chan struct{}),
-		Session: &Session{
-			tx:   make(chan frames.FrameBody, 100),
-			done: make(chan struct{}),
-		},
-		RX:            make(chan frames.FrameBody, 100),
-		ReceiverReady: make(chan struct{}, 1),
+		inFlight:      inFlight{},
+		receiverReady: make(chan struct{}, 1),
 	}
 
 	return l
@@ -236,22 +244,22 @@ func TestNewSendingLink(t *testing.T) {
 	tests := []struct {
 		label    string
 		opts     SenderOptions
-		validate func(t *testing.T, l *link)
+		validate func(t *testing.T, l *Sender)
 	}{
 		{
 			label: "default options",
-			validate: func(t *testing.T, l *link) {
-				require.Empty(t, l.Target.Capabilities)
-				require.Equal(t, DurabilityNone, l.Source.Durable)
+			validate: func(t *testing.T, l *Sender) {
+				require.Empty(t, l.target.Capabilities)
+				require.Equal(t, DurabilityNone, l.source.Durable)
 				require.False(t, l.dynamicAddr)
-				require.Empty(t, l.Source.ExpiryPolicy)
-				require.Zero(t, l.Source.Timeout)
+				require.Empty(t, l.source.ExpiryPolicy)
+				require.Zero(t, l.source.Timeout)
 				require.True(t, l.detachOnDispositionError)
-				require.NotEmpty(t, l.Key.name)
+				require.NotEmpty(t, l.key.name)
 				require.Empty(t, l.properties)
-				require.Nil(t, l.SenderSettleMode)
-				require.Nil(t, l.ReceiverSettleMode)
-				require.Equal(t, targetAddr, l.Target.Address)
+				require.Nil(t, l.senderSettleMode)
+				require.Nil(t, l.receiverSettleMode)
+				require.Equal(t, targetAddr, l.target.Address)
 			},
 		},
 		{
@@ -270,29 +278,29 @@ func TestNewSendingLink(t *testing.T) {
 				RequestedReceiverSettleMode: ModeFirst.Ptr(),
 				SettlementMode:              ModeSettled.Ptr(),
 			},
-			validate: func(t *testing.T, l *link) {
-				require.Equal(t, encoding.MultiSymbol{"foo", "bar"}, l.Source.Capabilities)
-				require.Equal(t, DurabilityUnsettledState, l.Source.Durable)
+			validate: func(t *testing.T, l *Sender) {
+				require.Equal(t, encoding.MultiSymbol{"foo", "bar"}, l.source.Capabilities)
+				require.Equal(t, DurabilityUnsettledState, l.source.Durable)
 				require.True(t, l.dynamicAddr)
-				require.Equal(t, ExpiryLinkDetach, l.Source.ExpiryPolicy)
-				require.Equal(t, uint32(5), l.Source.Timeout)
+				require.Equal(t, ExpiryLinkDetach, l.source.ExpiryPolicy)
+				require.Equal(t, uint32(5), l.source.Timeout)
 				require.False(t, l.detachOnDispositionError)
-				require.Equal(t, name, l.Key.name)
+				require.Equal(t, name, l.key.name)
 				require.Equal(t, map[encoding.Symbol]interface{}{
 					"property": 123,
 				}, l.properties)
-				require.NotNil(t, l.SenderSettleMode)
-				require.Equal(t, ModeSettled, *l.SenderSettleMode)
-				require.NotNil(t, l.ReceiverSettleMode)
-				require.Equal(t, ModeFirst, *l.ReceiverSettleMode)
-				require.Empty(t, l.Target.Address)
+				require.NotNil(t, l.senderSettleMode)
+				require.Equal(t, ModeSettled, *l.senderSettleMode)
+				require.NotNil(t, l.receiverSettleMode)
+				require.Equal(t, ModeFirst, *l.receiverSettleMode)
+				require.Empty(t, l.target.Address)
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			got, err := newSendingLink(targetAddr, nil, &tt.opts)
+			got, err := newSender(targetAddr, nil, &tt.opts)
 			require.NoError(t, err)
 			require.NotNil(t, got)
 			tt.validate(t, got)
@@ -311,7 +319,7 @@ func TestNewReceivingLink(t *testing.T) {
 	tests := []struct {
 		label    string
 		opts     ReceiverOptions
-		validate func(t *testing.T, l *link)
+		validate func(t *testing.T, l *Receiver)
 
 		wantSource     *frames.Source
 		wantTarget     *frames.Target
@@ -319,24 +327,23 @@ func TestNewReceivingLink(t *testing.T) {
 	}{
 		{
 			label: "default options",
-			validate: func(t *testing.T, l *link) {
+			validate: func(t *testing.T, l *Receiver) {
 				//require.False(t, l.receiver.batching)
 				//require.Equal(t, defaultLinkBatchMaxAge, l.receiver.batchMaxAge)
-				require.Empty(t, l.Target.Capabilities)
+				require.Empty(t, l.target.Capabilities)
 				//require.Equal(t, defaultLinkCredit, l.receiver.maxCredit)
-				require.Equal(t, DurabilityNone, l.Target.Durable)
+				require.Equal(t, DurabilityNone, l.target.Durable)
 				require.False(t, l.dynamicAddr)
-				require.Empty(t, l.Target.ExpiryPolicy)
-				require.Zero(t, l.Target.Timeout)
-				require.Empty(t, l.Source.Filter)
-				require.False(t, l.detachOnDispositionError)
+				require.Empty(t, l.target.ExpiryPolicy)
+				require.Zero(t, l.target.Timeout)
+				require.Empty(t, l.source.Filter)
 				//require.Nil(t, l.receiver.manualCreditor)
-				require.Zero(t, l.MaxMessageSize)
-				require.NotEmpty(t, l.Key.name)
+				require.Zero(t, l.maxMessageSize)
+				require.NotEmpty(t, l.key.name)
 				require.Empty(t, l.properties)
-				require.Nil(t, l.SenderSettleMode)
-				require.Nil(t, l.ReceiverSettleMode)
-				require.Equal(t, sourceAddr, l.Source.Address)
+				require.Nil(t, l.senderSettleMode)
+				require.Nil(t, l.receiverSettleMode)
+				require.Equal(t, sourceAddr, l.source.Address)
 			},
 		},
 		{
@@ -363,15 +370,15 @@ func TestNewReceivingLink(t *testing.T) {
 				RequestedSenderSettleMode: ModeMixed.Ptr(),
 				SettlementMode:            ModeSecond.Ptr(),
 			},
-			validate: func(t *testing.T, l *link) {
+			validate: func(t *testing.T, l *Receiver) {
 				//require.True(t, l.receiver.batching)
 				//require.Equal(t, 1*time.Minute, l.receiver.batchMaxAge)
-				require.Equal(t, encoding.MultiSymbol{"foo", "bar"}, l.Target.Capabilities)
+				require.Equal(t, encoding.MultiSymbol{"foo", "bar"}, l.target.Capabilities)
 				//require.Equal(t, uint32(32), l.receiver.maxCredit)
-				require.Equal(t, DurabilityConfiguration, l.Target.Durable)
+				require.Equal(t, DurabilityConfiguration, l.target.Durable)
 				require.True(t, l.dynamicAddr)
-				require.Equal(t, ExpiryNever, l.Target.ExpiryPolicy)
-				require.Equal(t, uint32(3), l.Target.Timeout)
+				require.Equal(t, ExpiryNever, l.target.ExpiryPolicy)
+				require.Equal(t, uint32(3), l.target.Timeout)
 				require.Equal(t, encoding.Filter{
 					selectorFilter: &encoding.DescribedType{
 						Descriptor: selectorFilterCode,
@@ -381,26 +388,25 @@ func TestNewReceivingLink(t *testing.T) {
 						Descriptor: uint64(0x00000137000000C),
 						Value:      "123",
 					},
-				}, l.Source.Filter)
-				require.False(t, l.detachOnDispositionError)
+				}, l.source.Filter)
 				//require.NotNil(t, l.receiver.manualCreditor)
-				require.Equal(t, uint64(1024), l.MaxMessageSize)
-				require.Equal(t, name, l.Key.name)
+				require.Equal(t, uint64(1024), l.maxMessageSize)
+				require.Equal(t, name, l.key.name)
 				require.Equal(t, map[encoding.Symbol]interface{}{
 					"property": 123,
 				}, l.properties)
-				require.NotNil(t, l.SenderSettleMode)
-				require.Equal(t, ModeMixed, *l.SenderSettleMode)
-				require.NotNil(t, l.ReceiverSettleMode)
-				require.Equal(t, ModeSecond, *l.ReceiverSettleMode)
-				require.Empty(t, l.Source.Address)
+				require.NotNil(t, l.senderSettleMode)
+				require.Equal(t, ModeMixed, *l.senderSettleMode)
+				require.NotNil(t, l.receiverSettleMode)
+				require.Equal(t, ModeSecond, *l.receiverSettleMode)
+				require.Empty(t, l.source.Address)
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			got, err := newReceivingLink(sourceAddr, nil, &Receiver{}, &tt.opts)
+			got, err := newReceiver(sourceAddr, nil, &tt.opts)
 			require.NoError(t, err)
 			require.NotNil(t, got)
 			tt.validate(t, got)

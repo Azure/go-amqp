@@ -104,9 +104,9 @@ type Message struct {
 	// This field is ignored when LinkSenderSettle is not ModeMixed.
 	SendSettled bool
 
-	link       *link  // the receiving link
-	deliveryID uint32 // used when sending disposition
-	settled    bool   // whether transfer was settled by sender
+	rcvr       *Receiver // the receiving link
+	deliveryID uint32    // used when sending disposition
+	settled    bool      // whether transfer was settled by sender
 }
 
 // NewMessage returns a *Message with data as the payload.
@@ -131,8 +131,8 @@ func (m *Message) GetData() []byte {
 
 // LinkName returns the receiving link name or the empty string.
 func (m *Message) LinkName() string {
-	if m.link != nil {
-		return m.link.Key.name
+	if m.rcvr != nil {
+		return m.rcvr.key.name
 	}
 	return ""
 }

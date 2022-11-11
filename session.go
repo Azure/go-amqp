@@ -125,21 +125,13 @@ func (s *Session) txFrame(p frames.FrameBody, done chan encoding.DeliveryState) 
 // NewReceiver opens a new receiver link on the session.
 // opts: pass nil to accept the default values.
 func (s *Session) NewReceiver(ctx context.Context, source string, opts *ReceiverOptions) (*Receiver, error) {
-	r := &Receiver{
-		batching:    defaultLinkBatching,
-		batchMaxAge: defaultLinkBatchMaxAge,
-		maxCredit:   defaultLinkCredit,
-	}
-
-	l, err := newReceivingLink(source, s, r, opts)
+	r, err := newReceiver(source, s, opts)
 	if err != nil {
 		return nil, err
 	}
-	if err = l.attach(ctx, s); err != nil {
+	if err = r.attach(ctx, s); err != nil {
 		return nil, err
 	}
-
-	r.link = l
 
 	// batching is just extra overhead when maxCredits == 1
 	if r.maxCredit == 1 {
@@ -159,7 +151,7 @@ func (s *Session) NewReceiver(ctx context.Context, source string, opts *Receiver
 // NewSender opens a new sender link on the session.
 // opts: pass nil to accept the default values.
 func (s *Session) NewSender(ctx context.Context, target string, opts *SenderOptions) (*Sender, error) {
-	l, err := newSendingLink(target, s, opts)
+	l, err := newSender(target, s, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +159,7 @@ func (s *Session) NewSender(ctx context.Context, target string, opts *SenderOpti
 		return nil, err
 	}
 
-	return &Sender{link: l}, nil
+	return l, nil
 }
 
 func (s *Session) mux(remoteBegin *frames.PerformBegin) {
@@ -351,8 +343,8 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 					return
 				}
 
-				link.RemoteHandle = body.Handle
-				links[link.RemoteHandle] = link
+				link.remoteHandle = body.Handle
+				links[link.remoteHandle] = link
 
 				s.muxFrameToLink(link, fr.Body)
 
@@ -376,11 +368,11 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 				select {
 				case <-s.conn.Done:
-				case link.RX <- fr.Body:
+				case link.rx <- fr.Body:
 				}
 
 				// if this message is received unsettled and link rcv-settle-mode == second, add to handlesByRemoteDeliveryID
-				if !body.Settled && body.DeliveryID != nil && link.ReceiverSettleMode != nil && *link.ReceiverSettleMode == ModeSecond {
+				if !body.Settled && body.DeliveryID != nil && link.receiverSettleMode != nil && *link.receiverSettleMode == ModeSecond {
 					debug.Log(1, "TX(Session): adding handle to handlesByRemoteDeliveryID. delivery ID: %d", *body.DeliveryID)
 					handlesByRemoteDeliveryID[*body.DeliveryID] = body.Handle
 				}
@@ -413,8 +405,8 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				// detach or our peer detached us. either way, now that
 				// the link has processed the frame it's detached so we
 				// are safe to clean up its state.
-				delete(links, link.RemoteHandle)
-				delete(deliveryIDByHandle, link.Handle)
+				delete(links, link.remoteHandle)
+				delete(deliveryIDByHandle, link.handle)
 
 			case *frames.PerformEnd:
 				_ = s.txFrame(&frames.PerformEnd{}, nil)
@@ -493,9 +485,9 @@ func (s *Session) allocateHandle(l *link) error {
 	defer s.linksMu.Unlock()
 
 	// Check if link name already exists, if so then an error should be returned
-	existing := s.linksByKey[l.Key]
+	existing := s.linksByKey[l.key]
 	if existing != nil {
-		return fmt.Errorf("link with name '%v' already exists", l.Key.name)
+		return fmt.Errorf("link with name '%v' already exists", l.key.name)
 	}
 
 	next, ok := s.handles.Next()
@@ -504,8 +496,8 @@ func (s *Session) allocateHandle(l *link) error {
 		return fmt.Errorf("reached session handle max (%d)", s.handleMax+1)
 	}
 
-	l.Handle = next         // allocate handle to the link
-	s.linksByKey[l.Key] = l // add to mapping
+	l.handle = next         // allocate handle to the link
+	s.linksByKey[l.key] = l // add to mapping
 
 	return nil
 }
@@ -514,16 +506,16 @@ func (s *Session) deallocateHandle(l *link) {
 	s.linksMu.Lock()
 	defer s.linksMu.Unlock()
 
-	delete(s.linksByKey, l.Key)
-	s.handles.Remove(l.Handle)
-	close(l.RX)
+	delete(s.linksByKey, l.key)
+	s.handles.Remove(l.handle)
+	close(l.rx)
 }
 
 func (s *Session) muxFrameToLink(l *link, fr frames.FrameBody) {
 	select {
-	case l.RX <- fr:
+	case l.rx <- fr:
 		// frame successfully sent to link
-	case <-l.Detached:
+	case <-l.detached:
 		// link is closed
 		// this should be impossible to hit as the link has been removed from the session once Detached is closed
 	case <-s.conn.Done:

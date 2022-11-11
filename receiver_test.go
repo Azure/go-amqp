@@ -410,13 +410,13 @@ func TestReceiveSuccessModeFirst(t *testing.T) {
 	msg, err := r.Receive(ctx)
 	cancel()
 	require.NoError(t, err)
-	if c := r.link.countUnsettled(); c != 0 {
+	if c := r.countUnsettled(); c != 0 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	// wait for the link to unpause as credit should now be available
-	require.NoError(t, waitForLink(r.link, false))
+	require.NoError(t, waitForReceiver(r, false))
 	// link credit should be 1
-	if c := r.link.linkCredit; c != 1 {
+	if c := r.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 	// subsequent dispositions should have no effect
@@ -469,20 +469,20 @@ func TestReceiveSuccessModeSecondAccept(t *testing.T) {
 	msg, err := r.Receive(ctx)
 	cancel()
 	require.NoError(t, err)
-	if c := r.link.countUnsettled(); c != 1 {
+	if c := r.countUnsettled(); c != 1 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	// wait for the link to pause as we've consumed all available credit
-	require.NoError(t, waitForLink(r.link, true))
+	require.NoError(t, waitForReceiver(r, true))
 	// link credit must be zero since we only started with 1
-	if c := r.link.linkCredit; c != 0 {
+	if c := r.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	err = r.AcceptMessage(ctx, msg)
 	cancel()
 	require.NoError(t, err)
-	if c := r.link.countUnsettled(); c != 0 {
+	if c := r.countUnsettled(); c != 0 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	require.Equal(t, true, msg.settled)
@@ -494,9 +494,9 @@ func TestReceiveSuccessModeSecondAccept(t *testing.T) {
 	}
 	cancel()
 	// wait for the link to unpause as credit should now be available
-	require.NoError(t, waitForLink(r.link, false))
+	require.NoError(t, waitForReceiver(r, false))
 	// link credit should be back to 1
-	if c := r.link.linkCredit; c != 1 {
+	if c := r.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 	// subsequent dispositions should have no effect
@@ -549,13 +549,13 @@ func TestReceiveSuccessModeSecondAcceptOnClosedLink(t *testing.T) {
 	msg, err := r.Receive(ctx)
 	cancel()
 	require.NoError(t, err)
-	if c := r.link.countUnsettled(); c != 1 {
+	if c := r.countUnsettled(); c != 1 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	// wait for the link to pause as we've consumed all available credit
-	require.NoError(t, waitForLink(r.link, true))
+	require.NoError(t, waitForReceiver(r, true))
 	// link credit must be zero since we only started with 1
-	if c := r.link.linkCredit; c != 0 {
+	if c := r.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 
@@ -609,20 +609,20 @@ func TestReceiveSuccessModeSecondReject(t *testing.T) {
 	msg, err := r.Receive(ctx)
 	cancel()
 	require.NoError(t, err)
-	if c := r.link.countUnsettled(); c != 1 {
+	if c := r.countUnsettled(); c != 1 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	// wait for the link to pause as we've consumed all available credit
-	require.NoError(t, waitForLink(r.link, true))
+	require.NoError(t, waitForReceiver(r, true))
 	// link credit must be zero since we only started with 1
-	if c := r.link.linkCredit; c != 0 {
+	if c := r.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	err = r.RejectMessage(ctx, msg, nil)
 	cancel()
 	require.NoError(t, err)
-	if c := r.link.countUnsettled(); c != 0 {
+	if c := r.countUnsettled(); c != 0 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	// perform a dummy receive with short timeout to trigger flow
@@ -633,9 +633,9 @@ func TestReceiveSuccessModeSecondReject(t *testing.T) {
 	}
 	cancel()
 	// wait for the link to unpause as credit should now be available
-	require.NoError(t, waitForLink(r.link, false))
+	require.NoError(t, waitForReceiver(r, false))
 	// link credit should be back to 1
-	if c := r.link.linkCredit; c != 1 {
+	if c := r.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 	require.NoError(t, client.Close())
@@ -683,20 +683,20 @@ func TestReceiveSuccessModeSecondRelease(t *testing.T) {
 	msg, err := r.Receive(ctx)
 	cancel()
 	require.NoError(t, err)
-	if c := r.link.countUnsettled(); c != 1 {
+	if c := r.countUnsettled(); c != 1 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	// wait for the link to pause as we've consumed all available credit
-	require.NoError(t, waitForLink(r.link, true))
+	require.NoError(t, waitForReceiver(r, true))
 	// link credit must be zero since we only started with 1
-	if c := r.link.linkCredit; c != 0 {
+	if c := r.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	err = r.ReleaseMessage(ctx, msg)
 	cancel()
 	require.NoError(t, err)
-	if c := r.link.countUnsettled(); c != 0 {
+	if c := r.countUnsettled(); c != 0 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	// perform a dummy receive with short timeout to trigger flow
@@ -707,9 +707,9 @@ func TestReceiveSuccessModeSecondRelease(t *testing.T) {
 	}
 	cancel()
 	// wait for the link to unpause as credit should now be available
-	require.NoError(t, waitForLink(r.link, false))
+	require.NoError(t, waitForReceiver(r, false))
 	// link credit should be back to 1
-	if c := r.link.linkCredit; c != 1 {
+	if c := r.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 	require.NoError(t, client.Close())
@@ -762,13 +762,13 @@ func TestReceiveSuccessModeSecondModify(t *testing.T) {
 	msg, err := r.Receive(ctx)
 	cancel()
 	require.NoError(t, err)
-	if c := r.link.countUnsettled(); c != 1 {
+	if c := r.countUnsettled(); c != 1 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	// wait for the link to pause as we've consumed all available credit
-	require.NoError(t, waitForLink(r.link, true))
+	require.NoError(t, waitForReceiver(r, true))
 	// link credit must be zero since we only started with 1
-	if c := r.link.linkCredit; c != 0 {
+	if c := r.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
@@ -780,7 +780,7 @@ func TestReceiveSuccessModeSecondModify(t *testing.T) {
 	})
 	cancel()
 	require.NoError(t, err)
-	if c := r.link.countUnsettled(); c != 0 {
+	if c := r.countUnsettled(); c != 0 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	// perform a dummy receive with short timeout to trigger flow
@@ -791,9 +791,9 @@ func TestReceiveSuccessModeSecondModify(t *testing.T) {
 	}
 	cancel()
 	// wait for the link to unpause as credit should now be available
-	require.NoError(t, waitForLink(r.link, false))
+	require.NoError(t, waitForReceiver(r, false))
 	// link credit should be back to 1
-	if c := r.link.linkCredit; c != 1 {
+	if c := r.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 	require.NoError(t, client.Close())
@@ -803,10 +803,8 @@ func TestReceiverPrefetch(t *testing.T) {
 	messagesCh := make(chan Message, 1)
 
 	receiver := &Receiver{
-		link: &link{
-			Messages:      messagesCh,
-			ReceiverReady: make(chan struct{}),
-		},
+		messages:      messagesCh,
+		receiverReady: make(chan struct{}),
 	}
 
 	// if there are no cached messages we just return immediately - no error, no message.
@@ -878,20 +876,20 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 		result = append(result, msg.Data[i]...)
 	}
 	require.Equal(t, payload, result)
-	if c := r.link.countUnsettled(); c != 1 {
+	if c := r.countUnsettled(); c != 1 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	// wait for the link to pause as we've consumed all available credit
-	require.NoError(t, waitForLink(r.link, true))
+	require.NoError(t, waitForReceiver(r, true))
 	// link credit must be zero since we only started with 1
-	if c := r.link.linkCredit; c != 0 {
+	if c := r.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	err = r.AcceptMessage(ctx, msg)
 	cancel()
 	require.NoError(t, err)
-	if c := r.link.countUnsettled(); c != 0 {
+	if c := r.countUnsettled(); c != 0 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	require.Equal(t, true, msg.settled)
@@ -903,9 +901,9 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 	}
 	cancel()
 	// wait for the link to unpause as credit should now be available
-	require.NoError(t, waitForLink(r.link, false))
+	require.NoError(t, waitForReceiver(r, false))
 	// link credit should be back to 1
-	if c := r.link.linkCredit; c != 1 {
+	if c := r.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 	require.NoError(t, client.Close())
@@ -1166,13 +1164,13 @@ func TestReceiveSuccessAcceptFails(t *testing.T) {
 	msg, err := r.Receive(ctx)
 	cancel()
 	require.NoError(t, err)
-	if c := r.link.countUnsettled(); c != 1 {
+	if c := r.countUnsettled(); c != 1 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	// wait for the link to pause as we've consumed all available credit
-	require.NoError(t, waitForLink(r.link, true))
+	require.NoError(t, waitForReceiver(r, true))
 	// link credit must be zero since we only started with 1
-	if c := r.link.linkCredit; c != 0 {
+	if c := r.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 	// close client before accepting the message
@@ -1184,7 +1182,7 @@ func TestReceiveSuccessAcceptFails(t *testing.T) {
 	if !errors.As(err, &connErr) {
 		t.Fatalf("unexpected error type %T", err)
 	}
-	if c := r.link.countUnsettled(); c != 1 {
+	if c := r.countUnsettled(); c != 1 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 }
@@ -1234,14 +1232,14 @@ func TestReceiverDispositionBatcherTimer(t *testing.T) {
 	msg, err := r.Receive(ctx)
 	cancel()
 	require.NoError(t, err)
-	if c := r.link.countUnsettled(); c != 1 {
+	if c := r.countUnsettled(); c != 1 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	ctx, cancel = context.WithTimeout(context.Background(), 2*time.Second)
 	err = r.AcceptMessage(ctx, msg)
 	cancel()
 	require.NoError(t, err)
-	if c := r.link.countUnsettled(); c != 0 {
+	if c := r.countUnsettled(); c != 0 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	require.Equal(t, 0, r.inFlight.len())

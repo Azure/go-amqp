@@ -476,7 +476,7 @@ func newReceiver(source string, s *Session, opts *ReceiverOptions) (*Receiver, e
 
 // attach sends the Attach performative to establish the link with its parent session.
 // this is automatically called by the new*Link constructors.
-func (r *Receiver) attach(ctx context.Context, s *Session) error {
+func (r *Receiver) attach(ctx context.Context) error {
 	// buffer rx to linkCredit so that conn.mux won't block
 	// attempting to send to a slow reader
 	if r.manualCreditor != nil {
@@ -485,7 +485,7 @@ func (r *Receiver) attach(ctx context.Context, s *Session) error {
 		r.l.rx = make(chan frames.FrameBody, r.l.linkCredit)
 	}
 
-	if err := r.l.attach(ctx, s, func(pa *frames.PerformAttach) {
+	if err := r.l.attach(ctx, func(pa *frames.PerformAttach) {
 		pa.Role = encoding.RoleReceiver
 		if pa.Source == nil {
 			pa.Source = new(frames.Source)

@@ -54,8 +54,8 @@ type link struct {
 
 // attach sends the Attach performative to establish the link with its parent session.
 // this is automatically called by the new*Link constructors.
-func (l *link) attach(ctx context.Context, s *Session, beforeAttach func(*frames.PerformAttach), afterAttach func(*frames.PerformAttach)) error {
-	if err := s.allocateHandle(l); err != nil {
+func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAttach), afterAttach func(*frames.PerformAttach)) error {
+	if err := l.session.allocateHandle(l); err != nil {
 		return err
 	}
 
@@ -78,7 +78,7 @@ func (l *link) attach(ctx context.Context, s *Session, beforeAttach func(*frames
 
 	// we use send to have positive confirmation on transmission
 	send := make(chan encoding.DeliveryState)
-	_ = s.txFrame(attach, send)
+	_ = l.session.txFrame(attach, send)
 
 	// wait for response
 	var fr frames.FrameBody
@@ -90,28 +90,28 @@ func (l *link) attach(ctx context.Context, s *Session, beforeAttach func(*frames
 			// and that the ctx was too short to wait for the ack. in this
 			// case we must send a detach before deallocation
 			go func() {
-				_ = s.txFrame(&frames.PerformDetach{
+				_ = l.session.txFrame(&frames.PerformDetach{
 					Handle: l.handle,
 					Closed: true,
 				}, nil)
 				select {
-				case <-s.done:
+				case <-l.session.done:
 					// session has terminated, no need to deallocate in this case
 				case <-time.After(5 * time.Second):
 					debug.Log(3, "link.attach() clean-up timed out waiting for ack")
 				case <-l.rx:
 					// received ack, safe to delete handle
-					s.deallocateHandle(l)
+					l.session.deallocateHandle(l)
 				}
 			}()
 		default:
 			// attach wasn't written to the network, so delete the handle
-			s.deallocateHandle(l)
+			l.session.deallocateHandle(l)
 		}
 		return ctx.Err()
-	case <-s.done:
+	case <-l.session.done:
 		// session has terminated, no need to deallocate in this case
-		return s.err
+		return l.session.err
 	case fr = <-l.rx:
 	}
 	debug.Log(3, "RX (attachLink): %s", fr)
@@ -135,17 +135,17 @@ func (l *link) attach(ctx context.Context, s *Session, beforeAttach func(*frames
 		case <-ctx.Done():
 			// if we don't send an ack then we're in violation of the protocol
 			go func() {
-				_ = s.txFrame(&frames.PerformDetach{
+				_ = l.session.txFrame(&frames.PerformDetach{
 					Handle: l.handle,
 					Closed: true,
 				}, nil)
-				s.deallocateHandle(l)
+				l.session.deallocateHandle(l)
 			}()
 			return ctx.Err()
-		case <-s.done:
-			return s.err
+		case <-l.session.done:
+			return l.session.err
 		case fr = <-l.rx:
-			s.deallocateHandle(l)
+			l.session.deallocateHandle(l)
 		}
 
 		detach, ok := fr.(*frames.PerformDetach)
@@ -159,7 +159,7 @@ func (l *link) attach(ctx context.Context, s *Session, beforeAttach func(*frames
 			Closed: true,
 		}
 		debug.Log(1, "TX (attachLink): %s", fr)
-		_ = s.txFrame(fr, nil)
+		_ = l.session.txFrame(fr, nil)
 
 		if detach.Error == nil {
 			return fmt.Errorf("received detach with no error specified")

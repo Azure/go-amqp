@@ -123,8 +123,8 @@ func TestSessionOptions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			session := newSession(nil, 0)
-			session.init(&tt.opt)
+			session := newSession(nil, 0, &tt.opt)
+			tt.verify(t, session)
 		})
 	}
 }

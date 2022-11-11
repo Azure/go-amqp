@@ -379,7 +379,7 @@ func (c *conn) Err() error {
 	return &ConnectionError{inner: c.err}
 }
 
-func (c *conn) NewSession() (*Session, error) {
+func (c *conn) NewSession(opts *SessionOptions) (*Session, error) {
 	c.sessionsByChannelMu.Lock()
 	defer c.sessionsByChannelMu.Unlock()
 
@@ -389,7 +389,7 @@ func (c *conn) NewSession() (*Session, error) {
 	if !ok {
 		return nil, fmt.Errorf("reached connection channel max (%d)", c.channelMax)
 	}
-	session := newSession(c, uint16(channel))
+	session := newSession(c, uint16(channel), opts)
 	c.sessionsByChannel[session.channel] = session
 	return session, nil
 }

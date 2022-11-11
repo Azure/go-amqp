@@ -237,7 +237,7 @@ func newSender(target string, s *Session, opts *SenderOptions) (*Sender, error) 
 	return l, nil
 }
 
-func (s *Sender) attach(ctx context.Context, session *Session) error {
+func (s *Sender) attach(ctx context.Context) error {
 	// sending unsettled messages when the receiver is in mode-second is currently
 	// broken and causes a hang after sending, so just disallow it for now.
 	if senderSettleModeValue(s.l.senderSettleMode) != ModeSettled && receiverSettleModeValue(s.l.receiverSettleMode) == ModeSecond {
@@ -246,7 +246,7 @@ func (s *Sender) attach(ctx context.Context, session *Session) error {
 
 	s.l.rx = make(chan frames.FrameBody, 1)
 
-	if err := s.l.attach(ctx, session, func(pa *frames.PerformAttach) {
+	if err := s.l.attach(ctx, func(pa *frames.PerformAttach) {
 		pa.Role = encoding.RoleSender
 		if pa.Target == nil {
 			pa.Target = new(frames.Target)

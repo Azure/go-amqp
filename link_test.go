@@ -120,7 +120,6 @@ func TestLinkFlowWithManualCreditor(t *testing.T) {
 }
 
 func TestLinkFlowWithDrain(t *testing.T) {
-	t.Skip("for now")
 	l := newTestLink(t)
 	l.manualCreditor = &manualCreditor{}
 	go l.mux()

@@ -208,21 +208,6 @@ func (l *link) setSettleModes(resp *frames.PerformAttach) error {
 	return nil
 }
 
-// Close closes the Sender and AMQP link.
-func (l *link) closeLink(ctx context.Context) error {
-	l.closeOnce.Do(func() { close(l.close) })
-	select {
-	case <-l.detached:
-		// mux exited
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-	if l.err == ErrLinkClosed {
-		return nil
-	}
-	return l.err
-}
-
 // muxHandleFrame processes fr based on type.
 func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 	switch fr := fr.(type) {
@@ -245,6 +230,21 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 	}
 
 	return nil
+}
+
+// Close closes the Sender and AMQP link.
+func (l *link) closeLink(ctx context.Context) error {
+	l.closeOnce.Do(func() { close(l.close) })
+	select {
+	case <-l.detached:
+		// mux exited
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	if l.err == ErrLinkClosed {
+		return nil
+	}
+	return l.err
 }
 
 func (l *link) muxDetach(deferred func(), onRXTransfer func(frames.PerformTransfer)) {

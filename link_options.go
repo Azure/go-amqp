@@ -63,6 +63,23 @@ type SenderOptions struct {
 
 	// SourceAddress specifies the source address for this sender.
 	SourceAddress string
+
+	// TargetDurability indicates what state of the peer will be retained durably.
+	//
+	// Default: DurabilityNone.
+	TargetDurability Durability
+
+	// TargetExpiryPolicy determines when the expiry timer of the peer starts counting
+	// down from the timeout value.  If the link is subsequently re-attached before
+	// the timeout is reached, the count down is aborted.
+	//
+	// Default: ExpirySessionEnd.
+	TargetExpiryPolicy ExpiryPolicy
+
+	// ExpiryTimeout is the duration in seconds that the peer will be retained.
+	//
+	// Default: 0.
+	TargetExpiryTimeout uint32
 }
 
 type ReceiverOptions struct {
@@ -157,6 +174,23 @@ type ReceiverOptions struct {
 
 	// TargetAddress specifies the target address for this receiver.
 	TargetAddress string
+
+	// SenderDurability indicates what state of the peer will be retained durably.
+	//
+	// Default: DurabilityNone.
+	SenderDurability Durability
+
+	// SenderExpiryPolicy determines when the expiry timer of the peer starts counting
+	// down from the timeout value.  If the link is subsequently re-attached before
+	// the timeout is reached, the count down is aborted.
+	//
+	// Default: ExpirySessionEnd.
+	SenderExpiryPolicy ExpiryPolicy
+
+	// SenderExpiryTimeout is the duration in seconds that the peer will be retained.
+	//
+	// Default: 0.
+	SenderExpiryTimeout uint32
 }
 
 // LinkFilter is an advanced API for setting non-standard source filters.

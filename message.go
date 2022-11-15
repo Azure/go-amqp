@@ -32,7 +32,7 @@ type Message struct {
 	// The delivery-annotations section is used for delivery-specific non-standard
 	// properties at the head of the message. Delivery annotations convey information
 	// from the sending peer to the receiving peer.
-	DeliveryAnnotations encoding.Annotations
+	DeliveryAnnotations Annotations
 	// If the recipient does not understand the annotation it cannot be acted upon
 	// and its effects (such as any implied propagation) cannot be acted upon.
 	// Annotations might be specific to one implementation, or common to multiple
@@ -48,7 +48,7 @@ type Message struct {
 
 	// The message-annotations section is used for properties of the message which
 	// are aimed at the infrastructure.
-	Annotations encoding.Annotations
+	Annotations Annotations
 	// The message-annotations section is used for properties of the message which
 	// are aimed at the infrastructure and SHOULD be propagated across every
 	// delivery step. Message annotations convey information about the message.
@@ -97,7 +97,7 @@ type Message struct {
 	// can only be calculated or evaluated once the whole bare message has been
 	// constructed or seen (for example message hashes, HMACs, signatures and
 	// encryption details).
-	Footer encoding.Annotations
+	Footer Annotations
 
 	// Mark the message as settled when LinkSenderSettle is ModeMixed.
 	//
@@ -524,4 +524,5 @@ func (p *MessageProperties) Unmarshal(r *buffer.Buffer) error {
 // String keys are encoded as AMQP Symbols.
 type Annotations = encoding.Annotations
 
+// UUID is a 128 bit identifier as defined in RFC 4122.
 type UUID = encoding.UUID

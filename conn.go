@@ -162,7 +162,7 @@ type Conn struct {
 	sessionsByChannelMu sync.RWMutex
 
 	// connReader
-	rxBuf         buffer.Buffer // incomes bytes buffer
+	rxBuf         buffer.Buffer // incoming bytes buffer
 	rxDone        chan struct{} // closed when connReader exits
 	rxErr         error         // contains last error reading from c.net; DO NOT TOUCH outside of connReader until rxDone has been closed!
 	connReaderRun chan func()   // functions to be run by conn reader (set deadline on conn to run)
@@ -798,6 +798,8 @@ func (c *Conn) exchangeProtoHeader(pID protoID) (stateFunc, error) {
 
 // readProtoHeader reads a protocol header packet from c.rxProto.
 func (c *Conn) readProtoHeader() (protoHeader, error) {
+	const protoHeaderSize = 8
+
 	// only read from the network once our buffer has been exhausted.
 	// TODO: this preserves existing behavior as some tests rely on this
 	// implementation detail (it lets you replay a stream of bytes). we
@@ -830,6 +832,7 @@ func (c *Conn) readProtoHeader() (protoHeader, error) {
 	if !ok {
 		return protoHeader{}, errors.New("invalid protoHeader")
 	}
+	// bounds check hint to compiler; see golang.org/issue/14808
 	_ = buf[7]
 
 	if !bytes.Equal(buf[:4], []byte{'A', 'M', 'Q', 'P'}) {
@@ -1003,8 +1006,6 @@ func (c *Conn) readSingleFrame() (frames.Frame, error) {
 
 	return fr, nil
 }
-
-const protoHeaderSize = 8
 
 type protoHeader struct {
 	ProtoID  protoID

@@ -7,7 +7,7 @@ import (
 )
 
 type SenderOptions struct {
-	// Capabilities is the list of extension capabilities the sender supports/desires.
+	// Capabilities is the list of extension capabilities the sender supports.
 	Capabilities []string
 
 	// Durability indicates what state of the sender will be retained durably.
@@ -64,6 +64,9 @@ type SenderOptions struct {
 	// SourceAddress specifies the source address for this sender.
 	SourceAddress string
 
+	// TargetCapabilities is the list of extension capabilities the sender desires.
+	TargetCapabilities []string
+
 	// TargetDurability indicates what state of the peer will be retained durably.
 	//
 	// Default: DurabilityNone.
@@ -100,7 +103,7 @@ type ReceiverOptions struct {
 	// Default: 5 seconds.
 	BatchMaxAge time.Duration
 
-	// Capabilities is the list of extension capabilities the receiver supports/desires.
+	// Capabilities is the list of extension capabilities the receiver supports.
 	Capabilities []string
 
 	// Credit specifies the maximum number of unacknowledged messages
@@ -174,6 +177,9 @@ type ReceiverOptions struct {
 
 	// TargetAddress specifies the target address for this receiver.
 	TargetAddress string
+
+	// SenderCapabilities is the list of extension capabilities the receiver desires.
+	SenderCapabilities []string
 
 	// SenderDurability indicates what state of the peer will be retained durably.
 	//

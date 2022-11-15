@@ -234,6 +234,9 @@ func newSender(target string, s *Session, opts *SenderOptions) (*Sender, error) 
 		l.l.senderSettleMode = opts.SettlementMode
 	}
 	l.l.source.Address = opts.SourceAddress
+	for _, v := range opts.TargetCapabilities {
+		l.l.target.Capabilities = append(l.l.target.Capabilities, encoding.Symbol(v))
+	}
 	if opts.TargetDurability != DurabilityNone {
 		l.l.target.Durable = opts.TargetDurability
 	}

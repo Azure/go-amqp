@@ -5,13 +5,13 @@ import "github.com/Azure/go-amqp/internal/encoding"
 // Sender Settlement Modes
 const (
 	// Sender will send all deliveries initially unsettled to the receiver.
-	ModeUnsettled SenderSettleMode = encoding.ModeUnsettled
+	SenderSettleModeUnsettled SenderSettleMode = encoding.SenderSettleModeUnsettled
 
 	// Sender will send all deliveries settled to the receiver.
-	ModeSettled SenderSettleMode = encoding.ModeSettled
+	SenderSettleModeSettled SenderSettleMode = encoding.SenderSettleModeSettled
 
 	// Sender MAY send a mixture of settled and unsettled deliveries to the receiver.
-	ModeMixed SenderSettleMode = encoding.ModeMixed
+	SenderSettleModeMixed SenderSettleMode = encoding.SenderSettleModeMixed
 )
 
 // SenderSettleMode specifies how the sender will settle messages.
@@ -19,7 +19,7 @@ type SenderSettleMode = encoding.SenderSettleMode
 
 func senderSettleModeValue(m *SenderSettleMode) SenderSettleMode {
 	if m == nil {
-		return ModeMixed
+		return SenderSettleModeMixed
 	}
 	return *m
 }
@@ -27,12 +27,12 @@ func senderSettleModeValue(m *SenderSettleMode) SenderSettleMode {
 // Receiver Settlement Modes
 const (
 	// Receiver will spontaneously settle all incoming transfers.
-	ModeFirst ReceiverSettleMode = encoding.ModeFirst
+	ReceiverSettleModeFirst ReceiverSettleMode = encoding.ReceiverSettleModeFirst
 
 	// Receiver will only settle after sending the disposition to the
 	// sender and receiving a disposition indicating settlement of
 	// the delivery from the sender.
-	ModeSecond ReceiverSettleMode = encoding.ModeSecond
+	ReceiverSettleModeSecond ReceiverSettleMode = encoding.ReceiverSettleModeSecond
 )
 
 // ReceiverSettleMode specifies how the receiver will settle messages.
@@ -40,7 +40,7 @@ type ReceiverSettleMode = encoding.ReceiverSettleMode
 
 func receiverSettleModeValue(m *ReceiverSettleMode) ReceiverSettleMode {
 	if m == nil {
-		return ModeFirst
+		return ReceiverSettleModeFirst
 	}
 	return *m
 }
@@ -66,18 +66,18 @@ type Durability = encoding.Durability
 // Expiry Policies
 const (
 	// The expiry timer starts when terminus is detached.
-	ExpiryLinkDetach ExpiryPolicy = encoding.ExpiryLinkDetach
+	ExpiryPolicyLinkDetach ExpiryPolicy = encoding.ExpiryLinkDetach
 
 	// The expiry timer starts when the most recently
 	// associated session is ended.
-	ExpirySessionEnd ExpiryPolicy = encoding.ExpirySessionEnd
+	ExpiryPolicySessionEnd ExpiryPolicy = encoding.ExpirySessionEnd
 
 	// The expiry timer starts when most recently associated
 	// connection is closed.
-	ExpiryConnectionClose ExpiryPolicy = encoding.ExpiryConnectionClose
+	ExpiryPolicyConnectionClose ExpiryPolicy = encoding.ExpiryConnectionClose
 
 	// The terminus never expires.
-	ExpiryNever ExpiryPolicy = encoding.ExpiryNever
+	ExpiryPolicyNever ExpiryPolicy = encoding.ExpiryNever
 )
 
 // ExpiryPolicy specifies when the expiry timer of a terminus

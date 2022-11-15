@@ -279,7 +279,7 @@ func TestIntegrationRoundTrip_Buffered(t *testing.T) {
 			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 			receiver, err := session.NewReceiver(ctx, targetName, &amqp.ReceiverOptions{
 				Credit:                    uint32(len(tt.data)),
-				RequestedSenderSettleMode: amqp.ModeSettled.Ptr(),
+				RequestedSenderSettleMode: amqp.SenderSettleModeSettled.Ptr(),
 			})
 			cancel()
 			if err != nil {
@@ -405,7 +405,7 @@ func TestIntegrationReceiverModeSecond(t *testing.T) {
 					// Create a receiver
 					ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 					receiver, err := session.NewReceiver(ctx, targetName, &amqp.ReceiverOptions{
-						SettlementMode: amqp.ModeSecond.Ptr(),
+						SettlementMode: amqp.ReceiverSettleModeSecond.Ptr(),
 					})
 					cancel()
 					if err != nil {

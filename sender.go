@@ -105,7 +105,7 @@ func (s *Sender) send(ctx context.Context, msg *Message) (chan encoding.Delivery
 	var (
 		maxPayloadSize = int64(s.l.session.conn.PeerMaxFrameSize) - maxTransferFrameHeader
 		sndSettleMode  = s.l.senderSettleMode
-		senderSettled  = sndSettleMode != nil && (*sndSettleMode == ModeSettled || (*sndSettleMode == ModeMixed && msg.SendSettled))
+		senderSettled  = sndSettleMode != nil && (*sndSettleMode == SenderSettleModeSettled || (*sndSettleMode == SenderSettleModeMixed && msg.SendSettled))
 		deliveryID     = atomic.AddUint32(&s.l.session.nextDeliveryID, 1)
 	)
 
@@ -222,13 +222,13 @@ func newSender(target string, s *Session, opts *SenderOptions) (*Sender, error) 
 		}
 	}
 	if opts.RequestedReceiverSettleMode != nil {
-		if rsm := *opts.RequestedReceiverSettleMode; rsm > ModeSecond {
+		if rsm := *opts.RequestedReceiverSettleMode; rsm > ReceiverSettleModeSecond {
 			return nil, fmt.Errorf("invalid RequestedReceiverSettleMode %d", rsm)
 		}
 		l.l.receiverSettleMode = opts.RequestedReceiverSettleMode
 	}
 	if opts.SettlementMode != nil {
-		if ssm := *opts.SettlementMode; ssm > ModeMixed {
+		if ssm := *opts.SettlementMode; ssm > SenderSettleModeMixed {
 			return nil, fmt.Errorf("invalid SettlementMode %d", ssm)
 		}
 		l.l.senderSettleMode = opts.SettlementMode
@@ -240,7 +240,7 @@ func newSender(target string, s *Session, opts *SenderOptions) (*Sender, error) 
 func (s *Sender) attach(ctx context.Context) error {
 	// sending unsettled messages when the receiver is in mode-second is currently
 	// broken and causes a hang after sending, so just disallow it for now.
-	if senderSettleModeValue(s.l.senderSettleMode) != ModeSettled && receiverSettleModeValue(s.l.receiverSettleMode) == ModeSecond {
+	if senderSettleModeValue(s.l.senderSettleMode) != SenderSettleModeSettled && receiverSettleModeValue(s.l.receiverSettleMode) == ReceiverSettleModeSecond {
 		return errors.New("sender does not support exactly-once guarantee")
 	}
 
@@ -398,7 +398,7 @@ func (s *Sender) detachOnRejectDisp() bool {
 	// only detach on rejection when no RSM was requested or in ModeFirst.
 	// if the receiver is in ModeSecond, it will send an explicit rejection disposition
 	// that we'll have to ack. so in that case, we don't treat it as a link error.
-	if s.detachOnDispositionError && (s.l.receiverSettleMode == nil || *s.l.receiverSettleMode == ModeFirst) {
+	if s.detachOnDispositionError && (s.l.receiverSettleMode == nil || *s.l.receiverSettleMode == ReceiverSettleModeFirst) {
 		return true
 	}
 	return false

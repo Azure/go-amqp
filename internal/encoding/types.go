@@ -217,13 +217,13 @@ func (e *ExpiryPolicy) String() string {
 // Sender Settlement Modes
 const (
 	// Sender will send all deliveries initially unsettled to the receiver.
-	ModeUnsettled SenderSettleMode = 0
+	SenderSettleModeUnsettled SenderSettleMode = 0
 
 	// Sender will send all deliveries settled to the receiver.
-	ModeSettled SenderSettleMode = 1
+	SenderSettleModeSettled SenderSettleMode = 1
 
 	// Sender MAY send a mixture of settled and unsettled deliveries to the receiver.
-	ModeMixed SenderSettleMode = 2
+	SenderSettleModeMixed SenderSettleMode = 2
 )
 
 // SenderSettleMode specifies how the sender will settle messages.
@@ -239,13 +239,13 @@ func (m *SenderSettleMode) String() string {
 	}
 
 	switch *m {
-	case ModeUnsettled:
+	case SenderSettleModeUnsettled:
 		return "unsettled"
 
-	case ModeSettled:
+	case SenderSettleModeSettled:
 		return "settled"
 
-	case ModeMixed:
+	case SenderSettleModeMixed:
 		return "mixed"
 
 	default:
@@ -266,12 +266,12 @@ func (m *SenderSettleMode) Unmarshal(r *buffer.Buffer) error {
 // Receiver Settlement Modes
 const (
 	// Receiver will spontaneously settle all incoming transfers.
-	ModeFirst ReceiverSettleMode = 0
+	ReceiverSettleModeFirst ReceiverSettleMode = 0
 
 	// Receiver will only settle after sending the disposition to the
 	// sender and receiving a disposition indicating settlement of
 	// the delivery from the sender.
-	ModeSecond ReceiverSettleMode = 1
+	ReceiverSettleModeSecond ReceiverSettleMode = 1
 )
 
 // ReceiverSettleMode specifies how the receiver will settle messages.
@@ -287,10 +287,10 @@ func (m *ReceiverSettleMode) String() string {
 	}
 
 	switch *m {
-	case ModeFirst:
+	case ReceiverSettleModeFirst:
 		return "first"
 
-	case ModeSecond:
+	case ReceiverSettleModeSecond:
 		return "second"
 
 	default:

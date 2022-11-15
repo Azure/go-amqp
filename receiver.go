@@ -81,9 +81,9 @@ func (r *Receiver) DrainCredit(ctx context.Context) error {
 // and returns immediately if the prefetch cache is empty. To receive from the
 // prefetch and wait for messages from the remote Sender use `Receive`.
 //
-// When using ModeSecond, you *must* take an action on the message by calling
+// When using ReceiverSettleModeSecond, you *must* take an action on the message by calling
 // one of the following: AcceptMessage, RejectMessage, ReleaseMessage, ModifyMessage.
-// When using ModeFirst, the message is spontaneously Accepted at reception.
+// When using ReceiverSettleModeFirst, the message is spontaneously Accepted at reception.
 func (r *Receiver) Prefetched() *Message {
 	select {
 	case r.receiverReady <- struct{}{}:
@@ -106,9 +106,9 @@ func (r *Receiver) Prefetched() *Message {
 // Receive returns the next message from the sender.
 //
 // Blocks until a message is received, ctx completes, or an error occurs.
-// When using ModeSecond, you *must* take an action on the message by calling
+// When using ReceiverSettleModeSecond, you *must* take an action on the message by calling
 // one of the following: AcceptMessage, RejectMessage, ReleaseMessage, ModifyMessage.
-// When using ModeFirst, the message is spontaneously Accepted at reception.
+// When using ReceiverSettleModeFirst, the message is spontaneously Accepted at reception.
 func (r *Receiver) Receive(ctx context.Context) (*Message, error) {
 	if msg := r.Prefetched(); msg != nil {
 		return msg, nil
@@ -322,7 +322,7 @@ func (r *Receiver) sendDisposition(first uint32, last *uint32, state encoding.De
 		Role:    encoding.RoleReceiver,
 		First:   first,
 		Last:    last,
-		Settled: r.l.receiverSettleMode == nil || *r.l.receiverSettleMode == ModeFirst,
+		Settled: r.l.receiverSettleMode == nil || *r.l.receiverSettleMode == ReceiverSettleModeFirst,
 		State:   state,
 	}
 
@@ -337,7 +337,7 @@ func (r *Receiver) sendDisposition(first uint32, last *uint32, state encoding.De
 
 func (r *Receiver) messageDisposition(ctx context.Context, msg *Message, state encoding.DeliveryState) error {
 	var wait chan error
-	if r.l.receiverSettleMode != nil && *r.l.receiverSettleMode == ModeSecond {
+	if r.l.receiverSettleMode != nil && *r.l.receiverSettleMode == ReceiverSettleModeSecond {
 		debug.Log(3, "RX (messageDisposition): add %d to inflight", msg.deliveryID)
 		wait = r.inFlight.add(msg.deliveryID)
 	}
@@ -459,13 +459,13 @@ func newReceiver(source string, s *Session, opts *ReceiverOptions) (*Receiver, e
 		}
 	}
 	if opts.RequestedSenderSettleMode != nil {
-		if rsm := *opts.RequestedSenderSettleMode; rsm > ModeMixed {
+		if rsm := *opts.RequestedSenderSettleMode; rsm > SenderSettleModeMixed {
 			return nil, fmt.Errorf("invalid RequestedSenderSettleMode %d", rsm)
 		}
 		l.l.senderSettleMode = opts.RequestedSenderSettleMode
 	}
 	if opts.SettlementMode != nil {
-		if rsm := *opts.SettlementMode; rsm > ModeSecond {
+		if rsm := *opts.SettlementMode; rsm > ReceiverSettleModeSecond {
 			return nil, fmt.Errorf("invalid SettlementMode %d", rsm)
 		}
 		l.l.receiverSettleMode = opts.SettlementMode
@@ -789,7 +789,7 @@ func (r *Receiver) muxReceive(fr frames.PerformTransfer) error {
 	}
 	debug.Log(1, "deliveryID %d before push to receiver - deliveryCount : %d - linkCredit: %d, len(messages): %d, len(inflight): %d", r.msg.deliveryID, r.l.deliveryCount, r.l.linkCredit, len(r.messages), r.inFlight.len())
 	// send to receiver
-	if receiverSettleModeValue(r.l.receiverSettleMode) == ModeSecond {
+	if receiverSettleModeValue(r.l.receiverSettleMode) == ReceiverSettleModeSecond {
 		r.addUnsettled(&r.msg)
 	}
 	select {

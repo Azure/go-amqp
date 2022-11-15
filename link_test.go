@@ -255,21 +255,21 @@ func TestNewSendingLink(t *testing.T) {
 				Capabilities:            []string{"foo", "bar"},
 				Durability:              DurabilityUnsettledState,
 				DynamicAddress:          true,
-				ExpiryPolicy:            ExpiryLinkDetach,
+				ExpiryPolicy:            ExpiryPolicyLinkDetach,
 				ExpiryTimeout:           5,
 				IgnoreDispositionErrors: true,
 				Name:                    name,
 				Properties: map[string]any{
 					"property": 123,
 				},
-				RequestedReceiverSettleMode: ModeFirst.Ptr(),
-				SettlementMode:              ModeSettled.Ptr(),
+				RequestedReceiverSettleMode: ReceiverSettleModeFirst.Ptr(),
+				SettlementMode:              SenderSettleModeSettled.Ptr(),
 			},
 			validate: func(t *testing.T, l *Sender) {
 				require.Equal(t, encoding.MultiSymbol{"foo", "bar"}, l.l.source.Capabilities)
 				require.Equal(t, DurabilityUnsettledState, l.l.source.Durable)
 				require.True(t, l.l.dynamicAddr)
-				require.Equal(t, ExpiryLinkDetach, l.l.source.ExpiryPolicy)
+				require.Equal(t, ExpiryPolicyLinkDetach, l.l.source.ExpiryPolicy)
 				require.Equal(t, uint32(5), l.l.source.Timeout)
 				require.False(t, l.detachOnDispositionError)
 				require.Equal(t, name, l.l.key.name)
@@ -277,9 +277,9 @@ func TestNewSendingLink(t *testing.T) {
 					"property": 123,
 				}, l.l.properties)
 				require.NotNil(t, l.l.senderSettleMode)
-				require.Equal(t, ModeSettled, *l.l.senderSettleMode)
+				require.Equal(t, SenderSettleModeSettled, *l.l.senderSettleMode)
 				require.NotNil(t, l.l.receiverSettleMode)
-				require.Equal(t, ModeFirst, *l.l.receiverSettleMode)
+				require.Equal(t, ReceiverSettleModeFirst, *l.l.receiverSettleMode)
 				require.Empty(t, l.l.target.Address)
 			},
 		},
@@ -342,7 +342,7 @@ func TestNewReceivingLink(t *testing.T) {
 				//Credit:                    32,
 				Durability:     DurabilityConfiguration,
 				DynamicAddress: true,
-				ExpiryPolicy:   ExpiryNever,
+				ExpiryPolicy:   ExpiryPolicyNever,
 				ExpiryTimeout:  3,
 				Filters: []LinkFilter{
 					LinkFilterSelector("amqp.annotation.x-opt-offset > '100'"),
@@ -354,8 +354,8 @@ func TestNewReceivingLink(t *testing.T) {
 				Properties: map[string]any{
 					"property": 123,
 				},
-				RequestedSenderSettleMode: ModeMixed.Ptr(),
-				SettlementMode:            ModeSecond.Ptr(),
+				RequestedSenderSettleMode: SenderSettleModeMixed.Ptr(),
+				SettlementMode:            ReceiverSettleModeSecond.Ptr(),
 			},
 			validate: func(t *testing.T, l *Receiver) {
 				//require.True(t, l.receiver.batching)
@@ -364,7 +364,7 @@ func TestNewReceivingLink(t *testing.T) {
 				//require.Equal(t, uint32(32), l.receiver.maxCredit)
 				require.Equal(t, DurabilityConfiguration, l.l.target.Durable)
 				require.True(t, l.l.dynamicAddr)
-				require.Equal(t, ExpiryNever, l.l.target.ExpiryPolicy)
+				require.Equal(t, ExpiryPolicyNever, l.l.target.ExpiryPolicy)
 				require.Equal(t, uint32(3), l.l.target.Timeout)
 				require.Equal(t, encoding.Filter{
 					selectorFilter: &encoding.DescribedType{
@@ -383,9 +383,9 @@ func TestNewReceivingLink(t *testing.T) {
 					"property": 123,
 				}, l.l.properties)
 				require.NotNil(t, l.l.senderSettleMode)
-				require.Equal(t, ModeMixed, *l.l.senderSettleMode)
+				require.Equal(t, SenderSettleModeMixed, *l.l.senderSettleMode)
 				require.NotNil(t, l.l.receiverSettleMode)
-				require.Equal(t, ModeSecond, *l.l.receiverSettleMode)
+				require.Equal(t, ReceiverSettleModeSecond, *l.l.receiverSettleMode)
 				require.Empty(t, l.l.source.Address)
 			},
 		},
@@ -404,7 +404,7 @@ func TestNewReceivingLink(t *testing.T) {
 func TestSessionFlowDisablesTransfer(t *testing.T) {
 	t.Skip("TODO: finish for link testing")
 	nextIncomingID := uint32(0)
-	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
+	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 
 	client, err := New(netConn, nil)
 	require.NoError(t, err)
@@ -432,7 +432,7 @@ func TestSessionFlowDisablesTransfer(t *testing.T) {
 }
 
 func TestExactlyOnceDoesntWork(t *testing.T) {
-	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
+	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 
 	client, err := New(netConn, nil)
 	require.NoError(t, err)
@@ -444,8 +444,8 @@ func TestExactlyOnceDoesntWork(t *testing.T) {
 
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	snd, err := session.NewSender(ctx, "doesntwork", &SenderOptions{
-		SettlementMode:              ModeMixed.Ptr(),
-		RequestedReceiverSettleMode: ModeSecond.Ptr(),
+		SettlementMode:              SenderSettleModeMixed.Ptr(),
+		RequestedReceiverSettleMode: ReceiverSettleModeSecond.Ptr(),
 	})
 	cancel()
 	require.Error(t, err)

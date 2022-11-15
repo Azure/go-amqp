@@ -296,13 +296,13 @@ func TestStart(t *testing.T) {
 }
 
 func TestClose(t *testing.T) {
-	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
+	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 	conn, err := newConn(netConn, nil)
 	require.NoError(t, err)
 	require.NoError(t, conn.Start())
 	require.NoError(t, conn.Close())
 	// with Close error
-	netConn = mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
+	netConn = mocks.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 	conn, err = newConn(netConn, nil)
 	require.NoError(t, err)
 	require.NoError(t, conn.Start())
@@ -315,7 +315,7 @@ func TestClose(t *testing.T) {
 }
 
 func TestServerSideClose(t *testing.T) {
-	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
+	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 	conn, err := newConn(netConn, nil)
 	require.NoError(t, err)
 	require.NoError(t, conn.Start())
@@ -325,7 +325,7 @@ func TestServerSideClose(t *testing.T) {
 	err = conn.Close()
 	require.NoError(t, err)
 	// with error
-	netConn = mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
+	netConn = mocks.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 	conn, err = newConn(netConn, nil)
 	require.NoError(t, err)
 	require.NoError(t, conn.Start())
@@ -380,7 +380,7 @@ func TestKeepAlives(t *testing.T) {
 }
 
 func TestConnReaderError(t *testing.T) {
-	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
+	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 	conn, err := newConn(netConn, nil)
 	require.NoError(t, err)
 	require.NoError(t, conn.Start())
@@ -396,7 +396,7 @@ func TestConnReaderError(t *testing.T) {
 }
 
 func TestConnWriterError(t *testing.T) {
-	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(ModeUnsettled))
+	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 	conn, err := newConn(netConn, nil)
 	require.NoError(t, err)
 	require.NoError(t, conn.Start())

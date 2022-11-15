@@ -15,7 +15,7 @@ import (
 )
 
 func TestReceiverInvalidOptions(t *testing.T) {
-	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ModeFirst))
+	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
 	client, err := New(conn, nil)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -59,9 +59,9 @@ func TestReceiverMethodsNoReceive(t *testing.T) {
 			return mocks.PerformBegin(0)
 		case *frames.PerformAttach:
 			require.Equal(t, DurabilityUnsettledState, ff.Target.Durable)
-			require.Equal(t, ExpiryNever, ff.Target.ExpiryPolicy)
+			require.Equal(t, ExpiryPolicyNever, ff.Target.ExpiryPolicy)
 			require.Equal(t, uint32(300), ff.Target.Timeout)
-			return mocks.ReceiverAttach(0, linkName, 0, ModeFirst, nil)
+			return mocks.ReceiverAttach(0, linkName, 0, ReceiverSettleModeFirst, nil)
 		case *frames.PerformFlow, *mocks.KeepAlive:
 			return nil, nil
 		default:
@@ -80,7 +80,7 @@ func TestReceiverMethodsNoReceive(t *testing.T) {
 	r, err := session.NewReceiver(ctx, sourceAddr, &ReceiverOptions{
 		Name:          linkName,
 		Durability:    DurabilityUnsettledState,
-		ExpiryPolicy:  ExpiryNever,
+		ExpiryPolicy:  ExpiryPolicyNever,
 		ExpiryTimeout: 300,
 	})
 	cancel()
@@ -94,7 +94,7 @@ func TestReceiverMethodsNoReceive(t *testing.T) {
 }
 
 func TestReceiverLinkSourceFilter(t *testing.T) {
-	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ModeFirst))
+	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
 	client, err := New(conn, nil)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -121,7 +121,7 @@ func TestReceiverLinkSourceFilter(t *testing.T) {
 }
 
 func TestReceiverOnClosed(t *testing.T) {
-	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ModeFirst))
+	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
 	client, err := New(conn, nil)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -152,7 +152,7 @@ func TestReceiverOnClosed(t *testing.T) {
 }
 
 func TestReceiverOnSessionClosed(t *testing.T) {
-	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ModeFirst))
+	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
 	client, err := New(conn, nil)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -183,7 +183,7 @@ func TestReceiverOnSessionClosed(t *testing.T) {
 }
 
 func TestReceiverOnConnClosed(t *testing.T) {
-	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ModeFirst))
+	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
 	client, err := New(conn, nil)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -214,7 +214,7 @@ func TestReceiverOnConnClosed(t *testing.T) {
 }
 
 func TestReceiverOnDetached(t *testing.T) {
-	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ModeFirst))
+	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
 	client, err := New(conn, nil)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -258,7 +258,7 @@ func TestReceiveInvalidMessage(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ModeFirst)(req)
+		b, err := receiverFrameHandler(ReceiverSettleModeFirst)(req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -371,11 +371,11 @@ func TestReceiveInvalidMessage(t *testing.T) {
 	require.NoError(t, client.Close())
 }
 
-func TestReceiveSuccessModeFirst(t *testing.T) {
+func TestReceiveSuccessReceiverSettleModeFirst(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ModeFirst)(req)
+		b, err := receiverFrameHandler(ReceiverSettleModeFirst)(req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -402,7 +402,7 @@ func TestReceiveSuccessModeFirst(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
-		SettlementMode: ModeFirst.Ptr(),
+		SettlementMode: ReceiverSettleModeFirst.Ptr(),
 	})
 	cancel()
 	require.NoError(t, err)
@@ -427,11 +427,11 @@ func TestReceiveSuccessModeFirst(t *testing.T) {
 	require.NoError(t, client.Close())
 }
 
-func TestReceiveSuccessModeSecondAccept(t *testing.T) {
+func TestReceiveSuccessReceiverSettleModeSecondAccept(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ModeSecond)(req)
+		b, err := receiverFrameHandler(ReceiverSettleModeSecond)(req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -461,7 +461,7 @@ func TestReceiveSuccessModeSecondAccept(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
-		SettlementMode: ModeSecond.Ptr(),
+		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 	})
 	cancel()
 	require.NoError(t, err)
@@ -507,11 +507,11 @@ func TestReceiveSuccessModeSecondAccept(t *testing.T) {
 	require.NoError(t, client.Close())
 }
 
-func TestReceiveSuccessModeSecondAcceptOnClosedLink(t *testing.T) {
+func TestReceiveSuccessReceiverSettleModeSecondAcceptOnClosedLink(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ModeSecond)(req)
+		b, err := receiverFrameHandler(ReceiverSettleModeSecond)(req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -541,7 +541,7 @@ func TestReceiveSuccessModeSecondAcceptOnClosedLink(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
-		SettlementMode: ModeSecond.Ptr(),
+		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 	})
 	cancel()
 	require.NoError(t, err)
@@ -567,11 +567,11 @@ func TestReceiveSuccessModeSecondAcceptOnClosedLink(t *testing.T) {
 	require.ErrorIs(t, err, ErrLinkClosed)
 }
 
-func TestReceiveSuccessModeSecondReject(t *testing.T) {
+func TestReceiveSuccessReceiverSettleModeSecondReject(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ModeSecond)(req)
+		b, err := receiverFrameHandler(ReceiverSettleModeSecond)(req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -601,7 +601,7 @@ func TestReceiveSuccessModeSecondReject(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
-		SettlementMode: ModeSecond.Ptr(),
+		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 	})
 	cancel()
 	require.NoError(t, err)
@@ -641,11 +641,11 @@ func TestReceiveSuccessModeSecondReject(t *testing.T) {
 	require.NoError(t, client.Close())
 }
 
-func TestReceiveSuccessModeSecondRelease(t *testing.T) {
+func TestReceiveSuccessReceiverSettleModeSecondRelease(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ModeSecond)(req)
+		b, err := receiverFrameHandler(ReceiverSettleModeSecond)(req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -675,7 +675,7 @@ func TestReceiveSuccessModeSecondRelease(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
-		SettlementMode: ModeSecond.Ptr(),
+		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 	})
 	cancel()
 	require.NoError(t, err)
@@ -715,11 +715,11 @@ func TestReceiveSuccessModeSecondRelease(t *testing.T) {
 	require.NoError(t, client.Close())
 }
 
-func TestReceiveSuccessModeSecondModify(t *testing.T) {
+func TestReceiveSuccessReceiverSettleModeSecondModify(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ModeSecond)(req)
+		b, err := receiverFrameHandler(ReceiverSettleModeSecond)(req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -754,7 +754,7 @@ func TestReceiveSuccessModeSecondModify(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
-		SettlementMode: ModeSecond.Ptr(),
+		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 	})
 	cancel()
 	require.NoError(t, err)
@@ -829,7 +829,7 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ModeSecond)(req)
+		b, err := receiverFrameHandler(ReceiverSettleModeSecond)(req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -854,7 +854,7 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
-		SettlementMode: ModeSecond.Ptr(),
+		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 	})
 	cancel()
 	require.NoError(t, err)
@@ -913,7 +913,7 @@ func TestReceiveInvalidMultiFrameMessage(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ModeSecond)(req)
+		b, err := receiverFrameHandler(ReceiverSettleModeSecond)(req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -933,7 +933,7 @@ func TestReceiveInvalidMultiFrameMessage(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
-		SettlementMode: ModeSecond.Ptr(),
+		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 	})
 	cancel()
 	require.NoError(t, err)
@@ -967,7 +967,7 @@ func TestReceiveInvalidMultiFrameMessage(t *testing.T) {
 	// mismatched MessageFormat
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	r, err = session.NewReceiver(ctx, "source", &ReceiverOptions{
-		SettlementMode: ModeSecond.Ptr(),
+		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 	})
 	cancel()
 	require.NoError(t, err)
@@ -994,7 +994,7 @@ func TestReceiveInvalidMultiFrameMessage(t *testing.T) {
 	// mismatched DeliveryTag
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	r, err = session.NewReceiver(ctx, "source", &ReceiverOptions{
-		SettlementMode: ModeSecond.Ptr(),
+		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 	})
 	cancel()
 	require.NoError(t, err)
@@ -1024,7 +1024,7 @@ func TestReceiveMultiFrameMessageAborted(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ModeSecond)(req)
+		b, err := receiverFrameHandler(ReceiverSettleModeSecond)(req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -1049,7 +1049,7 @@ func TestReceiveMultiFrameMessageAborted(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
-		SettlementMode: ModeSecond.Ptr(),
+		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 	})
 	cancel()
 	require.NoError(t, err)
@@ -1084,7 +1084,7 @@ func TestReceiveMessageTooBig(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ModeSecond)(req)
+		b, err := receiverFrameHandler(ReceiverSettleModeSecond)(req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -1110,7 +1110,7 @@ func TestReceiveMessageTooBig(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
-		SettlementMode: ModeSecond.Ptr(),
+		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 		MaxMessageSize: 128,
 	})
 	cancel()
@@ -1131,7 +1131,7 @@ func TestReceiveSuccessAcceptFails(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ModeSecond)(req)
+		b, err := receiverFrameHandler(ReceiverSettleModeSecond)(req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -1156,7 +1156,7 @@ func TestReceiveSuccessAcceptFails(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
-		SettlementMode: ModeSecond.Ptr(),
+		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 	})
 	cancel()
 	require.NoError(t, err)
@@ -1191,7 +1191,7 @@ func TestReceiverDispositionBatcherTimer(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ModeSecond)(req)
+		b, err := receiverFrameHandler(ReceiverSettleModeSecond)(req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -1224,7 +1224,7 @@ func TestReceiverDispositionBatcherTimer(t *testing.T) {
 		Batching:       true,
 		BatchMaxAge:    time.Second,
 		Credit:         2,
-		SettlementMode: ModeSecond.Ptr(),
+		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 	})
 	cancel()
 	require.NoError(t, err)
@@ -1254,7 +1254,7 @@ func TestReceiverDispositionBatcherFull(t *testing.T) {
 	acceptCount := 0
 	allAccepted := make(chan struct{})
 	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ModeSecond)(req)
+		b, err := receiverFrameHandler(ReceiverSettleModeSecond)(req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -1290,7 +1290,7 @@ func TestReceiverDispositionBatcherFull(t *testing.T) {
 		Batching:       true,
 		BatchMaxAge:    time.Second,
 		Credit:         credit,
-		SettlementMode: ModeSecond.Ptr(),
+		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 	})
 	cancel()
 	require.NoError(t, err)
@@ -1331,7 +1331,7 @@ func TestReceiverDispositionBatcherRelease(t *testing.T) {
 	acceptCount := 0
 	allAccepted := make(chan struct{})
 	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ModeSecond)(req)
+		b, err := receiverFrameHandler(ReceiverSettleModeSecond)(req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -1364,7 +1364,7 @@ func TestReceiverDispositionBatcherRelease(t *testing.T) {
 		Batching:       true,
 		BatchMaxAge:    time.Second,
 		Credit:         credit,
-		SettlementMode: ModeSecond.Ptr(),
+		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 	})
 	cancel()
 	require.NoError(t, err)
@@ -1403,7 +1403,7 @@ func TestReceiverDispositionBatcherRelease(t *testing.T) {
 }
 
 func TestReceiverCloseOnUnsettledWithPending(t *testing.T) {
-	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ModeFirst))
+	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
 	client, err := New(conn, nil)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -1430,7 +1430,7 @@ func TestReceiverCloseOnUnsettledWithPending(t *testing.T) {
 }
 
 func TestReceiverConnReaderError(t *testing.T) {
-	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ModeFirst))
+	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
 	client, err := New(conn, nil)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -1464,7 +1464,7 @@ func TestReceiverConnReaderError(t *testing.T) {
 }
 
 func TestReceiverConnWriterError(t *testing.T) {
-	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ModeFirst))
+	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
 	client, err := New(conn, nil)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)

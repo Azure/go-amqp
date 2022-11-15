@@ -65,6 +65,7 @@ jobs:
 
       - script: |
           set -e
+          export TEST_CORPUS=1
           echo '##[command]Starting broker at $(AMQP_BROKER_ADDR)'
           $(Pipeline.Workspace)/azure-amqp/bin/Debug/TestAmqpBroker/net461/TestAmqpBroker.exe $AMQP_BROKER_ADDR /headless &
           brokerPID=$!

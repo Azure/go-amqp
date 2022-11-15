@@ -128,16 +128,6 @@ func TestLinkFlowWithDrain(t *testing.T) {
 	errChan := make(chan error)
 
 	go func(errChan chan error) {
-		<-l.receiverReady
-
-		select {
-		case l.receiverReady <- struct{}{}:
-			// woke up mux
-		default:
-			errChan <- errors.New("failed to wake up mux")
-			return
-		}
-
 		// flow happens immmediately in 'mux'
 		txFrame := <-l.l.session.tx
 

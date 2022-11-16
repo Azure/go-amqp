@@ -2,6 +2,7 @@ package amqp
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -85,16 +86,45 @@ type ConnOptions struct {
 	dialer dialer
 }
 
-// used to abstract the underlying dialer for testing purposes
-type dialer interface {
-	NetDialerDial(c *conn, host, port string) error
-	TLSDialWithDialer(c *conn, host, port string) error
+// Dial connects to an AMQP server.
+//
+// If the addr includes a scheme, it must be "amqp", "amqps", or "amqp+ssl".
+// If no port is provided, 5672 will be used for "amqp" and 5671 for "amqps" or "amqp+ssl".
+//
+// If username and password information is not empty it's used as SASL PLAIN
+// credentials, equal to passing ConnSASLPlain option.
+//
+// opts: pass nil to accept the default values.
+func Dial(addr string, opts *ConnOptions) (*Conn, error) {
+	c, err := dialConn(addr, opts)
+	if err != nil {
+		return nil, err
+	}
+	err = c.start()
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// NewConn establishes a new AMQP client connection over conn.
+// opts: pass nil to accept the default values.
+func NewConn(conn net.Conn, opts *ConnOptions) (*Conn, error) {
+	c, err := newConn(conn, opts)
+	if err != nil {
+		return nil, err
+	}
+	err = c.start()
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
 // conn is an AMQP connection.
 // only exported fields and methods are part of public surface area,
 // all others are considered to be internal implementation details.
-type conn struct {
+type Conn struct {
 	net            net.Conn      // underlying connection
 	connectTimeout time.Duration // time to wait for reads/writes during conn establishment
 	dialer         dialer        // used for testing purposes, it allows faking dialing TCP/TLS endpoints
@@ -118,12 +148,12 @@ type conn struct {
 
 	// peer settings
 	peerIdleTimeout  time.Duration // maximum period between sending frames
-	PeerMaxFrameSize uint32        // maximum frame size peer will accept
+	peerMaxFrameSize uint32        // maximum frame size peer will accept
 
 	// conn state
-	errMu sync.Mutex    // mux holds errMu from start until shutdown completes; operations are sequential before mux is started
-	err   error         // error to be returned to client
-	Done  chan struct{} // indicates the connection is done
+	doneErrMu sync.Mutex    // mux holds doneErr from start until shutdown completes; operations are sequential before mux is started
+	doneErr   error         // error to be returned to client
+	done      chan struct{} // indicates the connection is done
 
 	// mux
 	connErr      chan error    // connReader/Writer notifications of an error
@@ -147,22 +177,28 @@ type conn struct {
 	txDone  chan struct{}
 }
 
+// used to abstract the underlying dialer for testing purposes
+type dialer interface {
+	NetDialerDial(c *Conn, host, port string) error
+	TLSDialWithDialer(c *Conn, host, port string) error
+}
+
 // implements the dialer interface
 type defaultDialer struct{}
 
-func (defaultDialer) NetDialerDial(c *conn, host, port string) (err error) {
+func (defaultDialer) NetDialerDial(c *Conn, host, port string) (err error) {
 	dialer := &net.Dialer{Timeout: c.connectTimeout}
 	c.net, err = dialer.Dial("tcp", net.JoinHostPort(host, port))
 	return
 }
 
-func (defaultDialer) TLSDialWithDialer(c *conn, host, port string) (err error) {
+func (defaultDialer) TLSDialWithDialer(c *Conn, host, port string) (err error) {
 	dialer := &net.Dialer{Timeout: c.connectTimeout}
 	c.net, err = tls.DialWithDialer(dialer, "tcp", net.JoinHostPort(host, port), c.tlsConfig)
 	return
 }
 
-func dialConn(addr string, opts *ConnOptions) (*conn, error) {
+func dialConn(addr string, opts *ConnOptions) (*Conn, error) {
 	u, err := url.Parse(addr)
 	if err != nil {
 		return nil, err
@@ -212,16 +248,16 @@ func dialConn(addr string, opts *ConnOptions) (*conn, error) {
 	return c, nil
 }
 
-func newConn(netConn net.Conn, opts *ConnOptions) (*conn, error) {
-	c := &conn{
+func newConn(netConn net.Conn, opts *ConnOptions) (*Conn, error) {
+	c := &Conn{
 		dialer:            defaultDialer{},
 		net:               netConn,
 		maxFrameSize:      defaultMaxFrameSize,
-		PeerMaxFrameSize:  defaultMaxFrameSize,
+		peerMaxFrameSize:  defaultMaxFrameSize,
 		channelMax:        defaultMaxSessions - 1, // -1 because channel-max starts at zero
 		idleTimeout:       defaultIdleTimeout,
 		containerID:       shared.RandString(40),
-		Done:              make(chan struct{}),
+		done:              make(chan struct{}),
 		connErr:           make(chan error, 2), // buffered to ensure connReader/Writer won't leak
 		closeMux:          make(chan struct{}),
 		rxProto:           make(chan protoHeader),
@@ -281,7 +317,7 @@ func newConn(netConn net.Conn, opts *ConnOptions) (*conn, error) {
 	return c, nil
 }
 
-func (c *conn) initTLSConfig() {
+func (c *Conn) initTLSConfig() {
 	// create a new config if not already set
 	if c.tlsConfig == nil {
 		c.tlsConfig = new(tls.Config)
@@ -295,7 +331,7 @@ func (c *conn) initTLSConfig() {
 
 // Start establishes the connection and begins multiplexing network IO.
 // It is an error to call Start() on a connection that's been closed.
-func (c *conn) Start() error {
+func (c *Conn) start() error {
 	// start reader
 	go c.connReader()
 
@@ -323,9 +359,9 @@ func (c *conn) Start() error {
 }
 
 // Close closes the connection.
-func (c *conn) Close() error {
+func (c *Conn) Close() error {
 	c.closeMuxOnce.Do(func() { close(c.closeMux) })
-	err := c.Err()
+	err := c.err()
 	var connErr *ConnectionError
 	if errors.As(err, &connErr) && connErr.inner == nil {
 		// an empty ConnectionError means the connection was closed by the caller
@@ -336,8 +372,8 @@ func (c *conn) Close() error {
 }
 
 // close should only be called by conn.mux.
-func (c *conn) close() {
-	close(c.Done) // notify goroutines and blocked functions to exit
+func (c *Conn) close() {
+	close(c.done) // notify goroutines and blocked functions to exit
 
 	// wait for writing to stop, allows it to send the final close frame
 	<-c.txDone
@@ -347,7 +383,7 @@ func (c *conn) close() {
 	// mux has exited, drain any pending error.
 	select {
 	case err := <-c.connErr:
-		c.err = err
+		c.doneErr = err
 	default:
 		// no pending read/write error
 	}
@@ -356,11 +392,11 @@ func (c *conn) close() {
 	switch {
 	// conn.err already set
 	// TODO: err info is lost, log it?
-	case c.err != nil:
+	case c.doneErr != nil:
 
 	// conn.err not set and c.net.Close() returned a non-nil error
 	case err != nil:
-		c.err = err
+		c.doneErr = err
 
 	// no errors
 	default:
@@ -373,28 +409,34 @@ func (c *conn) close() {
 
 // Err returns the connection's error state after it's been closed.
 // Calling this on an open connection will block until the connection is closed.
-func (c *conn) Err() error {
-	c.errMu.Lock()
-	defer c.errMu.Unlock()
-	return &ConnectionError{inner: c.err}
+func (c *Conn) err() error {
+	c.doneErrMu.Lock()
+	defer c.doneErrMu.Unlock()
+	return &ConnectionError{inner: c.doneErr}
 }
 
-func (c *conn) NewSession(opts *SessionOptions) (*Session, error) {
+func (c *Conn) NewSession(ctx context.Context, opts *SessionOptions) (*Session, error) {
 	c.sessionsByChannelMu.Lock()
-	defer c.sessionsByChannelMu.Unlock()
 
 	// create the next session to allocate
 	// note that channel always start at 0
 	channel, ok := c.channels.Next()
 	if !ok {
+		c.sessionsByChannelMu.Unlock()
 		return nil, fmt.Errorf("reached connection channel max (%d)", c.channelMax)
 	}
 	session := newSession(c, uint16(channel), opts)
 	c.sessionsByChannel[session.channel] = session
+	c.sessionsByChannelMu.Unlock()
+
+	if err := session.begin(ctx); err != nil {
+		return nil, err
+	}
+
 	return session, nil
 }
 
-func (c *conn) DeleteSession(s *Session) {
+func (c *Conn) DeleteSession(s *Session) {
 	c.sessionsByChannelMu.Lock()
 	defer c.sessionsByChannelMu.Unlock()
 
@@ -404,26 +446,26 @@ func (c *conn) DeleteSession(s *Session) {
 
 // mux is started in it's own goroutine after initial connection establishment.
 // It handles muxing of sessions, keepalives, and connection errors.
-func (c *conn) mux() {
+func (c *Conn) mux() {
 	var (
 		// map channels to sessions
 		sessionsByRemoteChannel = make(map[uint16]*Session)
 	)
 
 	// hold the errMu lock until error or done
-	c.errMu.Lock()
-	defer c.errMu.Unlock()
+	c.doneErrMu.Lock()
+	defer c.doneErrMu.Unlock()
 	defer c.close() // defer order is important. c.errMu unlock indicates that connection is finally complete
 
 	for {
 		// check if last loop returned an error
-		if c.err != nil {
+		if c.doneErr != nil {
 			return
 		}
 
 		select {
 		// error from connReader
-		case c.err = <-c.connErr:
+		case c.doneErr = <-c.connErr:
 
 		// new frame from connReader
 		case fr := <-c.rxFrame:
@@ -436,7 +478,7 @@ func (c *conn) mux() {
 			// Server initiated close.
 			case *frames.PerformClose:
 				if body.Error != nil {
-					c.err = body.Error
+					c.doneErr = body.Error
 				}
 				return
 
@@ -445,14 +487,14 @@ func (c *conn) mux() {
 				if body.RemoteChannel == nil {
 					// since we only support remotely-initiated sessions, this is an error
 					// TODO: it would be ideal to not have this kill the connection
-					c.err = fmt.Errorf("%T: nil RemoteChannel", fr.Body)
+					c.doneErr = fmt.Errorf("%T: nil RemoteChannel", fr.Body)
 					break
 				}
 				c.sessionsByChannelMu.RLock()
 				session, ok = c.sessionsByChannel[*body.RemoteChannel]
 				c.sessionsByChannelMu.RUnlock()
 				if !ok {
-					c.err = fmt.Errorf("unexpected remote channel number %d", *body.RemoteChannel)
+					c.doneErr = fmt.Errorf("unexpected remote channel number %d", *body.RemoteChannel)
 					break
 				}
 
@@ -462,7 +504,7 @@ func (c *conn) mux() {
 			case *frames.PerformEnd:
 				session, ok = sessionsByRemoteChannel[fr.Channel]
 				if !ok {
-					c.err = fmt.Errorf("%T: didn't find channel %d in sessionsByRemoteChannel (PerformEnd)", fr.Body, fr.Channel)
+					c.doneErr = fmt.Errorf("%T: didn't find channel %d in sessionsByRemoteChannel (PerformEnd)", fr.Body, fr.Channel)
 					break
 				}
 				// we MUST remove the remote channel from our map as soon as we receive
@@ -474,7 +516,7 @@ func (c *conn) mux() {
 				// pass on performative to the correct session
 				session, ok = sessionsByRemoteChannel[fr.Channel]
 				if !ok {
-					c.err = fmt.Errorf("%T: didn't find channel %d in sessionsByRemoteChannel", fr.Body, fr.Channel)
+					c.doneErr = fmt.Errorf("%T: didn't find channel %d in sessionsByRemoteChannel", fr.Body, fr.Channel)
 				}
 			}
 
@@ -497,7 +539,7 @@ func (c *conn) mux() {
 
 // connReader reads from the net.Conn, decodes frames, and passes them
 // up via the conn.rxFrame and conn.rxProto channels.
-func (c *conn) connReader() {
+func (c *Conn) connReader() {
 	defer close(c.rxDone)
 
 	buf := &buffer.Buffer{}
@@ -530,7 +572,7 @@ func (c *conn) connReader() {
 				debug.Log(1, "connReader error: %v", err)
 				select {
 				// check if error was due to close in progress
-				case <-c.Done:
+				case <-c.done:
 					return
 
 				// if there is a pending connReaderRun function, execute it
@@ -585,7 +627,7 @@ func (c *conn) connReader() {
 
 			// send proto header
 			select {
-			case <-c.Done:
+			case <-c.done:
 				return
 			case c.rxProto <- p:
 			}
@@ -638,14 +680,14 @@ func (c *conn) connReader() {
 
 		// send to mux
 		select {
-		case <-c.Done:
+		case <-c.done:
 			return
 		case c.rxFrame <- frames.Frame{Channel: currentHeader.Channel, Body: parsedBody}:
 		}
 	}
 }
 
-func (c *conn) connWriter() {
+func (c *Conn) connWriter() {
 	defer close(c.txDone)
 
 	// disable write timeout
@@ -698,7 +740,7 @@ func (c *conn) connWriter() {
 			// possibly drained, then reset.)
 
 		// connection complete
-		case <-c.Done:
+		case <-c.done:
 			// send close
 			cls := &frames.PerformClose{}
 			debug.Log(1, "TX (connWriter): %s", cls)
@@ -713,7 +755,7 @@ func (c *conn) connWriter() {
 
 // writeFrame writes a frame to the network.
 // used externally by SASL only.
-func (c *conn) writeFrame(fr frames.Frame) error {
+func (c *Conn) writeFrame(fr frames.Frame) error {
 	if c.connectTimeout != 0 {
 		_ = c.net.SetWriteDeadline(time.Now().Add(c.connectTimeout))
 	}
@@ -727,8 +769,8 @@ func (c *conn) writeFrame(fr frames.Frame) error {
 
 	// validate the frame isn't exceeding peer's max frame size
 	requiredFrameSize := c.txBuf.Len()
-	if uint64(requiredFrameSize) > uint64(c.PeerMaxFrameSize) {
-		return fmt.Errorf("%T frame size %d larger than peer's max frame size %d", fr, requiredFrameSize, c.PeerMaxFrameSize)
+	if uint64(requiredFrameSize) > uint64(c.peerMaxFrameSize) {
+		return fmt.Errorf("%T frame size %d larger than peer's max frame size %d", fr, requiredFrameSize, c.peerMaxFrameSize)
 	}
 
 	// write to network
@@ -738,7 +780,7 @@ func (c *conn) writeFrame(fr frames.Frame) error {
 
 // writeProtoHeader writes an AMQP protocol header to the
 // network
-func (c *conn) writeProtoHeader(pID protoID) error {
+func (c *Conn) writeProtoHeader(pID protoID) error {
 	if c.connectTimeout != 0 {
 		_ = c.net.SetWriteDeadline(time.Now().Add(c.connectTimeout))
 	}
@@ -750,12 +792,12 @@ func (c *conn) writeProtoHeader(pID protoID) error {
 var keepaliveFrame = []byte{0x00, 0x00, 0x00, 0x08, 0x02, 0x00, 0x00, 0x00}
 
 // SendFrame is used by sessions and links to send frames across the network.
-func (c *conn) SendFrame(fr frames.Frame) error {
+func (c *Conn) SendFrame(fr frames.Frame) error {
 	select {
 	case c.txFrame <- fr:
 		return nil
-	case <-c.Done:
-		return c.Err()
+	case <-c.done:
+		return c.err()
 	}
 }
 
@@ -767,7 +809,7 @@ type stateFunc func() (stateFunc, error)
 
 // negotiateProto determines which proto to negotiate next.
 // used externally by SASL only.
-func (c *conn) negotiateProto() (stateFunc, error) {
+func (c *Conn) negotiateProto() (stateFunc, error) {
 	// in the order each must be negotiated
 	switch {
 	case c.tlsNegotiation && !c.tlsComplete:
@@ -790,7 +832,7 @@ const (
 
 // exchangeProtoHeader performs the round trip exchange of protocol
 // headers, validation, and returns the protoID specific next state.
-func (c *conn) exchangeProtoHeader(pID protoID) (stateFunc, error) {
+func (c *Conn) exchangeProtoHeader(pID protoID) (stateFunc, error) {
 	// write the proto header
 	if err := c.writeProtoHeader(pID); err != nil {
 		return nil, err
@@ -820,7 +862,7 @@ func (c *conn) exchangeProtoHeader(pID protoID) (stateFunc, error) {
 }
 
 // readProtoHeader reads a protocol header packet from c.rxProto.
-func (c *conn) readProtoHeader() (protoHeader, error) {
+func (c *Conn) readProtoHeader() (protoHeader, error) {
 	var deadline <-chan time.Time
 	if c.connectTimeout != 0 {
 		deadline = time.After(c.connectTimeout)
@@ -839,7 +881,7 @@ func (c *conn) readProtoHeader() (protoHeader, error) {
 }
 
 // startTLS wraps the conn with TLS and returns to Client.negotiateProto
-func (c *conn) startTLS() (stateFunc, error) {
+func (c *Conn) startTLS() (stateFunc, error) {
 	c.initTLSConfig()
 
 	// buffered so connReaderRun won't block
@@ -875,7 +917,7 @@ func (c *conn) startTLS() (stateFunc, error) {
 }
 
 // openAMQP round trips the AMQP open performative
-func (c *conn) openAMQP() (stateFunc, error) {
+func (c *Conn) openAMQP() (stateFunc, error) {
 	// send open frame
 	open := &frames.PerformOpen{
 		ContainerID:  c.containerID,
@@ -908,7 +950,7 @@ func (c *conn) openAMQP() (stateFunc, error) {
 
 	// update peer settings
 	if o.MaxFrameSize > 0 {
-		c.PeerMaxFrameSize = o.MaxFrameSize
+		c.peerMaxFrameSize = o.MaxFrameSize
 	}
 	if o.IdleTimeout > 0 {
 		// TODO: reject very small idle timeouts
@@ -924,7 +966,7 @@ func (c *conn) openAMQP() (stateFunc, error) {
 
 // negotiateSASL returns the SASL handler for the first matched
 // mechanism specified by the server
-func (c *conn) negotiateSASL() (stateFunc, error) {
+func (c *Conn) negotiateSASL() (stateFunc, error) {
 	// read mechanisms frame
 	fr, err := c.readFrame()
 	if err != nil {
@@ -953,7 +995,7 @@ func (c *conn) negotiateSASL() (stateFunc, error) {
 // SASL handlers return this stateFunc when the mechanism specific negotiation
 // has completed.
 // used externally by SASL only.
-func (c *conn) saslOutcome() (stateFunc, error) {
+func (c *Conn) saslOutcome() (stateFunc, error) {
 	// read outcome frame
 	fr, err := c.readFrame()
 	if err != nil {
@@ -979,7 +1021,7 @@ func (c *conn) saslOutcome() (stateFunc, error) {
 //
 // After setup, conn.mux handles incoming frames.
 // used externally by SASL only.
-func (c *conn) readFrame() (frames.Frame, error) {
+func (c *Conn) readFrame() (frames.Frame, error) {
 	var deadline <-chan time.Time
 	if c.connectTimeout != 0 {
 		deadline = time.After(c.connectTimeout)

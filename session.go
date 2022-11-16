@@ -19,12 +19,23 @@ const (
 	defaultWindow = 5000
 )
 
-// Default link options
-const (
-	defaultLinkCredit      = 1
-	defaultLinkBatching    = false
-	defaultLinkBatchMaxAge = 5 * time.Second
-)
+// SessionOption contains the optional settings for configuring an AMQP session.
+type SessionOptions struct {
+	// IncomingWindow sets the maximum number of unacknowledged
+	// transfer frames the server can send.
+	IncomingWindow uint32
+
+	// OutgoingWindow sets the maximum number of unacknowledged
+	// transfer frames the client can send.
+	OutgoingWindow uint32
+
+	// MaxLinks sets the maximum number of links (Senders/Receivers)
+	// allowed on the session.
+	//
+	// Minimum: 1.
+	// Default: 4294967295.
+	MaxLinks uint32
+}
 
 // Session is an AMQP session.
 //
@@ -32,7 +43,7 @@ const (
 type Session struct {
 	channel       uint16                       // session's local channel
 	remoteChannel uint16                       // session's remote channel, owned by conn.mux
-	conn          *conn                        // underlying conn
+	conn          *Conn                        // underlying conn
 	rx            chan frames.Frame            // frames destined for this session are sent on this chan by conn.mux
 	tx            chan frames.FrameBody        // non-transfer frames to be sent; session must track disposition
 	txTransfer    chan *frames.PerformTransfer // transfer frames to be sent; session must track disposition
@@ -58,7 +69,7 @@ type Session struct {
 	err       error
 }
 
-func newSession(c *conn, channel uint16, opts *SessionOptions) *Session {
+func newSession(c *Conn, channel uint16, opts *SessionOptions) *Session {
 	s := &Session{
 		conn:           c,
 		channel:        channel,
@@ -120,7 +131,7 @@ func (s *Session) begin(ctx context.Context) error {
 			go func() {
 				_ = s.txFrame(&frames.PerformEnd{}, nil)
 				select {
-				case <-s.conn.Done:
+				case <-s.conn.done:
 					// conn has terminated, no need to delete the session
 				case <-time.After(5 * time.Second):
 					debug.Log(3, "NewSession clean-up timed out waiting for PerformEnd ack")
@@ -134,8 +145,8 @@ func (s *Session) begin(ctx context.Context) error {
 			s.conn.DeleteSession(s)
 		}
 		return ctx.Err()
-	case <-s.conn.Done:
-		return s.conn.Err()
+	case <-s.conn.done:
+		return s.conn.err()
 	case fr = <-s.rx:
 		// received ack that session was created
 	}
@@ -264,8 +275,8 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 		select {
 		// conn has completed, exit
-		case <-s.conn.Done:
-			s.err = s.conn.Err()
+		case <-s.conn.done:
+			s.err = s.conn.err()
 			return
 
 		// session is being closed by user
@@ -283,8 +294,8 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 					if ok {
 						break EndLoop
 					}
-				case <-s.conn.Done:
-					s.err = s.conn.Err()
+				case <-s.conn.done:
+					s.err = s.conn.err()
 					return
 				}
 			}
@@ -432,7 +443,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				}
 
 				select {
-				case <-s.conn.Done:
+				case <-s.conn.done:
 				case link.rx <- fr.Body:
 				}
 
@@ -583,7 +594,7 @@ func (s *Session) muxFrameToLink(l *link, fr frames.FrameBody) {
 	case <-l.detached:
 		// link is closed
 		// this should be impossible to hit as the link has been removed from the session once Detached is closed
-	case <-s.conn.Done:
+	case <-s.conn.done:
 		// conn is closed
 	}
 }

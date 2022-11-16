@@ -17,7 +17,7 @@ import (
 
 func fuzzConn(data []byte) int {
 	// Receive
-	client, err := New(testconn.New(data), &ConnOptions{
+	client, err := NewConn(testconn.New(data), &ConnOptions{
 		IdleTimeout: 10 * time.Millisecond,
 		SASLType:    SASLTypePlain("listen", "3aCXZYFcuZA89xe6lZkfYJvOPnTGipA3ap7NvPruBhI="),
 	})
@@ -55,7 +55,7 @@ func fuzzConn(data []byte) int {
 	s.Close(ctx)
 
 	// Send
-	client, err = New(testconn.New(data), &ConnOptions{
+	client, err = NewConn(testconn.New(data), &ConnOptions{
 		IdleTimeout: 10 * time.Millisecond,
 		SASLType:    SASLTypePlain("listen", "3aCXZYFcuZA89xe6lZkfYJvOPnTGipA3ap7NvPruBhI="),
 	})

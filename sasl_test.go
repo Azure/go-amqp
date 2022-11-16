@@ -104,7 +104,7 @@ func TestConnSASLXOAUTH2AuthSuccess(t *testing.T) {
 	}
 
 	c := testconn.New(buf)
-	client, err := New(c, &ConnOptions{
+	client, err := NewConn(c, &ConnOptions{
 		IdleTimeout: 10 * time.Minute,
 		SASLType:    SASLTypeXOAUTH2("someuser@example.com", "ya29.vF9dft4qmTc2Nvb3RlckBhdHRhdmlzdGEuY29tCg", 512),
 	})
@@ -134,7 +134,7 @@ func TestConnSASLXOAUTH2AuthFail(t *testing.T) {
 	}
 
 	c := testconn.New(buf)
-	client, err := New(c, &ConnOptions{
+	client, err := NewConn(c, &ConnOptions{
 		IdleTimeout: 10 * time.Minute,
 		SASLType:    SASLTypeXOAUTH2("someuser@example.com", "ya29.vF9dft4qmTc2Nvb3RlckBhdHRhdmlzdGEuY29tCg", 512),
 	})
@@ -174,7 +174,7 @@ func TestConnSASLXOAUTH2AuthFailWithErrorResponse(t *testing.T) {
 	}
 
 	c := testconn.New(buf)
-	client, err := New(c, &ConnOptions{
+	client, err := NewConn(c, &ConnOptions{
 		IdleTimeout: 10 * time.Minute,
 		SASLType:    SASLTypeXOAUTH2("someuser@example.com", "ya29.vF9dft4qmTc2Nvb3RlckBhdHRhdmlzdGEuY29tCg", 512),
 	})
@@ -214,7 +214,7 @@ func TestConnSASLXOAUTH2AuthFailsAdditionalErrorResponse(t *testing.T) {
 	}
 
 	c := testconn.New(buf)
-	client, err := New(c, &ConnOptions{
+	client, err := NewConn(c, &ConnOptions{
 		IdleTimeout: 10 * time.Minute,
 		SASLType:    SASLTypeXOAUTH2("someuser@example.com", "ya29.vF9dft4qmTc2Nvb3RlckBhdHRhdmlzdGEuY29tCg", 512),
 	})
@@ -255,7 +255,7 @@ func TestConnSASLExternal(t *testing.T) {
 	}
 
 	c := testconn.New(buf)
-	client, err := New(c, &ConnOptions{
+	client, err := NewConn(c, &ConnOptions{
 		IdleTimeout: 10 * time.Minute,
 		SASLType:    SASLTypeExternal(""),
 	})

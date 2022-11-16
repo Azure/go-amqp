@@ -15,6 +15,13 @@ import (
 	"github.com/Azure/go-amqp/internal/shared"
 )
 
+// Default link options
+const (
+	defaultLinkCredit      = 1
+	defaultLinkBatching    = false
+	defaultLinkBatchMaxAge = 5 * time.Second
+)
+
 type messageDisposition struct {
 	id    uint32
 	state encoding.DeliveryState

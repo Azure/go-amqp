@@ -11,6 +11,19 @@ import (
 	"github.com/Azure/go-amqp/internal/frames"
 )
 
+// linkKey uniquely identifies a link on a connection by name and direction.
+//
+// A link can be identified uniquely by the ordered tuple
+//
+//	(source-container-id, target-container-id, name)
+//
+// On a single connection the container ID pairs can be abbreviated
+// to a boolean flag indicating the direction of the link.
+type linkKey struct {
+	name string
+	role encoding.Role // Local role: sender/receiver
+}
+
 // link contains the common state and methods for sending and receiving links
 type link struct {
 	key          linkKey               // Name and direction

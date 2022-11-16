@@ -17,7 +17,7 @@ const (
 )
 
 // SASLType represents a SASL configuration to use during authentication.
-type SASLType func(c *conn) error
+type SASLType func(c *Conn) error
 
 // ConnSASLPlain enables SASL PLAIN authentication for the connection.
 //
@@ -25,7 +25,7 @@ type SASLType func(c *conn) error
 // on TLS/SSL enabled connection.
 func SASLTypePlain(username, password string) SASLType {
 	// TODO: how widely used is hostname? should it be supported
-	return func(c *conn) error {
+	return func(c *Conn) error {
 		// make handlers map if no other mechanism has
 		if c.saslHandlers == nil {
 			c.saslHandlers = make(map[encoding.Symbol]stateFunc)
@@ -57,7 +57,7 @@ func SASLTypePlain(username, password string) SASLType {
 
 // ConnSASLAnonymous enables SASL ANONYMOUS authentication for the connection.
 func SASLTypeAnonymous() SASLType {
-	return func(c *conn) error {
+	return func(c *Conn) error {
 		// make handlers map if no other mechanism has
 		if c.saslHandlers == nil {
 			c.saslHandlers = make(map[encoding.Symbol]stateFunc)
@@ -89,7 +89,7 @@ func SASLTypeAnonymous() SASLType {
 // The value for resp is dependent on the type of authentication (empty string is common for TLS).
 // See https://datatracker.ietf.org/doc/html/rfc4422#appendix-A for additional info.
 func SASLTypeExternal(resp string) SASLType {
-	return func(c *conn) error {
+	return func(c *Conn) error {
 		// make handlers map if no other mechanism has
 		if c.saslHandlers == nil {
 			c.saslHandlers = make(map[encoding.Symbol]stateFunc)
@@ -128,7 +128,7 @@ func SASLTypeExternal(resp string) SASLType {
 // SASL XOAUTH2 transmits the bearer in plain text and should only be used
 // on TLS/SSL enabled connection.
 func SASLTypeXOAUTH2(username, bearer string, saslMaxFrameSizeOverride uint32) SASLType {
-	return func(c *conn) error {
+	return func(c *Conn) error {
 		// make handlers map if no other mechanism has
 		if c.saslHandlers == nil {
 			c.saslHandlers = make(map[encoding.Symbol]stateFunc)
@@ -151,16 +151,16 @@ func SASLTypeXOAUTH2(username, bearer string, saslMaxFrameSizeOverride uint32) S
 }
 
 type saslXOAUTH2Handler struct {
-	conn                 *conn
+	conn                 *Conn
 	maxFrameSizeOverride uint32
 	response             []byte
 	errorResponse        []byte // https://developers.google.com/gmail/imap/xoauth2-protocol#error_response
 }
 
 func (s saslXOAUTH2Handler) init() (stateFunc, error) {
-	originalPeerMaxFrameSize := s.conn.PeerMaxFrameSize
-	if s.maxFrameSizeOverride > s.conn.PeerMaxFrameSize {
-		s.conn.PeerMaxFrameSize = s.maxFrameSizeOverride
+	originalPeerMaxFrameSize := s.conn.peerMaxFrameSize
+	if s.maxFrameSizeOverride > s.conn.peerMaxFrameSize {
+		s.conn.peerMaxFrameSize = s.maxFrameSizeOverride
 	}
 	err := s.conn.writeFrame(frames.Frame{
 		Type: frames.TypeSASL,
@@ -169,7 +169,7 @@ func (s saslXOAUTH2Handler) init() (stateFunc, error) {
 			InitialResponse: s.response,
 		},
 	})
-	s.conn.PeerMaxFrameSize = originalPeerMaxFrameSize
+	s.conn.peerMaxFrameSize = originalPeerMaxFrameSize
 	if err != nil {
 		return nil, err
 	}

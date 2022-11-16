@@ -84,7 +84,10 @@ func (s *Sender) Send(ctx context.Context, msg *Message) error {
 // send is separated from Send so that the mutex unlock can be deferred without
 // locking the transfer confirmation that happens in Send.
 func (s *Sender) send(ctx context.Context, msg *Message) (chan encoding.DeliveryState, error) {
-	const maxDeliveryTagLength = 32
+	const (
+		maxDeliveryTagLength   = 32
+		maxTransferFrameHeader = 66 // determined by calcMaxTransferFrameHeader
+	)
 	if len(msg.DeliveryTag) > maxDeliveryTagLength {
 		return nil, fmt.Errorf("delivery tag is over the allowed %v bytes, len: %v", maxDeliveryTagLength, len(msg.DeliveryTag))
 	}
@@ -103,7 +106,7 @@ func (s *Sender) send(ctx context.Context, msg *Message) (chan encoding.Delivery
 	}
 
 	var (
-		maxPayloadSize = int64(s.l.session.conn.PeerMaxFrameSize) - maxTransferFrameHeader
+		maxPayloadSize = int64(s.l.session.conn.peerMaxFrameSize) - maxTransferFrameHeader
 		sndSettleMode  = s.l.senderSettleMode
 		senderSettled  = sndSettleMode != nil && (*sndSettleMode == SenderSettleModeSettled || (*sndSettleMode == SenderSettleModeMixed && msg.SendSettled))
 		deliveryID     = atomic.AddUint32(&s.l.session.nextDeliveryID, 1)

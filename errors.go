@@ -14,37 +14,37 @@ type ErrCond = encoding.ErrCond
 // Error Conditions
 const (
 	// AMQP Errors
-	ErrCondInternalError         ErrCond = "amqp:internal-error"
-	ErrCondNotFound              ErrCond = "amqp:not-found"
-	ErrCondUnauthorizedAccess    ErrCond = "amqp:unauthorized-access"
 	ErrCondDecodeError           ErrCond = "amqp:decode-error"
-	ErrCondResourceLimitExceeded ErrCond = "amqp:resource-limit-exceeded"
-	ErrCondNotAllowed            ErrCond = "amqp:not-allowed"
+	ErrCondFrameSizeTooSmall     ErrCond = "amqp:frame-size-too-small"
+	ErrCondIllegalState          ErrCond = "amqp:illegal-state"
+	ErrCondInternalError         ErrCond = "amqp:internal-error"
 	ErrCondInvalidField          ErrCond = "amqp:invalid-field"
+	ErrCondNotAllowed            ErrCond = "amqp:not-allowed"
+	ErrCondNotFound              ErrCond = "amqp:not-found"
 	ErrCondNotImplemented        ErrCond = "amqp:not-implemented"
-	ErrCondResourceLocked        ErrCond = "amqp:resource-locked"
 	ErrCondPreconditionFailed    ErrCond = "amqp:precondition-failed"
 	ErrCondResourceDeleted       ErrCond = "amqp:resource-deleted"
-	ErrCondIllegalState          ErrCond = "amqp:illegal-state"
-	ErrCondFrameSizeTooSmall     ErrCond = "amqp:frame-size-too-small"
+	ErrCondResourceLimitExceeded ErrCond = "amqp:resource-limit-exceeded"
+	ErrCondResourceLocked        ErrCond = "amqp:resource-locked"
+	ErrCondUnauthorizedAccess    ErrCond = "amqp:unauthorized-access"
 
 	// Connection Errors
 	ErrCondConnectionForced   ErrCond = "amqp:connection:forced"
-	ErrCondFramingError       ErrCond = "amqp:connection:framing-error"
 	ErrCondConnectionRedirect ErrCond = "amqp:connection:redirect"
+	ErrCondFramingError       ErrCond = "amqp:connection:framing-error"
 
 	// Session Errors
-	ErrCondWindowViolation  ErrCond = "amqp:session:window-violation"
 	ErrCondErrantLink       ErrCond = "amqp:session:errant-link"
 	ErrCondHandleInUse      ErrCond = "amqp:session:handle-in-use"
 	ErrCondUnattachedHandle ErrCond = "amqp:session:unattached-handle"
+	ErrCondWindowViolation  ErrCond = "amqp:session:window-violation"
 
 	// Link Errors
 	ErrCondDetachForced          ErrCond = "amqp:link:detach-forced"
-	ErrCondTransferLimitExceeded ErrCond = "amqp:link:transfer-limit-exceeded"
-	ErrCondMessageSizeExceeded   ErrCond = "amqp:link:message-size-exceeded"
 	ErrCondLinkRedirect          ErrCond = "amqp:link:redirect"
+	ErrCondMessageSizeExceeded   ErrCond = "amqp:link:message-size-exceeded"
 	ErrCondStolen                ErrCond = "amqp:link:stolen"
+	ErrCondTransferLimitExceeded ErrCond = "amqp:link:transfer-limit-exceeded"
 )
 
 type Error = encoding.Error

@@ -87,8 +87,6 @@ func TestLinkFlowDrain(t *testing.T) {
 	l := newTestLink(t)
 	// now initialize it as a manual credit link
 	l.manualCreditor = &manualCreditor{}
-	go l.mux()
-	defer close(l.l.close)
 
 	go func() {
 		<-l.receiverReady

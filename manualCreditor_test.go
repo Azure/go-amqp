@@ -121,7 +121,7 @@ func TestManualCreditorDrainReturnsProperError(t *testing.T) {
 
 	errs := []*Error{
 		&encoding.Error{
-			Condition: ErrorDecodeError,
+			Condition: ErrCondDecodeError,
 		},
 		nil,
 	}

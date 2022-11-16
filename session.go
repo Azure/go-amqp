@@ -344,7 +344,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 					//        the begin frame for the session"
 					_ = s.txFrame(&frames.PerformEnd{
 						Error: &Error{
-							Condition:   ErrorNotAllowed,
+							Condition:   ErrCondNotAllowed,
 							Description: "next-incoming-id not set after session established",
 						},
 					}, nil)

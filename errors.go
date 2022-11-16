@@ -7,45 +7,47 @@ import (
 	"github.com/Azure/go-amqp/internal/encoding"
 )
 
+// ErrCond is an AMQP defined error condition.
+// See http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transport-v1.0-os.html#type-amqp-error for info on their meaning.
+type ErrCond = encoding.ErrCond
+
 // Error Conditions
 const (
 	// AMQP Errors
-	ErrorInternalError         ErrorCondition = "amqp:internal-error"
-	ErrorNotFound              ErrorCondition = "amqp:not-found"
-	ErrorUnauthorizedAccess    ErrorCondition = "amqp:unauthorized-access"
-	ErrorDecodeError           ErrorCondition = "amqp:decode-error"
-	ErrorResourceLimitExceeded ErrorCondition = "amqp:resource-limit-exceeded"
-	ErrorNotAllowed            ErrorCondition = "amqp:not-allowed"
-	ErrorInvalidField          ErrorCondition = "amqp:invalid-field"
-	ErrorNotImplemented        ErrorCondition = "amqp:not-implemented"
-	ErrorResourceLocked        ErrorCondition = "amqp:resource-locked"
-	ErrorPreconditionFailed    ErrorCondition = "amqp:precondition-failed"
-	ErrorResourceDeleted       ErrorCondition = "amqp:resource-deleted"
-	ErrorIllegalState          ErrorCondition = "amqp:illegal-state"
-	ErrorFrameSizeTooSmall     ErrorCondition = "amqp:frame-size-too-small"
+	ErrCondInternalError         ErrCond = "amqp:internal-error"
+	ErrCondNotFound              ErrCond = "amqp:not-found"
+	ErrCondUnauthorizedAccess    ErrCond = "amqp:unauthorized-access"
+	ErrCondDecodeError           ErrCond = "amqp:decode-error"
+	ErrCondResourceLimitExceeded ErrCond = "amqp:resource-limit-exceeded"
+	ErrCondNotAllowed            ErrCond = "amqp:not-allowed"
+	ErrCondInvalidField          ErrCond = "amqp:invalid-field"
+	ErrCondNotImplemented        ErrCond = "amqp:not-implemented"
+	ErrCondResourceLocked        ErrCond = "amqp:resource-locked"
+	ErrCondPreconditionFailed    ErrCond = "amqp:precondition-failed"
+	ErrCondResourceDeleted       ErrCond = "amqp:resource-deleted"
+	ErrCondIllegalState          ErrCond = "amqp:illegal-state"
+	ErrCondFrameSizeTooSmall     ErrCond = "amqp:frame-size-too-small"
 
 	// Connection Errors
-	ErrorConnectionForced   ErrorCondition = "amqp:connection:forced"
-	ErrorFramingError       ErrorCondition = "amqp:connection:framing-error"
-	ErrorConnectionRedirect ErrorCondition = "amqp:connection:redirect"
+	ErrCondConnectionForced   ErrCond = "amqp:connection:forced"
+	ErrCondFramingError       ErrCond = "amqp:connection:framing-error"
+	ErrCondConnectionRedirect ErrCond = "amqp:connection:redirect"
 
 	// Session Errors
-	ErrorWindowViolation  ErrorCondition = "amqp:session:window-violation"
-	ErrorErrantLink       ErrorCondition = "amqp:session:errant-link"
-	ErrorHandleInUse      ErrorCondition = "amqp:session:handle-in-use"
-	ErrorUnattachedHandle ErrorCondition = "amqp:session:unattached-handle"
+	ErrCondWindowViolation  ErrCond = "amqp:session:window-violation"
+	ErrCondErrantLink       ErrCond = "amqp:session:errant-link"
+	ErrCondHandleInUse      ErrCond = "amqp:session:handle-in-use"
+	ErrCondUnattachedHandle ErrCond = "amqp:session:unattached-handle"
 
 	// Link Errors
-	ErrorDetachForced          ErrorCondition = "amqp:link:detach-forced"
-	ErrorTransferLimitExceeded ErrorCondition = "amqp:link:transfer-limit-exceeded"
-	ErrorMessageSizeExceeded   ErrorCondition = "amqp:link:message-size-exceeded"
-	ErrorLinkRedirect          ErrorCondition = "amqp:link:redirect"
-	ErrorStolen                ErrorCondition = "amqp:link:stolen"
+	ErrCondDetachForced          ErrCond = "amqp:link:detach-forced"
+	ErrCondTransferLimitExceeded ErrCond = "amqp:link:transfer-limit-exceeded"
+	ErrCondMessageSizeExceeded   ErrCond = "amqp:link:message-size-exceeded"
+	ErrCondLinkRedirect          ErrCond = "amqp:link:redirect"
+	ErrCondStolen                ErrCond = "amqp:link:stolen"
 )
 
 type Error = encoding.Error
-
-type ErrorCondition = encoding.ErrorCondition
 
 // DetachError is returned by a link (Receiver/Sender) when a detach frame is received.
 //

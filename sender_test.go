@@ -194,7 +194,7 @@ func TestSenderSendOnDetached(t *testing.T) {
 	if !errors.As(err, &de) {
 		t.Fatalf("unexpected error type %T", err)
 	}
-	require.Equal(t, encoding.ErrorCondition(errcon), de.RemoteError.Condition)
+	require.Equal(t, ErrCond(errcon), de.RemoteError.Condition)
 	require.Equal(t, errdesc, de.RemoteError.Description)
 	require.NoError(t, client.Close())
 }
@@ -262,7 +262,7 @@ func TestSenderAttachError(t *testing.T) {
 	if !errors.As(err, &de) {
 		t.Fatalf("unexpected error type %T", err)
 	}
-	require.Equal(t, encoding.ErrorCondition(errcon), de.Condition)
+	require.Equal(t, ErrCond(errcon), de.Condition)
 	require.Equal(t, errdesc, de.Description)
 	require.Nil(t, snd)
 	require.Equal(t, true, <-detachAck)
@@ -426,7 +426,7 @@ func TestSenderSendRejected(t *testing.T) {
 	if !errors.As(err, &deErr) {
 		t.Fatalf("unexpected error type %T", err)
 	}
-	require.Equal(t, encoding.ErrorCondition("rejected"), deErr.RemoteError.Condition)
+	require.Equal(t, ErrCond("rejected"), deErr.RemoteError.Condition)
 
 	// link should now be detached
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -493,7 +493,7 @@ func TestSenderSendRejectedNoDetach(t *testing.T) {
 	if !errors.As(err, &asErr) {
 		t.Fatalf("unexpected error type %T", err)
 	}
-	require.Equal(t, encoding.ErrorCondition("rejected"), asErr.Condition)
+	require.Equal(t, ErrCond("rejected"), asErr.Condition)
 
 	// link should *not* be detached
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -542,7 +542,7 @@ func TestSenderSendDetached(t *testing.T) {
 	if !errors.As(err, &asErr) {
 		t.Fatalf("unexpected error type %T", err)
 	}
-	require.Equal(t, encoding.ErrorCondition("detached"), asErr.RemoteError.Condition)
+	require.Equal(t, ErrCond("detached"), asErr.RemoteError.Condition)
 
 	require.NoError(t, client.Close())
 }

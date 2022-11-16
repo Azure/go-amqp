@@ -491,16 +491,16 @@ func (a *Annotations) Unmarshal(r *buffer.Buffer) error {
 	return nil
 }
 
-// ErrorCondition is one of the error conditions defined in the AMQP spec.
-type ErrorCondition string
+// ErrCond is one of the error conditions defined in the AMQP spec.
+type ErrCond string
 
-func (ec ErrorCondition) Marshal(wr *buffer.Buffer) error {
+func (ec ErrCond) Marshal(wr *buffer.Buffer) error {
 	return (Symbol)(ec).Marshal(wr)
 }
 
-func (ec *ErrorCondition) Unmarshal(r *buffer.Buffer) error {
+func (ec *ErrCond) Unmarshal(r *buffer.Buffer) error {
 	s, err := ReadString(r)
-	*ec = ErrorCondition(s)
+	*ec = ErrCond(s)
 	return err
 }
 
@@ -516,7 +516,7 @@ func (ec *ErrorCondition) Unmarshal(r *buffer.Buffer) error {
 // Error is an AMQP error.
 type Error struct {
 	// A symbolic value indicating the error condition.
-	Condition ErrorCondition
+	Condition ErrCond
 
 	// descriptive text about the error condition
 	//

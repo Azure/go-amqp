@@ -699,19 +699,19 @@ func (r *Receiver) muxReceive(fr frames.PerformTransfer) error {
 		// these fields are required on first transfer of a message
 		if fr.DeliveryID == nil {
 			return r.closeWithError(&Error{
-				Condition:   ErrorNotAllowed,
+				Condition:   ErrCondNotAllowed,
 				Description: "received message without a delivery-id",
 			})
 		}
 		if fr.MessageFormat == nil {
 			return r.closeWithError(&Error{
-				Condition:   ErrorNotAllowed,
+				Condition:   ErrCondNotAllowed,
 				Description: "received message without a message-format",
 			})
 		}
 		if fr.DeliveryTag == nil {
 			return r.closeWithError(&Error{
-				Condition:   ErrorNotAllowed,
+				Condition:   ErrCondNotAllowed,
 				Description: "received message without a delivery-tag",
 			})
 		}
@@ -727,7 +727,7 @@ func (r *Receiver) muxReceive(fr frames.PerformTransfer) error {
 				*fr.DeliveryID, r.msg.deliveryID,
 			)
 			return r.closeWithError(&Error{
-				Condition:   ErrorNotAllowed,
+				Condition:   ErrCondNotAllowed,
 				Description: msg,
 			})
 		}
@@ -737,7 +737,7 @@ func (r *Receiver) muxReceive(fr frames.PerformTransfer) error {
 				*fr.MessageFormat, r.msg.Format,
 			)
 			return r.closeWithError(&Error{
-				Condition:   ErrorNotAllowed,
+				Condition:   ErrCondNotAllowed,
 				Description: msg,
 			})
 		}
@@ -747,7 +747,7 @@ func (r *Receiver) muxReceive(fr frames.PerformTransfer) error {
 				fr.DeliveryTag, r.msg.DeliveryTag,
 			)
 			return r.closeWithError(&Error{
-				Condition:   ErrorNotAllowed,
+				Condition:   ErrCondNotAllowed,
 				Description: msg,
 			})
 		}
@@ -764,7 +764,7 @@ func (r *Receiver) muxReceive(fr frames.PerformTransfer) error {
 	// ensure maxMessageSize will not be exceeded
 	if r.l.maxMessageSize != 0 && uint64(r.msgBuf.Len())+uint64(len(fr.Payload)) > r.l.maxMessageSize {
 		return r.closeWithError(&Error{
-			Condition:   ErrorMessageSizeExceeded,
+			Condition:   ErrCondMessageSizeExceeded,
 			Description: fmt.Sprintf("received message larger than max size of %d", r.l.maxMessageSize),
 		})
 	}

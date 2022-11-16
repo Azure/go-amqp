@@ -245,7 +245,7 @@ func TestReceiverOnDetached(t *testing.T) {
 	if !errors.As(<-errChan, &de) {
 		t.Fatalf("unexpected error type %T", err)
 	}
-	require.Equal(t, encoding.ErrorCondition(errcon), de.RemoteError.Condition)
+	require.Equal(t, ErrCond(errcon), de.RemoteError.Condition)
 	require.Equal(t, errdesc, de.RemoteError.Description)
 	require.NoError(t, client.Close())
 	_, err = r.Receive(context.Background())
@@ -303,7 +303,7 @@ func TestReceiveInvalidMessage(t *testing.T) {
 	if err = <-errChan; !errors.As(err, &amqpErr) {
 		t.Fatalf("unexpected error %v", err)
 	}
-	require.Equal(t, ErrorNotAllowed, amqpErr.Condition)
+	require.Equal(t, ErrCondNotAllowed, amqpErr.Condition)
 
 	_, err = r.Receive(context.Background())
 	if !errors.As(err, &amqpErr) {
@@ -331,7 +331,7 @@ func TestReceiveInvalidMessage(t *testing.T) {
 	if err = <-errChan; !errors.As(err, &amqpErr) {
 		t.Fatalf("unexpected error %v", err)
 	}
-	require.Equal(t, ErrorNotAllowed, amqpErr.Condition)
+	require.Equal(t, ErrCondNotAllowed, amqpErr.Condition)
 
 	_, err = r.Receive(context.Background())
 	if !errors.As(err, &amqpErr) {
@@ -361,7 +361,7 @@ func TestReceiveInvalidMessage(t *testing.T) {
 	if err = <-errChan; !errors.As(err, &amqpErr) {
 		t.Fatalf("unexpected error %v", err)
 	}
-	require.Equal(t, ErrorNotAllowed, amqpErr.Condition)
+	require.Equal(t, ErrCondNotAllowed, amqpErr.Condition)
 
 	_, err = r.Receive(context.Background())
 	if !errors.As(err, &amqpErr) {
@@ -962,7 +962,7 @@ func TestReceiveInvalidMultiFrameMessage(t *testing.T) {
 	if err = <-errChan; !errors.As(err, &amqpErr) {
 		t.Fatalf("unexpected error %v", err)
 	}
-	require.Equal(t, ErrorNotAllowed, amqpErr.Condition)
+	require.Equal(t, ErrCondNotAllowed, amqpErr.Condition)
 
 	// mismatched MessageFormat
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -989,7 +989,7 @@ func TestReceiveInvalidMultiFrameMessage(t *testing.T) {
 	if err = <-errChan; !errors.As(err, &amqpErr) {
 		t.Fatalf("unexpected error %v", err)
 	}
-	require.Equal(t, ErrorNotAllowed, amqpErr.Condition)
+	require.Equal(t, ErrCondNotAllowed, amqpErr.Condition)
 
 	// mismatched DeliveryTag
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -1015,7 +1015,7 @@ func TestReceiveInvalidMultiFrameMessage(t *testing.T) {
 	if err = <-errChan; !errors.As(err, &amqpErr) {
 		t.Fatalf("unexpected error %v", err)
 	}
-	require.Equal(t, ErrorNotAllowed, amqpErr.Condition)
+	require.Equal(t, ErrCondNotAllowed, amqpErr.Condition)
 
 	require.NoError(t, client.Close())
 }
@@ -1123,7 +1123,7 @@ func TestReceiveMessageTooBig(t *testing.T) {
 	if !errors.As(err, &amqpErr) {
 		t.Fatalf("unexpected error %v", err)
 	}
-	require.Equal(t, ErrorMessageSizeExceeded, amqpErr.Condition)
+	require.Equal(t, ErrCondMessageSizeExceeded, amqpErr.Condition)
 	require.NoError(t, client.Close())
 }
 

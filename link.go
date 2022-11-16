@@ -30,12 +30,12 @@ type link struct {
 	// This will be initiated if the service sends back an error or requests the link detach.
 	detached chan struct{}
 
-	detachErrorMu sync.Mutex                      // protects detachError
-	detachError   *Error                          // error to send to remote on detach, set by closeWithError
-	session       *Session                        // parent session
-	source        *frames.Source                  // used for Receiver links
-	target        *frames.Target                  // used for Sender links
-	properties    map[encoding.Symbol]interface{} // additional properties sent upon link attach
+	detachErrorMu sync.Mutex              // protects detachError
+	detachError   *Error                  // error to send to remote on detach, set by closeWithError
+	session       *Session                // parent session
+	source        *frames.Source          // used for Receiver links
+	target        *frames.Target          // used for Sender links
+	properties    map[encoding.Symbol]any // additional properties sent upon link attach
 
 	// "The delivery-count is initialized by the sender when a link endpoint is created,
 	// and is incremented whenever a message is sent. Only the sender MAY independently

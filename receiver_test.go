@@ -812,7 +812,7 @@ func TestReceiverPrefetch(t *testing.T) {
 	require.Nil(t, msg)
 
 	messagesCh <- Message{
-		ApplicationProperties: map[string]interface{}{
+		ApplicationProperties: map[string]any{
 			"prop": "hello",
 		},
 		settled: true,

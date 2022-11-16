@@ -2,7 +2,6 @@ package amqp
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -91,7 +90,7 @@ func fuzzConn(data []byte) int {
 }
 
 func fuzzUnmarshal(data []byte) int {
-	types := []interface{}{
+	types := []any{
 		new(frames.PerformAttach),
 		new(*frames.PerformAttach),
 		new(frames.PerformBegin),
@@ -511,7 +510,7 @@ func TestFuzzMarshalCrashers(t *testing.T) {
 }
 
 func testDirFiles(t *testing.T, dir string) []string {
-	finfos, err := ioutil.ReadDir(dir)
+	finfos, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -531,7 +530,7 @@ func TestFuzzConnCorpus(t *testing.T) {
 
 	for _, path := range testDirFiles(t, "internal/encoding/testdata/fuzz/conn/corpus") {
 		t.Run(filepath.Base(path), func(t *testing.T) {
-			data, err := ioutil.ReadFile(path)
+			data, err := os.ReadFile(path)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -549,7 +548,7 @@ func TestFuzzMarshalCorpus(t *testing.T) {
 
 	for _, path := range testDirFiles(t, "internal/encoding/testdata/fuzz/marshal/corpus") {
 		t.Run(filepath.Base(path), func(t *testing.T) {
-			data, err := ioutil.ReadFile(path)
+			data, err := os.ReadFile(path)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -201,7 +201,7 @@ func (r *Receiver) LinkName() string {
 }
 
 // LinkSourceFilterValue retrieves the specified link source filter value or nil if it doesn't exist.
-func (r *Receiver) LinkSourceFilterValue(name string) interface{} {
+func (r *Receiver) LinkSourceFilterValue(name string) any {
 	if r.l.source == nil {
 		return nil
 	}
@@ -450,7 +450,7 @@ func newReceiver(source string, s *Session, opts *ReceiverOptions) (*Receiver, e
 		l.l.key.name = opts.Name
 	}
 	if opts.Properties != nil {
-		l.l.properties = make(map[encoding.Symbol]interface{})
+		l.l.properties = make(map[encoding.Symbol]any)
 		for k, v := range opts.Properties {
 			if k == "" {
 				return nil, errors.New("link property key must not be empty")

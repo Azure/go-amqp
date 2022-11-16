@@ -7,15 +7,15 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
-func Equal(x, y interface{}) bool {
+func Equal(x, y any) bool {
 	return cmp.Equal(x, y, compareOpts(x, y)...)
 }
 
-func Diff(x, y interface{}) string {
+func Diff(x, y any) string {
 	return cmp.Diff(x, y, compareOpts(x, y)...)
 }
 
-func compareOpts(x, y interface{}) []cmp.Option {
+func compareOpts(x, y any) []cmp.Option {
 	return cmp.Options{
 		deepAllowUnexported(x, y),
 		cmpopts.EquateNaNs(),
@@ -23,12 +23,12 @@ func compareOpts(x, y interface{}) []cmp.Option {
 }
 
 // from https://github.com/google/go-cmp/issues/40
-func deepAllowUnexported(vs ...interface{}) cmp.Option {
+func deepAllowUnexported(vs ...any) cmp.Option {
 	m := make(map[reflect.Type]struct{})
 	for _, v := range vs {
 		structTypes(reflect.ValueOf(v), m)
 	}
-	var types []interface{}
+	var types []any
 	for t := range m {
 		types = append(types, reflect.New(t).Elem().Interface())
 	}

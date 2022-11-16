@@ -133,7 +133,7 @@ func TestIntegrationRoundTrip(t *testing.T) {
 						go func(index int, data string) {
 							defer func() { <-maxSendSemaphore }()
 							msg := amqp.NewMessage([]byte(data))
-							msg.ApplicationProperties = make(map[string]interface{})
+							msg.ApplicationProperties = make(map[string]any)
 							msg.ApplicationProperties["i"] = index
 							ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 							err := sender.Send(ctx, msg)

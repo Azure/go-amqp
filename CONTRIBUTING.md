@@ -45,7 +45,7 @@ Thank you for your interest in contributing to go-amqp.
 
 To enable debug logging, build with `-tags debug`. This enables debug level 1 by default. You can increase the level by setting the `DEBUG_LEVEL` environment variable to 2 or higher. (Debug logging is disabled entirely without `-tags debug`, regardless of `DEBUG_LEVEL` setting.)
 
-To add additional logging, use the `debug(level int, format string, v ...interface{})` function, which is similar to `fmt.Printf` but takes a level as it's first argument.
+To add additional logging, use the `debug.Log(level int, format string, v ...any)` function, which is similar to `fmt.Printf` but takes a level as its first argument.
 
 ### Packet Capture
 

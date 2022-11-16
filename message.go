@@ -76,7 +76,7 @@ type Message struct {
 	// The application-properties section is a part of the bare message used for
 	// structured application data. Intermediaries can use the data within this
 	// structure for the purposes of filtering or routing.
-	ApplicationProperties map[string]interface{}
+	ApplicationProperties map[string]any
 	// The keys of this map are restricted to be of type string (which excludes
 	// the possibility of a null key) and the values are restricted to be of
 	// simple types only, that is, excluding map, list, and array types.
@@ -87,11 +87,11 @@ type Message struct {
 
 	// Value payload.
 	// An amqp-value section contains a single AMQP value.
-	Value interface{}
+	Value any
 
 	// Sequence will contain AMQP sequence sections from the body of the message.
 	// An amqp-sequence section contains an AMQP sequence.
-	Sequence [][]interface{}
+	Sequence [][]any
 
 	// The footer section is used for details about the message or delivery which
 	// can only be calculated or evaluated once the whole bare message has been
@@ -242,7 +242,7 @@ func (m *Message) Unmarshal(r *buffer.Buffer) error {
 		}
 
 		var (
-			section interface{}
+			section any
 			// section header is read from r before
 			// unmarshaling section is set to true
 			discardHeader = true
@@ -281,7 +281,7 @@ func (m *Message) Unmarshal(r *buffer.Buffer) error {
 		case encoding.TypeCodeAMQPSequence:
 			r.Skip(int(headerLength))
 
-			var data []interface{}
+			var data []any
 			err = encoding.Unmarshal(r, &data)
 			if err != nil {
 				return err
@@ -365,7 +365,7 @@ type (
 	// - amqp.UUID: <type name="message-id-uuid" class="restricted" source="uuid" provides="message-id"/>
 	// - []byte:    <type name="message-id-binary" class="restricted" source="binary" provides="message-id"/>
 	// - string:    <type name="message-id-string" class="restricted" source="string" provides="message-id"/>
-	MessageID = interface{}
+	MessageID = any
 
 	// AMQPSymbol corresponds to the 'symbol' type in the AMQP spec.
 	// <type name="symbol" class="primitive"/>

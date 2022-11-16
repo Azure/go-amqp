@@ -60,7 +60,7 @@ type ConnOptions struct {
 	MaxSessions uint16
 
 	// Properties sets an entry in the connection properties map sent to the server.
-	Properties map[string]interface{}
+	Properties map[string]any
 
 	// SASLType contains the specified SASL authentication mechanism.
 	SASLType SASLType
@@ -109,12 +109,12 @@ type conn struct {
 	saslComplete bool                          // SASL negotiation complete; internal *except* for SASL auth methods
 
 	// local settings
-	maxFrameSize uint32                          // max frame size to accept
-	channelMax   uint16                          // maximum number of channels to allow
-	hostname     string                          // hostname of remote server (set explicitly or parsed from URL)
-	idleTimeout  time.Duration                   // maximum period between receiving frames
-	properties   map[encoding.Symbol]interface{} // additional properties sent upon connection open
-	containerID  string                          // set explicitly or randomly generated
+	maxFrameSize uint32                  // max frame size to accept
+	channelMax   uint16                  // maximum number of channels to allow
+	hostname     string                  // hostname of remote server (set explicitly or parsed from URL)
+	idleTimeout  time.Duration           // maximum period between receiving frames
+	properties   map[encoding.Symbol]any // additional properties sent upon connection open
+	containerID  string                  // set explicitly or randomly generated
 
 	// peer settings
 	peerIdleTimeout  time.Duration // maximum period between sending frames
@@ -266,7 +266,7 @@ func newConn(netConn net.Conn, opts *ConnOptions) (*conn, error) {
 		c.connectTimeout = opts.Timeout
 	}
 	if opts.Properties != nil {
-		c.properties = make(map[encoding.Symbol]interface{})
+		c.properties = make(map[encoding.Symbol]any)
 		for key, val := range opts.Properties {
 			c.properties[encoding.Symbol(key)] = val
 		}

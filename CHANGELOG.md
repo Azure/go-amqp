@@ -9,6 +9,7 @@
 * Added `Ptr()` method to `SenderSettleMode` and `ReceiverSettleMode` types.
 
 ### Breaking Changes
+* The minimum version of Go required to build this module is now 1.18.
 * Removed `ErrConnClosed` and `ErrTimeout` sentinel error types.
 * The following methods now require a `context.Context` as their first parameter.
   * `Client.NewSession()`, `Session.NewReceiver()`, `Session.NewSender()`

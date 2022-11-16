@@ -259,7 +259,7 @@ func TestNewSendingLink(t *testing.T) {
 				ExpiryTimeout:           5,
 				IgnoreDispositionErrors: true,
 				Name:                    name,
-				Properties: map[string]interface{}{
+				Properties: map[string]any{
 					"property": 123,
 				},
 				RequestedReceiverSettleMode: ModeFirst.Ptr(),
@@ -273,7 +273,7 @@ func TestNewSendingLink(t *testing.T) {
 				require.Equal(t, uint32(5), l.l.source.Timeout)
 				require.False(t, l.detachOnDispositionError)
 				require.Equal(t, name, l.l.key.name)
-				require.Equal(t, map[encoding.Symbol]interface{}{
+				require.Equal(t, map[encoding.Symbol]any{
 					"property": 123,
 				}, l.l.properties)
 				require.NotNil(t, l.l.senderSettleMode)
@@ -310,7 +310,7 @@ func TestNewReceivingLink(t *testing.T) {
 
 		wantSource     *frames.Source
 		wantTarget     *frames.Target
-		wantProperties map[encoding.Symbol]interface{}
+		wantProperties map[encoding.Symbol]any
 	}{
 		{
 			label: "default options",
@@ -351,7 +351,7 @@ func TestNewReceivingLink(t *testing.T) {
 				//ManualCredits:             true,
 				MaxMessageSize: 1024,
 				Name:           name,
-				Properties: map[string]interface{}{
+				Properties: map[string]any{
 					"property": 123,
 				},
 				RequestedSenderSettleMode: ModeMixed.Ptr(),
@@ -379,7 +379,7 @@ func TestNewReceivingLink(t *testing.T) {
 				//require.NotNil(t, l.receiver.manualCreditor)
 				require.Equal(t, uint64(1024), l.l.maxMessageSize)
 				require.Equal(t, name, l.l.key.name)
-				require.Equal(t, map[encoding.Symbol]interface{}{
+				require.Equal(t, map[encoding.Symbol]any{
 					"property": 123,
 				}, l.l.properties)
 				require.NotNil(t, l.l.senderSettleMode)

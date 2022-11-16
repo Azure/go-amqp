@@ -463,7 +463,7 @@ func tryReadNull(r *buffer.Buffer) bool {
 // Annotations keys must be of type string, int, or int64.
 //
 // String keys are encoded as AMQP Symbols.
-type Annotations map[interface{}]interface{}
+type Annotations map[any]any
 
 func (a Annotations) Marshal(wr *buffer.Buffer) error {
 	return writeMap(wr, a)
@@ -525,7 +525,7 @@ type Error struct {
 	Description string
 
 	// map carrying information about the error condition
-	Info map[string]interface{}
+	Info map[string]any
 }
 
 func (e *Error) Marshal(wr *buffer.Buffer) error {
@@ -775,10 +775,10 @@ func (m *Milliseconds) Unmarshal(r *buffer.Buffer) error {
 
 // mapAnyAny is used to decode AMQP maps who's keys are undefined or
 // inconsistently typed.
-type mapAnyAny map[interface{}]interface{}
+type mapAnyAny map[any]any
 
 func (m mapAnyAny) Marshal(wr *buffer.Buffer) error {
-	return writeMap(wr, map[interface{}]interface{}(m))
+	return writeMap(wr, map[any]any(m))
 }
 
 func (m *mapAnyAny) Unmarshal(r *buffer.Buffer) error {
@@ -814,10 +814,10 @@ func (m *mapAnyAny) Unmarshal(r *buffer.Buffer) error {
 }
 
 // mapStringAny is used to decode AMQP maps that have string keys
-type mapStringAny map[string]interface{}
+type mapStringAny map[string]any
 
 func (m mapStringAny) Marshal(wr *buffer.Buffer) error {
-	return writeMap(wr, map[string]interface{}(m))
+	return writeMap(wr, map[string]any(m))
 }
 
 func (m *mapStringAny) Unmarshal(r *buffer.Buffer) error {
@@ -844,10 +844,10 @@ func (m *mapStringAny) Unmarshal(r *buffer.Buffer) error {
 }
 
 // mapStringAny is used to decode AMQP maps that have Symbol keys
-type mapSymbolAny map[Symbol]interface{}
+type mapSymbolAny map[Symbol]any
 
 func (m mapSymbolAny) Marshal(wr *buffer.Buffer) error {
-	return writeMap(wr, map[Symbol]interface{}(m))
+	return writeMap(wr, map[Symbol]any(m))
 }
 
 func (m *mapSymbolAny) Unmarshal(r *buffer.Buffer) error {
@@ -934,8 +934,8 @@ func (p *LifetimePolicy) Unmarshal(r *buffer.Buffer) error {
 }
 
 type DescribedType struct {
-	Descriptor interface{}
-	Value      interface{}
+	Descriptor any
+	Value      any
 }
 
 func (t DescribedType) Marshal(wr *buffer.Buffer) error {
@@ -2064,7 +2064,7 @@ func (a *arrayUUID) Unmarshal(r *buffer.Buffer) error {
 
 // LIST
 
-type list []interface{}
+type list []any
 
 func (l list) Marshal(wr *buffer.Buffer) error {
 	length := len(l)
@@ -2109,7 +2109,7 @@ func (l *list) Unmarshal(r *buffer.Buffer) error {
 
 	ll := *l
 	if int64(cap(ll)) < length {
-		ll = make([]interface{}, length)
+		ll = make([]any, length)
 	} else {
 		ll = ll[:length]
 	}

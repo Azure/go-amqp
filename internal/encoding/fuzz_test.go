@@ -1,7 +1,6 @@
 package encoding
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,7 +11,7 @@ import (
 )
 
 func fuzzUnmarshal(data []byte) int {
-	types := []interface{}{
+	types := []any{
 		new(Error),
 		new(*Error),
 		new(StateReceived),
@@ -65,14 +64,14 @@ func fuzzUnmarshal(data []byte) int {
 		new(*[]string),
 		new([]Symbol),
 		new(*[]Symbol),
-		new(map[interface{}]interface{}),
-		new(*map[interface{}]interface{}),
-		new(map[string]interface{}),
-		new(*map[string]interface{}),
-		new(map[Symbol]interface{}),
-		new(*map[Symbol]interface{}),
-		new(interface{}),
-		new(*interface{}),
+		new(map[any]any),
+		new(*map[any]any),
+		new(map[string]any),
+		new(*map[string]any),
+		new(map[Symbol]any),
+		new(*map[Symbol]any),
+		new(any),
+		new(*any),
 		new(ErrorCondition),
 		new(*ErrorCondition),
 		new(UUID),
@@ -128,7 +127,7 @@ func TestFuzzMarshalCrashers(t *testing.T) {
 }
 
 func testDirFiles(t *testing.T, dir string) []string {
-	finfos, err := ioutil.ReadDir(dir)
+	finfos, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +147,7 @@ func TestFuzzMarshalCorpus(t *testing.T) {
 
 	for _, path := range testDirFiles(t, "testdata/fuzz/marshal/corpus") {
 		t.Run(filepath.Base(path), func(t *testing.T) {
-			data, err := ioutil.ReadFile(path)
+			data, err := os.ReadFile(path)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -161,7 +161,7 @@ func TestSessionNewReceiverBadOptionFails(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	recv, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
-		Properties: map[string]interface{}{
+		Properties: map[string]any{
 			"": "bad_key",
 		},
 	})
@@ -315,7 +315,7 @@ func TestSessionNewSenderBadOptionFails(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	snd, err := session.NewSender(ctx, "target", &SenderOptions{
-		Properties: map[string]interface{}{
+		Properties: map[string]any{
 			"": "bad_key",
 		},
 	})

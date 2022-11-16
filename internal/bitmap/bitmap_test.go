@@ -17,7 +17,7 @@ func TestBitmap(t *testing.T) {
 
 	tests := []struct {
 		max uint32
-		ops []interface{}
+		ops []any
 
 		nextFail bool
 		next     uint32
@@ -25,7 +25,7 @@ func TestBitmap(t *testing.T) {
 	}{
 		{
 			max: 9,
-			ops: []interface{}{
+			ops: []any{
 				add(0), add(1), add(2), add(3), add(4), add(5), add(6), add(7), add(8), add(9),
 				rem(3), rem(7),
 			},
@@ -41,7 +41,7 @@ func TestBitmap(t *testing.T) {
 		},
 		{
 			max: math.MaxUint32,
-			ops: []interface{}{
+			ops: []any{
 				add(13000),
 			},
 
@@ -50,7 +50,7 @@ func TestBitmap(t *testing.T) {
 		},
 		{
 			max: math.MaxUint32,
-			ops: []interface{}{
+			ops: []any{
 				next(64),
 			},
 
@@ -59,7 +59,7 @@ func TestBitmap(t *testing.T) {
 		},
 		{
 			max: math.MaxUint32,
-			ops: []interface{}{
+			ops: []any{
 				next(65535),
 			},
 
@@ -68,7 +68,7 @@ func TestBitmap(t *testing.T) {
 		},
 		{
 			max: math.MaxUint32,
-			ops: []interface{}{
+			ops: []any{
 				next(300),
 				rem(32), rem(78), rem(13),
 				next(1),
@@ -79,7 +79,7 @@ func TestBitmap(t *testing.T) {
 		},
 		{
 			max: 63,
-			ops: []interface{}{
+			ops: []any{
 				next(64),
 			},
 
@@ -88,7 +88,7 @@ func TestBitmap(t *testing.T) {
 		},
 		{
 			max: 31,
-			ops: []interface{}{
+			ops: []any{
 				next(32),
 			},
 
@@ -97,7 +97,7 @@ func TestBitmap(t *testing.T) {
 		},
 		{
 			max: 31,
-			ops: []interface{}{
+			ops: []any{
 				add(32),
 			},
 
@@ -106,7 +106,7 @@ func TestBitmap(t *testing.T) {
 		},
 		{
 			max: 63,
-			ops: []interface{}{
+			ops: []any{
 				next(64),
 				rem(64),
 			},

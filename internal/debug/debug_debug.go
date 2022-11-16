@@ -27,7 +27,7 @@ func init() {
 // Log writes the formatted string to stderr.
 // Level indicates the verbosity of the messages to log.
 // The greater the value, the more verbose messages will be logged.
-func Log(level int, format string, v ...interface{}) {
+func Log(level int, format string, v ...any) {
 	if level <= debugLevel {
 		logger.Printf(format, v...)
 	}
@@ -41,7 +41,7 @@ func Assert(condition bool) {
 }
 
 // Assert panics with the provided message if the specified condition is false.
-func Assertf(condition bool, msg string, v ...interface{}) {
+func Assertf(condition bool, msg string, v ...any) {
 	if !condition {
 		panic(fmt.Sprintf(msg, v...))
 	}

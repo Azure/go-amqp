@@ -46,7 +46,7 @@ type SenderOptions struct {
 	Name string
 
 	// Properties sets an entry in the link properties map sent to the server.
-	Properties map[string]interface{}
+	Properties map[string]any
 
 	// RequestedReceiverSettleMode sets the requested receiver settlement mode.
 	//
@@ -140,7 +140,7 @@ type ReceiverOptions struct {
 	Name string
 
 	// Properties sets an entry in the link properties map sent to the server.
-	Properties map[string]interface{}
+	Properties map[string]any
 
 	// RequestedSenderSettleMode sets the requested sender settlement mode.
 	//
@@ -190,9 +190,9 @@ type ReceiverOptions struct {
 type LinkFilter func(encoding.Filter)
 
 // LinkFilterSource creates or updates the named filter for this LinkFilter.
-func LinkFilterSource(name string, code uint64, value interface{}) LinkFilter {
+func LinkFilterSource(name string, code uint64, value any) LinkFilter {
 	return func(f encoding.Filter) {
-		var descriptor interface{}
+		var descriptor any
 		if code != 0 {
 			descriptor = code
 		} else {

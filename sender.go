@@ -213,7 +213,7 @@ func newSender(target string, s *Session, opts *SenderOptions) (*Sender, error) 
 		l.l.key.name = opts.Name
 	}
 	if opts.Properties != nil {
-		l.l.properties = make(map[encoding.Symbol]interface{})
+		l.l.properties = make(map[encoding.Symbol]any)
 		for k, v := range opts.Properties {
 			if k == "" {
 				return nil, errors.New("link property key must not be empty")

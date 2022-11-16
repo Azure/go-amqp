@@ -29,13 +29,13 @@ func TestConnOptions(t *testing.T) {
 		{
 			label: "multiple properties",
 			opts: ConnOptions{
-				Properties: map[string]interface{}{
+				Properties: map[string]any{
 					"x-opt-test1": "test3",
 					"x-opt-test2": "test2",
 				},
 			},
 			verify: func(t *testing.T, c *conn) {
-				wantProperties := map[encoding.Symbol]interface{}{
+				wantProperties := map[encoding.Symbol]any{
 					"x-opt-test1": "test3",
 					"x-opt-test2": "test2",
 				}

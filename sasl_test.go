@@ -265,7 +265,7 @@ func TestConnSASLExternal(t *testing.T) {
 	defer client.Close()
 }
 
-func peerResponse(items ...interface{}) ([]byte, error) {
+func peerResponse(items ...any) ([]byte, error) {
 	buf := make([]byte, 0)
 	for _, item := range items {
 		switch v := item.(type) {

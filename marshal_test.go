@@ -3,7 +3,6 @@ package amqp
 import (
 	"encoding/binary"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"os"
 	"path/filepath"
@@ -187,7 +186,7 @@ func TestMarshalUnmarshal(t *testing.T) {
 				name = strings.TrimPrefix(name, "amqp.")
 				name = strings.TrimPrefix(name, "*amqp.")
 				path := filepath.Join("fuzz/marshal/corpus", name)
-				err = ioutil.WriteFile(path, buf.Bytes(), 0644)
+				err = os.WriteFile(path, buf.Bytes(), 0644)
 				if err != nil {
 					t.Error(err)
 				}
@@ -264,7 +263,7 @@ var (
 
 	remoteChannel = uint16(4321)
 
-	protoTypes = []interface{}{
+	protoTypes = []any{
 		&frames.PerformOpen{
 			ContainerID:         "foo",
 			Hostname:            "bar.host",
@@ -274,7 +273,7 @@ var (
 			IncomingLocales:     []encoding.Symbol{"barLocale"},
 			OfferedCapabilities: []encoding.Symbol{"fooCap"},
 			DesiredCapabilities: []encoding.Symbol{"barCap"},
-			Properties: map[encoding.Symbol]interface{}{
+			Properties: map[encoding.Symbol]any{
 				"fooProp": int32(45),
 			},
 		},
@@ -286,7 +285,7 @@ var (
 			HandleMax:           9757,
 			OfferedCapabilities: []encoding.Symbol{"fooCap"},
 			DesiredCapabilities: []encoding.Symbol{"barCap"},
-			Properties: map[encoding.Symbol]interface{}{
+			Properties: map[encoding.Symbol]any{
 				"fooProp": int32(45),
 			},
 		},
@@ -302,7 +301,7 @@ var (
 				ExpiryPolicy: ExpiryLinkDetach,
 				Timeout:      635,
 				Dynamic:      true,
-				DynamicNodeProperties: map[encoding.Symbol]interface{}{
+				DynamicNodeProperties: map[encoding.Symbol]any{
 					"lifetime-policy": encoding.DeleteOnClose,
 				},
 				DistributionMode: "some-mode",
@@ -321,7 +320,7 @@ var (
 				ExpiryPolicy: ExpiryLinkDetach,
 				Timeout:      635,
 				Dynamic:      true,
-				DynamicNodeProperties: map[encoding.Symbol]interface{}{
+				DynamicNodeProperties: map[encoding.Symbol]any{
 					"lifetime-policy": encoding.DeleteOnClose,
 				},
 				Capabilities: []encoding.Symbol{"barCap"},
@@ -334,7 +333,7 @@ var (
 			MaxMessageSize:       75983,
 			OfferedCapabilities:  []encoding.Symbol{"fooCap"},
 			DesiredCapabilities:  []encoding.Symbol{"barCap"},
-			Properties: map[encoding.Symbol]interface{}{
+			Properties: map[encoding.Symbol]any{
 				"fooProp": int32(45),
 			},
 		},
@@ -348,7 +347,7 @@ var (
 			ExpiryPolicy: ExpiryLinkDetach,
 			Timeout:      635,
 			Dynamic:      true,
-			DynamicNodeProperties: map[encoding.Symbol]interface{}{
+			DynamicNodeProperties: map[encoding.Symbol]any{
 				"lifetime-policy": encoding.DeleteOnClose,
 			},
 			DistributionMode: "some-mode",
@@ -367,7 +366,7 @@ var (
 			ExpiryPolicy: ExpiryLinkDetach,
 			Timeout:      635,
 			Dynamic:      true,
-			DynamicNodeProperties: map[encoding.Symbol]interface{}{
+			DynamicNodeProperties: map[encoding.Symbol]any{
 				"lifetime-policy": encoding.DeleteOnClose,
 			},
 			Capabilities: []encoding.Symbol{"barCap"},
@@ -383,7 +382,7 @@ var (
 			Available:      uint32Ptr(878321),
 			Drain:          true,
 			Echo:           true,
-			Properties: map[encoding.Symbol]interface{}{
+			Properties: map[encoding.Symbol]any{
 				"fooProp": int32(45),
 			},
 		},
@@ -415,7 +414,7 @@ var (
 			Error: &Error{
 				Condition:   ErrorNotAllowed,
 				Description: "foo description",
-				Info: map[string]interface{}{
+				Info: map[string]any{
 					"other": "info",
 					"and":   uint16(875),
 				},
@@ -428,7 +427,7 @@ var (
 				Condition:   ErrorLinkRedirect,
 				Description: "",
 				// payload is bigger than map8 encoding size
-				Info: map[string]interface{}{
+				Info: map[string]any{
 					"hostname":     "redirected.myservicebus.example.org",
 					"network-host": "redirected.myservicebus.example.org",
 					"port":         uint32(5671),
@@ -440,7 +439,7 @@ var (
 		&Error{
 			Condition:   ErrorNotAllowed,
 			Description: "foo description",
-			Info: map[string]interface{}{
+			Info: map[string]any{
 				"other": "info",
 				"and":   uint16(875),
 			},
@@ -449,7 +448,7 @@ var (
 			Error: &Error{
 				Condition:   ErrorNotAllowed,
 				Description: "foo description",
-				Info: map[string]interface{}{
+				Info: map[string]any{
 					"other": "info",
 					"and":   uint16(875),
 				},
@@ -459,7 +458,7 @@ var (
 			Error: &Error{
 				Condition:   ErrorNotAllowed,
 				Description: "foo description",
-				Info: map[string]interface{}{
+				Info: map[string]any{
 					"other": "info",
 					"and":   uint16(875),
 				},
@@ -494,7 +493,7 @@ var (
 				GroupSequence:      uint32Ptr(89324),
 				ReplyToGroupID:     stringPtr("barGroup"),
 			},
-			ApplicationProperties: map[string]interface{}{
+			ApplicationProperties: map[string]any{
 				"baz": "foo",
 			},
 			Data: [][]byte{
@@ -535,7 +534,7 @@ var (
 				GroupSequence:      nil,
 				ReplyToGroupID:     nil,
 			},
-			ApplicationProperties: map[string]interface{}{
+			ApplicationProperties: map[string]any{
 				"baz": "foo",
 			},
 			Data: [][]byte{
@@ -578,7 +577,7 @@ var (
 			Error: &Error{
 				Condition:   ErrorStolen,
 				Description: "foo description",
-				Info: map[string]interface{}{
+				Info: map[string]any{
 					"other": "info",
 					"and":   int32(uint16(875)),
 				},
@@ -615,12 +614,12 @@ var (
 		},
 		encoding.Milliseconds(10 * time.Second),
 		encoding.Symbol("a symbol"),
-		map[encoding.Symbol]interface{}{
+		map[encoding.Symbol]any{
 			"hash": []uint8{0, 1, 2, 34, 5, 6, 7, 8, 9, 0},
 		},
 	}
 
-	generalTypes = []interface{}{
+	generalTypes = []any{
 		nil,
 		encoding.UUID{1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16},
 		bool(true),
@@ -648,10 +647,10 @@ var (
 			Descriptor: binary.BigEndian.Uint64([]byte{0x00, 0x00, 0x46, 0x8C, 0x00, 0x00, 0x00, 0x04}),
 			Value:      "amqp.annotation.x-opt-offset > '312'",
 		},
-		map[interface{}]interface{}{
+		map[any]any{
 			int32(-1234): []uint8{0, 1, 2, 34, 5, 6, 7, 8, 9, 0},
 		},
-		map[string]interface{}{
+		map[string]any{
 			"hash": []uint8{0, 1, 2, 34, 5, 6, 7, 8, 9, 0},
 		},
 		encoding.ArrayUByte{1, 2, 3, math.MaxUint8, 0},
@@ -679,7 +678,7 @@ var (
 			{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
 			{16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 31},
 		},
-		[]interface{}{int16(1), "hello", false},
+		[]any{int16(1), "hello", false},
 	}
 )
 

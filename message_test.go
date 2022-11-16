@@ -28,7 +28,7 @@ var exampleEncodedMessages = []struct {
 				MessageID: "7735812932138480283/1/12",
 				To:        &helperTo,
 			},
-			ApplicationProperties: map[string]interface{}{
+			ApplicationProperties: map[string]any{
 				"prop002":       "v2",
 				"prop000000003": int64(100000),
 				"prop4":         "val000004",
@@ -63,7 +63,7 @@ func TestMessageUnmarshaling(t *testing.T) {
 
 func TestMessageWithSequence(t *testing.T) {
 	m := &Message{
-		Sequence: [][]interface{}{
+		Sequence: [][]any{
 			{"hello1", "world1", 11, 12, 13},
 			{"hello2", "world2", 21, 22, 23},
 		},
@@ -76,7 +76,7 @@ func TestMessageWithSequence(t *testing.T) {
 	err = newM.UnmarshalBinary(bytes)
 	require.NoError(t, err)
 
-	require.EqualValues(t, [][]interface{}{
+	require.EqualValues(t, [][]any{
 		{"hello1", "world1", int64(11), int64(12), int64(13)},
 		{"hello2", "world2", int64(21), int64(22), int64(23)},
 	}, newM.Sequence)

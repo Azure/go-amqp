@@ -31,6 +31,7 @@
   * `SenderSettleMode`, `ReceiverSettleMode`, `ExpiryPolicy`
 * Constant type `ErrorCondition` has been renamed to `ErrCond`.
   * The `ErrCond` values have had their names updated to include the `ErrCond` prefix.
+* `LinkFilterSource` and `LinkFilterSelector` have been renamed to `NewLinkFilter` and `NewSelectorLinkFilter` respectively.
 
 ### Bugs Fixed
 * Fixed potential panic in `muxHandleFrame()` when checking for manual creditor.

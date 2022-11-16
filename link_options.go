@@ -229,8 +229,9 @@ type ReceiverOptions struct {
 //	http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-types-v1.0-os.html#section-descriptor-values
 type LinkFilter func(encoding.Filter)
 
-// LinkFilterSource creates or updates the named filter for this LinkFilter.
-func LinkFilterSource(name string, code uint64, value any) LinkFilter {
+// NewLinkFilter creates a new LinkFilter with the specified values.
+// Any preexisting link filter with the same name will be updated with the new code and value.
+func NewLinkFilter(name string, code uint64, value any) LinkFilter {
 	return func(f encoding.Filter) {
 		var descriptor any
 		if code != 0 {
@@ -245,9 +246,10 @@ func LinkFilterSource(name string, code uint64, value any) LinkFilter {
 	}
 }
 
-// LinkFilterSelector creates or updates the selector filter (apache.org:selector-filter:string) for this LinkFilter.
-func LinkFilterSelector(filter string) LinkFilter {
-	return LinkFilterSource(selectorFilter, selectorFilterCode, filter)
+// NewSelectorLinkFilter creates a new selector filter (apache.org:selector-filter:string) with the specified filter value.
+// Any preexisting selector filter will be updated with the new filter value.
+func NewSelectorLinkFilter(filter string) LinkFilter {
+	return NewLinkFilter(selectorFilter, selectorFilterCode, filter)
 }
 
 const (

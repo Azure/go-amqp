@@ -345,8 +345,8 @@ func TestNewReceivingLink(t *testing.T) {
 				ExpiryPolicy:   ExpiryPolicyNever,
 				ExpiryTimeout:  3,
 				Filters: []LinkFilter{
-					LinkFilterSelector("amqp.annotation.x-opt-offset > '100'"),
-					LinkFilterSource("com.microsoft:session-filter", 0x00000137000000C, "123"),
+					NewSelectorLinkFilter("amqp.annotation.x-opt-offset > '100'"),
+					NewLinkFilter("com.microsoft:session-filter", 0x00000137000000C, "123"),
 				},
 				//ManualCredits:             true,
 				MaxMessageSize: 1024,

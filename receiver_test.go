@@ -107,7 +107,7 @@ func TestReceiverLinkSourceFilter(t *testing.T) {
 	r, err := session.NewReceiver(ctx, "ignored", &ReceiverOptions{
 		DynamicAddress: true,
 		Filters: []LinkFilter{
-			LinkFilterSource(filterName, 0, filterExp),
+			NewLinkFilter(filterName, 0, filterExp),
 		},
 	})
 	cancel()

@@ -389,11 +389,11 @@ func (r *Receiver) countUnsettled() int {
 	return count
 }
 
-func newReceiver(source string, s *Session, opts *ReceiverOptions) (*Receiver, error) {
-	l := &Receiver{
+func newReceiver(source string, session *Session, opts *ReceiverOptions) (*Receiver, error) {
+	r := &Receiver{
 		l: link{
 			key:      linkKey{shared.RandString(40), encoding.RoleReceiver},
-			session:  s,
+			session:  session,
 			close:    make(chan struct{}),
 			detached: make(chan struct{}),
 			source:   &frames.Source{Address: source},
@@ -406,84 +406,84 @@ func newReceiver(source string, s *Session, opts *ReceiverOptions) (*Receiver, e
 	}
 
 	if opts == nil {
-		return l, nil
+		return r, nil
 	}
 
-	l.batching = opts.Batching
+	r.batching = opts.Batching
 	if opts.BatchMaxAge > 0 {
-		l.batchMaxAge = opts.BatchMaxAge
+		r.batchMaxAge = opts.BatchMaxAge
 	}
 	for _, v := range opts.Capabilities {
-		l.l.target.Capabilities = append(l.l.target.Capabilities, encoding.Symbol(v))
+		r.l.target.Capabilities = append(r.l.target.Capabilities, encoding.Symbol(v))
 	}
 	if opts.Credit > 0 {
-		l.maxCredit = opts.Credit
+		r.maxCredit = opts.Credit
 	}
 	if opts.Durability > DurabilityUnsettledState {
 		return nil, fmt.Errorf("invalid Durability %d", opts.Durability)
 	}
-	l.l.target.Durable = opts.Durability
+	r.l.target.Durable = opts.Durability
 	if opts.DynamicAddress {
-		l.l.source.Address = ""
-		l.l.dynamicAddr = opts.DynamicAddress
+		r.l.source.Address = ""
+		r.l.dynamicAddr = opts.DynamicAddress
 	}
 	if opts.ExpiryPolicy != "" {
 		if err := encoding.ValidateExpiryPolicy(opts.ExpiryPolicy); err != nil {
 			return nil, err
 		}
-		l.l.target.ExpiryPolicy = opts.ExpiryPolicy
+		r.l.target.ExpiryPolicy = opts.ExpiryPolicy
 	}
-	l.l.target.Timeout = opts.ExpiryTimeout
+	r.l.target.Timeout = opts.ExpiryTimeout
 	if opts.Filters != nil {
-		l.l.source.Filter = make(encoding.Filter)
+		r.l.source.Filter = make(encoding.Filter)
 		for _, f := range opts.Filters {
-			f(l.l.source.Filter)
+			f(r.l.source.Filter)
 		}
 	}
 	if opts.ManualCredits {
-		l.manualCreditor = &manualCreditor{}
+		r.manualCreditor = &manualCreditor{}
 	}
 	if opts.MaxMessageSize > 0 {
-		l.l.maxMessageSize = opts.MaxMessageSize
+		r.l.maxMessageSize = opts.MaxMessageSize
 	}
 	if opts.Name != "" {
-		l.l.key.name = opts.Name
+		r.l.key.name = opts.Name
 	}
 	if opts.Properties != nil {
-		l.l.properties = make(map[encoding.Symbol]any)
+		r.l.properties = make(map[encoding.Symbol]any)
 		for k, v := range opts.Properties {
 			if k == "" {
 				return nil, errors.New("link property key must not be empty")
 			}
-			l.l.properties[encoding.Symbol(k)] = v
+			r.l.properties[encoding.Symbol(k)] = v
 		}
 	}
 	if opts.RequestedSenderSettleMode != nil {
 		if rsm := *opts.RequestedSenderSettleMode; rsm > SenderSettleModeMixed {
 			return nil, fmt.Errorf("invalid RequestedSenderSettleMode %d", rsm)
 		}
-		l.l.senderSettleMode = opts.RequestedSenderSettleMode
+		r.l.senderSettleMode = opts.RequestedSenderSettleMode
 	}
 	if opts.SettlementMode != nil {
 		if rsm := *opts.SettlementMode; rsm > ReceiverSettleModeSecond {
 			return nil, fmt.Errorf("invalid SettlementMode %d", rsm)
 		}
-		l.l.receiverSettleMode = opts.SettlementMode
+		r.l.receiverSettleMode = opts.SettlementMode
 	}
-	l.l.target.Address = opts.TargetAddress
+	r.l.target.Address = opts.TargetAddress
 	for _, v := range opts.SenderCapabilities {
-		l.l.source.Capabilities = append(l.l.source.Capabilities, encoding.Symbol(v))
+		r.l.source.Capabilities = append(r.l.source.Capabilities, encoding.Symbol(v))
 	}
 	if opts.SenderDurability != DurabilityNone {
-		l.l.source.Durable = opts.SenderDurability
+		r.l.source.Durable = opts.SenderDurability
 	}
 	if opts.SenderExpiryPolicy != ExpiryPolicySessionEnd {
-		l.l.source.ExpiryPolicy = opts.SenderExpiryPolicy
+		r.l.source.ExpiryPolicy = opts.SenderExpiryPolicy
 	}
 	if opts.SenderExpiryTimeout != 0 {
-		l.l.source.Timeout = opts.SenderExpiryTimeout
+		r.l.source.Timeout = opts.SenderExpiryTimeout
 	}
-	return l, nil
+	return r, nil
 }
 
 // attach sends the Attach performative to establish the link with its parent session.

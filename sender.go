@@ -173,11 +173,11 @@ func (s *Sender) Close(ctx context.Context) error {
 }
 
 // newSendingLink creates a new sending link and attaches it to the session
-func newSender(target string, s *Session, opts *SenderOptions) (*Sender, error) {
-	l := &Sender{
+func newSender(target string, session *Session, opts *SenderOptions) (*Sender, error) {
+	s := &Sender{
 		l: link{
 			key:      linkKey{shared.RandString(40), encoding.RoleSender},
-			session:  s,
+			session:  session,
 			close:    make(chan struct{}),
 			detached: make(chan struct{}),
 			target:   &frames.Target{Address: target},
@@ -187,66 +187,66 @@ func newSender(target string, s *Session, opts *SenderOptions) (*Sender, error) 
 	}
 
 	if opts == nil {
-		return l, nil
+		return s, nil
 	}
 
 	for _, v := range opts.Capabilities {
-		l.l.source.Capabilities = append(l.l.source.Capabilities, encoding.Symbol(v))
+		s.l.source.Capabilities = append(s.l.source.Capabilities, encoding.Symbol(v))
 	}
 	if opts.Durability > DurabilityUnsettledState {
 		return nil, fmt.Errorf("invalid Durability %d", opts.Durability)
 	}
-	l.l.source.Durable = opts.Durability
+	s.l.source.Durable = opts.Durability
 	if opts.DynamicAddress {
-		l.l.target.Address = ""
-		l.l.dynamicAddr = opts.DynamicAddress
+		s.l.target.Address = ""
+		s.l.dynamicAddr = opts.DynamicAddress
 	}
 	if opts.ExpiryPolicy != "" {
 		if err := encoding.ValidateExpiryPolicy(opts.ExpiryPolicy); err != nil {
 			return nil, err
 		}
-		l.l.source.ExpiryPolicy = opts.ExpiryPolicy
+		s.l.source.ExpiryPolicy = opts.ExpiryPolicy
 	}
-	l.l.source.Timeout = opts.ExpiryTimeout
-	l.detachOnDispositionError = !opts.IgnoreDispositionErrors
+	s.l.source.Timeout = opts.ExpiryTimeout
+	s.detachOnDispositionError = !opts.IgnoreDispositionErrors
 	if opts.Name != "" {
-		l.l.key.name = opts.Name
+		s.l.key.name = opts.Name
 	}
 	if opts.Properties != nil {
-		l.l.properties = make(map[encoding.Symbol]any)
+		s.l.properties = make(map[encoding.Symbol]any)
 		for k, v := range opts.Properties {
 			if k == "" {
 				return nil, errors.New("link property key must not be empty")
 			}
-			l.l.properties[encoding.Symbol(k)] = v
+			s.l.properties[encoding.Symbol(k)] = v
 		}
 	}
 	if opts.RequestedReceiverSettleMode != nil {
 		if rsm := *opts.RequestedReceiverSettleMode; rsm > ReceiverSettleModeSecond {
 			return nil, fmt.Errorf("invalid RequestedReceiverSettleMode %d", rsm)
 		}
-		l.l.receiverSettleMode = opts.RequestedReceiverSettleMode
+		s.l.receiverSettleMode = opts.RequestedReceiverSettleMode
 	}
 	if opts.SettlementMode != nil {
 		if ssm := *opts.SettlementMode; ssm > SenderSettleModeMixed {
 			return nil, fmt.Errorf("invalid SettlementMode %d", ssm)
 		}
-		l.l.senderSettleMode = opts.SettlementMode
+		s.l.senderSettleMode = opts.SettlementMode
 	}
-	l.l.source.Address = opts.SourceAddress
+	s.l.source.Address = opts.SourceAddress
 	for _, v := range opts.TargetCapabilities {
-		l.l.target.Capabilities = append(l.l.target.Capabilities, encoding.Symbol(v))
+		s.l.target.Capabilities = append(s.l.target.Capabilities, encoding.Symbol(v))
 	}
 	if opts.TargetDurability != DurabilityNone {
-		l.l.target.Durable = opts.TargetDurability
+		s.l.target.Durable = opts.TargetDurability
 	}
 	if opts.TargetExpiryPolicy != ExpiryPolicySessionEnd {
-		l.l.target.ExpiryPolicy = opts.TargetExpiryPolicy
+		s.l.target.ExpiryPolicy = opts.TargetExpiryPolicy
 	}
 	if opts.TargetExpiryTimeout != 0 {
-		l.l.target.Timeout = opts.TargetExpiryTimeout
+		s.l.target.Timeout = opts.TargetExpiryTimeout
 	}
-	return l, nil
+	return s, nil
 }
 
 func (s *Sender) attach(ctx context.Context) error {

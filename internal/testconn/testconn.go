@@ -68,7 +68,7 @@ func (c *Conn) RemoteAddr() net.Addr {
 }
 
 func (c *Conn) SetDeadline(t time.Time) error {
-	return nil
+	return c.SetReadDeadline(t)
 }
 
 func (c *Conn) SetReadDeadline(t time.Time) error {
@@ -89,5 +89,5 @@ func (c *Conn) SetReadDeadline(t time.Time) error {
 }
 
 func (c *Conn) SetWriteDeadline(t time.Time) error {
-	return nil
+	return errors.New("testconn.SetWriteDeadline NYI")
 }

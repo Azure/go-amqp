@@ -246,9 +246,9 @@ func NewLinkFilter(name string, code uint64, value any) LinkFilter {
 	}
 }
 
-// NewSelectorLinkFilter creates a new selector filter (apache.org:selector-filter:string) with the specified filter value.
+// NewSelectorFilter creates a new selector filter (apache.org:selector-filter:string) with the specified filter value.
 // Any preexisting selector filter will be updated with the new filter value.
-func NewSelectorLinkFilter(filter string) LinkFilter {
+func NewSelectorFilter(filter string) LinkFilter {
 	return NewLinkFilter(selectorFilter, selectorFilterCode, filter)
 }
 

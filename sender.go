@@ -240,7 +240,7 @@ func newSender(target string, s *Session, opts *SenderOptions) (*Sender, error) 
 	if opts.TargetDurability != DurabilityNone {
 		l.l.target.Durable = opts.TargetDurability
 	}
-	if opts.TargetExpiryPolicy != ExpirySessionEnd {
+	if opts.TargetExpiryPolicy != ExpiryPolicySessionEnd {
 		l.l.target.ExpiryPolicy = opts.TargetExpiryPolicy
 	}
 	if opts.TargetExpiryTimeout != 0 {

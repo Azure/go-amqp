@@ -477,7 +477,7 @@ func newReceiver(source string, s *Session, opts *ReceiverOptions) (*Receiver, e
 	if opts.SenderDurability != DurabilityNone {
 		l.l.source.Durable = opts.SenderDurability
 	}
-	if opts.SenderExpiryPolicy != ExpirySessionEnd {
+	if opts.SenderExpiryPolicy != ExpiryPolicySessionEnd {
 		l.l.source.ExpiryPolicy = opts.SenderExpiryPolicy
 	}
 	if opts.SenderExpiryTimeout != 0 {

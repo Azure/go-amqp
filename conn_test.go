@@ -402,7 +402,7 @@ func TestConnWriterError(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, conn.start())
 	// send a frame that our responder doesn't handle to simulate a conn.connWriter error
-	require.NoError(t, conn.SendFrame(frames.Frame{
+	require.NoError(t, conn.sendFrame(frames.Frame{
 		Type: frames.TypeAMQP,
 		Body: &frames.PerformFlow{},
 	}))

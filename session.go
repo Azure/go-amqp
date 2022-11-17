@@ -19,7 +19,7 @@ const (
 	defaultWindow = 5000
 )
 
-// SessionOption contains the optional settings for configuring an AMQP session.
+// SessionOptions contains the optional settings for configuring an AMQP session.
 type SessionOptions struct {
 	// IncomingWindow sets the maximum number of unacknowledged
 	// transfer frames the server can send.
@@ -137,12 +137,12 @@ func (s *Session) begin(ctx context.Context) error {
 					debug.Log(3, "NewSession clean-up timed out waiting for PerformEnd ack")
 				case <-s.rx:
 					// received ack that session was closed, safe to delete session
-					s.conn.DeleteSession(s)
+					s.conn.deleteSession(s)
 				}
 			}()
 		default:
 			// begin wasn't written to the network, so delete session
-			s.conn.DeleteSession(s)
+			s.conn.deleteSession(s)
 		}
 		return ctx.Err()
 	case <-s.conn.done:
@@ -160,7 +160,7 @@ func (s *Session) begin(ctx context.Context) error {
 		// either swallow the frame or blow up in some other way, both causing this call to hang.
 		// deallocate session on error.  we can't call
 		// s.Close() as the session mux hasn't started yet.
-		s.conn.DeleteSession(s)
+		s.conn.deleteSession(s)
 		return fmt.Errorf("unexpected begin response: %+v", fr.Body)
 	}
 
@@ -190,7 +190,7 @@ func (s *Session) Close(ctx context.Context) error {
 // txFrame sends a frame to the connWriter.
 // it returns an error if the connection has been closed.
 func (s *Session) txFrame(p frames.FrameBody, done chan encoding.DeliveryState) error {
-	return s.conn.SendFrame(frames.Frame{
+	return s.conn.sendFrame(frames.Frame{
 		Type:    frames.TypeAMQP,
 		Channel: s.channel,
 		Body:    p,
@@ -240,7 +240,7 @@ func (s *Session) NewSender(ctx context.Context, target string, opts *SenderOpti
 
 func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 	defer func() {
-		s.conn.DeleteSession(s)
+		s.conn.deleteSession(s)
 		if s.err == nil {
 			s.err = ErrSessionClosed
 		}

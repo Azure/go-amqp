@@ -416,18 +416,10 @@ func (c *Conn) err() error {
 }
 
 func (c *Conn) NewSession(ctx context.Context, opts *SessionOptions) (*Session, error) {
-	c.sessionsByChannelMu.Lock()
-
-	// create the next session to allocate
-	// note that channel always start at 0
-	channel, ok := c.channels.Next()
-	if !ok {
-		c.sessionsByChannelMu.Unlock()
-		return nil, fmt.Errorf("reached connection channel max (%d)", c.channelMax)
+	session, err := c.newSession(opts)
+	if err != nil {
+		return nil, err
 	}
-	session := newSession(c, uint16(channel), opts)
-	c.sessionsByChannel[session.channel] = session
-	c.sessionsByChannelMu.Unlock()
 
 	if err := session.begin(ctx); err != nil {
 		return nil, err
@@ -436,7 +428,23 @@ func (c *Conn) NewSession(ctx context.Context, opts *SessionOptions) (*Session, 
 	return session, nil
 }
 
-func (c *Conn) DeleteSession(s *Session) {
+func (c *Conn) newSession(opts *SessionOptions) (*Session, error) {
+	c.sessionsByChannelMu.Lock()
+	defer c.sessionsByChannelMu.Unlock()
+
+	// create the next session to allocate
+	// note that channel always start at 0
+	channel, ok := c.channels.Next()
+	if !ok {
+		return nil, fmt.Errorf("reached connection channel max (%d)", c.channelMax)
+	}
+	session := newSession(c, uint16(channel), opts)
+	c.sessionsByChannel[session.channel] = session
+
+	return session, nil
+}
+
+func (c *Conn) deleteSession(s *Session) {
 	c.sessionsByChannelMu.Lock()
 	defer c.sessionsByChannelMu.Unlock()
 
@@ -792,7 +800,7 @@ func (c *Conn) writeProtoHeader(pID protoID) error {
 var keepaliveFrame = []byte{0x00, 0x00, 0x00, 0x08, 0x02, 0x00, 0x00, 0x00}
 
 // SendFrame is used by sessions and links to send frames across the network.
-func (c *Conn) SendFrame(fr frames.Frame) error {
+func (c *Conn) sendFrame(fr frames.Frame) error {
 	select {
 	case c.txFrame <- fr:
 		return nil

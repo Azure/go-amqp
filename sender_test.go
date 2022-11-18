@@ -107,9 +107,9 @@ func TestSenderSendOnClosed(t *testing.T) {
 	require.NoError(t, snd.Close(ctx))
 	cancel()
 	// sending on a closed sender returns ErrLinkClosed
-	if err = snd.Send(context.Background(), NewMessage([]byte("failed"))); !errors.Is(err, ErrLinkClosed) {
-		t.Fatalf("unexpected error %T", err)
-	}
+	var detachErr *DetachError
+	require.ErrorAs(t, snd.Send(context.Background(), NewMessage([]byte("failed"))), &detachErr)
+	require.Equal(t, "amqp: link closed", detachErr.Error())
 	require.NoError(t, client.Close())
 }
 
@@ -132,10 +132,13 @@ func TestSenderSendOnSessionClosed(t *testing.T) {
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	require.NoError(t, session.Close(ctx))
 	cancel()
-	// sending on a closed sender returns ErrLinkClosed
-	if err = snd.Send(context.Background(), NewMessage([]byte("failed"))); !errors.Is(err, ErrSessionClosed) {
-		t.Fatalf("unexpected error %T", err)
-	}
+	// sending on a closed sender returns SessionError
+	var sessionErr *SessionError
+	err = snd.Send(context.Background(), NewMessage([]byte("failed")))
+	require.ErrorAs(t, err, &sessionErr)
+	var amqpErr *Error
+	// there should be no inner error when closed on our side
+	require.False(t, errors.As(err, &amqpErr))
 	require.NoError(t, client.Close())
 }
 
@@ -191,11 +194,11 @@ func TestSenderSendOnDetached(t *testing.T) {
 	// sending on a detached link returns a DetachError
 	err = snd.Send(context.Background(), NewMessage([]byte("failed")))
 	var de *DetachError
-	if !errors.As(err, &de) {
-		t.Fatalf("unexpected error type %T", err)
-	}
-	require.Equal(t, ErrCond(errcon), de.RemoteError.Condition)
-	require.Equal(t, errdesc, de.RemoteError.Description)
+	require.ErrorAs(t, err, &de)
+	var amqpErr *Error
+	require.ErrorAs(t, de, &amqpErr)
+	require.Equal(t, ErrCond(errcon), amqpErr.Condition)
+	require.Equal(t, errdesc, amqpErr.Description)
 	require.NoError(t, client.Close())
 }
 
@@ -423,10 +426,10 @@ func TestSenderSendRejected(t *testing.T) {
 	err = snd.Send(ctx, NewMessage([]byte("test")))
 	cancel()
 	var deErr *DetachError
-	if !errors.As(err, &deErr) {
-		t.Fatalf("unexpected error type %T", err)
-	}
-	require.Equal(t, ErrCond("rejected"), deErr.RemoteError.Condition)
+	require.ErrorAs(t, err, &deErr)
+	var amqpErr *Error
+	require.ErrorAs(t, deErr, &amqpErr)
+	require.Equal(t, ErrCond("rejected"), amqpErr.Condition)
 
 	// link should now be detached
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -538,11 +541,11 @@ func TestSenderSendDetached(t *testing.T) {
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	err = snd.Send(ctx, NewMessage([]byte("test")))
 	cancel()
-	var asErr *DetachError
-	if !errors.As(err, &asErr) {
-		t.Fatalf("unexpected error type %T", err)
-	}
-	require.Equal(t, ErrCond("detached"), asErr.RemoteError.Condition)
+	var deErr *DetachError
+	require.ErrorAs(t, err, &deErr)
+	var amqpErr *Error
+	require.ErrorAs(t, deErr, &amqpErr)
+	require.Equal(t, ErrCond("detached"), amqpErr.Condition)
 
 	require.NoError(t, client.Close())
 }

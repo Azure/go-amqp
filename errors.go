@@ -2,7 +2,6 @@ package amqp
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/Azure/go-amqp/internal/encoding"
 )
@@ -47,39 +46,67 @@ const (
 	ErrCondTransferLimitExceeded ErrCond = "amqp:link:transfer-limit-exceeded"
 )
 
+// Error is an AMQP error.
+// DetachError and SessionError will contain instances of this type
+// when detached/closed by the peer with an AMQP error. In this case,
+// use errors.As() to unwrap the inner *Error.
 type Error = encoding.Error
 
-// DetachError is returned by a link (Receiver/Sender) when a detach frame is received.
-//
-// RemoteError will be nil if the link was detached gracefully.
+// DetachError is returned by methods on Sender/Receiver when the link has become detached/closed.
 type DetachError struct {
-	RemoteError *Error
+	inner error
 }
 
+// Error implements the error interface for DetachError.
 func (e *DetachError) Error() string {
-	return fmt.Sprintf("link detached, reason: %+v", e.RemoteError)
+	if e.inner == nil {
+		return "amqp: link closed"
+	}
+	return e.inner.Error()
 }
 
-// Errors
-var (
-	// ErrSessionClosed is propagated to Sender/Receivers
-	// when Session.Close() is called.
-	ErrSessionClosed = errors.New("amqp: session closed")
-
-	// ErrLinkClosed is returned by send and receive operations when
-	// Sender.Close() or Receiver.Close() are called.
-	ErrLinkClosed = errors.New("amqp: link closed")
-)
+// Unwrap returns the inner *Error or nil.
+func (e *DetachError) Unwrap() error {
+	var err *Error
+	if errors.As(e.inner, &err) {
+		return err
+	}
+	return nil
+}
 
 // ConnectionError is propagated to Session and Senders/Receivers
-// when the connection has been closed or is no longer functional.
+// when the connection has been closed.
 type ConnectionError struct {
 	inner error
 }
 
+// Error implements the error interface for ConnectionError.
 func (c *ConnectionError) Error() string {
 	if c.inner == nil {
 		return "amqp: connection closed"
 	}
 	return c.inner.Error()
+}
+
+// SessionError is propagated to Senders/Receivers when the session
+// has been closed.
+type SessionError struct {
+	inner error
+}
+
+// Error implements the error interface for SessionError.
+func (s *SessionError) Error() string {
+	if s.inner == nil {
+		return "amqp: session closed"
+	}
+	return s.inner.Error()
+}
+
+// Unwrap returns the inner *Error or nil.
+func (e *SessionError) Unwrap() error {
+	var err *Error
+	if errors.As(e.inner, &err) {
+		return err
+	}
+	return nil
 }

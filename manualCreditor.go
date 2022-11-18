@@ -86,7 +86,7 @@ func (mc *manualCreditor) Drain(ctx context.Context, r *Receiver) error {
 	case <-drained:
 		return nil
 	case <-r.l.detached:
-		return &DetachError{RemoteError: r.l.detachError}
+		return r.l.detachError
 	case <-ctx.Done():
 		return ctx.Err()
 	}

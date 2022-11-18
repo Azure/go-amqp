@@ -4,14 +4,14 @@
 
 ### Features Added
 * Added `ConnectionError` type that's returned when a connection is no longer functional.
-* Added `LinkTargetCapabilities()` option to specify desired target capabilities.
+* Added `SessionError` type that's returned when a session has been closed.
 * Added `SASLType` used when configuring the SASL authentication mechanism.
 * Added `Ptr()` method to `SenderSettleMode` and `ReceiverSettleMode` types.
 
 ### Breaking Changes
 * The minimum version of Go required to build this module is now 1.18.
 * The type `Client` has been renamed to `Conn`, and its constructor `New()` renamed to `NewConn()`.
-* Removed `ErrConnClosed` and `ErrTimeout` sentinel error types.
+* Removed `ErrConnClosed`, `ErrSessionClosed`, `ErrLinkClosed`, and `ErrTimeout` sentinel error types.
 * The following methods now require a `context.Context` as their first parameter.
   * `Conn.NewSession()`, `Session.NewReceiver()`, `Session.NewSender()`
 * Removed `context.Context` parameter and `error` return from method `Receiver.Prefetched()`.
@@ -33,6 +33,8 @@
 * Constant type `ErrorCondition` has been renamed to `ErrCond`.
   * The `ErrCond` values have had their names updated to include the `ErrCond` prefix.
 * `LinkFilterSource` and `LinkFilterSelector` have been renamed to `NewLinkFilter` and `NewSelectorFilter` respectively.
+* The `RemoteError *Error` field in `DetachError` has been removed.
+  * The `DetachError.Unwrap()` method will return the inner `*Error` if present.
 
 ### Bugs Fixed
 * Fixed potential panic in `muxHandleFrame()` when checking for manual creditor.
@@ -42,7 +44,7 @@
 * Session will no longer flood peer with flow frames when half its incoming window is consumed.
 * Newly created `Session` won't leak if the context passed to `Conn.NewSession()` expires before exit.
 * Newly created `link` won't leak if the context passed to `link.attach()` expires before exit.
-* Fixed an issue causing dispositions to hang indefinitely with batching enabled when the receiver link is disconnected.
+* Fixed an issue causing dispositions to hang indefinitely with batching enabled when the receiver link is detached.
 
 ### Other Changes
 * Errors when reading/writing to the underlying `net.Conn` are now wrapped in a `ConnectionError` type.

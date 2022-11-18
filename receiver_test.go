@@ -142,13 +142,13 @@ func TestReceiverOnClosed(t *testing.T) {
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	require.NoError(t, r.Close(ctx))
 	cancel()
-	if err = <-errChan; !errors.Is(err, ErrLinkClosed) {
-		t.Fatalf("unexpected error %v", err)
-	}
+	var deErr *DetachError
+	require.ErrorAs(t, <-errChan, &deErr)
 	_, err = r.Receive(context.Background())
-	if !errors.Is(err, ErrLinkClosed) {
-		t.Fatalf("unexpected error %v", err)
-	}
+	require.ErrorAs(t, err, &deErr)
+	var amqpErr *Error
+	// there should be no inner error when closed on our side
+	require.False(t, errors.As(err, &amqpErr))
 }
 
 func TestReceiverOnSessionClosed(t *testing.T) {
@@ -173,13 +173,10 @@ func TestReceiverOnSessionClosed(t *testing.T) {
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	require.NoError(t, session.Close(ctx))
 	cancel()
-	if err = <-errChan; !errors.Is(err, ErrSessionClosed) {
-		t.Fatalf("unexpected error %v", err)
-	}
+	var sessionErr *SessionError
+	require.ErrorAs(t, <-errChan, &sessionErr)
 	_, err = r.Receive(context.Background())
-	if !errors.Is(err, ErrSessionClosed) {
-		t.Fatalf("unexpected error %v", err)
-	}
+	require.ErrorAs(t, err, &sessionErr)
 }
 
 func TestReceiverOnConnClosed(t *testing.T) {
@@ -241,17 +238,15 @@ func TestReceiverOnDetached(t *testing.T) {
 	require.NoError(t, err)
 	conn.SendFrame(b)
 
-	var de *DetachError
-	if !errors.As(<-errChan, &de) {
-		t.Fatalf("unexpected error type %T", err)
-	}
-	require.Equal(t, ErrCond(errcon), de.RemoteError.Condition)
-	require.Equal(t, errdesc, de.RemoteError.Description)
+	var deErr *DetachError
+	require.ErrorAs(t, <-errChan, &deErr)
+	var amqpErr *Error
+	require.ErrorAs(t, deErr, &amqpErr)
+	require.Equal(t, ErrCond(errcon), amqpErr.Condition)
+	require.Equal(t, errdesc, amqpErr.Description)
 	require.NoError(t, client.Close())
 	_, err = r.Receive(context.Background())
-	if !errors.As(err, &de) {
-		t.Fatalf("unexpected error type %T", err)
-	}
+	require.ErrorAs(t, err, &deErr)
 }
 
 func TestReceiveInvalidMessage(t *testing.T) {
@@ -564,7 +559,8 @@ func TestReceiveSuccessReceiverSettleModeSecondAcceptOnClosedLink(t *testing.T) 
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	err = r.AcceptMessage(ctx, msg)
 	cancel()
-	require.ErrorIs(t, err, ErrLinkClosed)
+	var deErr *DetachError
+	require.ErrorAs(t, err, &deErr)
 }
 
 func TestReceiveSuccessReceiverSettleModeSecondReject(t *testing.T) {

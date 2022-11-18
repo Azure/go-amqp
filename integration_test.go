@@ -15,6 +15,7 @@ import (
 
 	amqp "github.com/Azure/go-amqp"
 	"github.com/fortytw2/leaktest"
+	"github.com/stretchr/testify/require"
 )
 
 var localBrokerAddr string
@@ -653,10 +654,8 @@ func TestIntegrationClose(t *testing.T) {
 		testClose(t, receiver.Close)
 
 		_, err = receiver.Receive(context.Background())
-		if err != amqp.ErrLinkClosed {
-			t.Fatalf("Expected ErrLinkClosed from receiver.Receiver, got: %+v", err)
-			return
-		}
+		var detachErr *amqp.DetachError
+		require.ErrorAs(t, err, &detachErr)
 
 		err = client.Close() // close before leak check
 		if err != nil {
@@ -696,10 +695,8 @@ func TestIntegrationClose(t *testing.T) {
 		testClose(t, session.Close)
 
 		msg, err := receiver.Receive(context.Background())
-		if !errors.Is(err, amqp.ErrSessionClosed) {
-			t.Fatalf("Expected ErrSessionClosed from receiver.Receiver, got: %+v", err)
-			return
-		}
+		var sessionErr *amqp.SessionError
+		require.ErrorAs(t, err, &sessionErr)
 		if msg != nil {
 			t.Fatal("expected nil message")
 		}

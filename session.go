@@ -181,7 +181,9 @@ func (s *Session) Close(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-	if s.err == ErrSessionClosed {
+	var sessionErr *SessionError
+	if errors.As(s.err, &sessionErr) && sessionErr.inner == nil {
+		// an empty SessionError means the session was closed by the caller
 		return nil
 	}
 	return s.err
@@ -242,7 +244,10 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 	defer func() {
 		s.conn.deleteSession(s)
 		if s.err == nil {
-			s.err = ErrSessionClosed
+			s.err = &SessionError{}
+		} else if connErr := (&ConnectionError{}); !errors.As(s.err, &connErr) {
+			// only wrap non-ConnectionError error types
+			s.err = &SessionError{inner: s.err}
 		}
 		// Signal goroutines waiting on the session.
 		close(s.done)
@@ -486,7 +491,11 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 			case *frames.PerformEnd:
 				_ = s.txFrame(&frames.PerformEnd{}, nil)
-				s.err = fmt.Errorf("session ended by server: %s", body.Error)
+				if body.Error != nil {
+					s.err = body.Error
+				} else {
+					s.err = errors.New("session ended by peer but no error was specified")
+				}
 				return
 
 			default:

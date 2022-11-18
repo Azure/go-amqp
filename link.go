@@ -2,6 +2,7 @@ package amqp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -229,13 +230,16 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 		debug.Log(1, "RX (muxHandleFrame): %s", fr)
 		// don't currently support link detach and reattach
 		if !fr.Closed {
-			return fmt.Errorf("non-closing detach not supported: %+v", fr)
+			return &DetachError{inner: fmt.Errorf("non-closing detach not supported: %+v", fr)}
 		}
 
 		// set detach received and close link
 		l.detachReceived = true
 
-		return &DetachError{fr.Error}
+		if fr.Error != nil {
+			return &DetachError{inner: fr.Error}
+		}
+		return &DetachError{}
 
 	default:
 		// TODO: evaluate
@@ -254,7 +258,9 @@ func (l *link) closeLink(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-	if l.err == ErrLinkClosed {
+	var detachErr *DetachError
+	if errors.As(l.err, &detachErr) && detachErr.inner == nil {
+		// an empty DetachError means the link was closed by the caller
 		return nil
 	}
 	return l.err

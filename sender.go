@@ -328,7 +328,7 @@ Loop:
 						return
 					}
 				case <-s.l.close:
-					s.l.err = ErrLinkClosed
+					s.l.err = &DetachError{}
 					return
 				case <-s.l.session.done:
 					s.l.err = s.l.session.err
@@ -337,7 +337,7 @@ Loop:
 			}
 
 		case <-s.l.close:
-			s.l.err = ErrLinkClosed
+			s.l.err = &DetachError{}
 			return
 		case <-s.l.session.done:
 			s.l.err = s.l.session.err

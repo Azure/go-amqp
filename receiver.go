@@ -236,7 +236,7 @@ func (r *Receiver) closeWithError(de *Error) error {
 		r.l.detachErrorMu.Unlock()
 		close(r.l.close)
 	})
-	return de
+	return &DetachError{inner: de}
 }
 
 func (r *Receiver) dispositionBatcher() {
@@ -588,7 +588,7 @@ func (r *Receiver) mux() {
 		case <-r.receiverReady:
 			continue
 		case <-r.l.close:
-			r.l.err = ErrLinkClosed
+			r.l.err = &DetachError{}
 			return
 		case <-r.l.session.done:
 			r.l.err = r.l.session.err
@@ -636,7 +636,7 @@ func (r *Receiver) muxFlow(linkCredit uint32, drain bool) error {
 				return err
 			}
 		case <-r.l.close:
-			return ErrLinkClosed
+			return &DetachError{}
 		case <-r.l.session.done:
 			return r.l.session.err
 		}
@@ -804,7 +804,7 @@ func (r *Receiver) muxReceive(fr frames.PerformTransfer) error {
 	// last frame in message
 	err := r.msg.Unmarshal(&r.msgBuf)
 	if err != nil {
-		return err
+		return &DetachError{inner: err}
 	}
 	debug.Log(1, "deliveryID %d before push to receiver - deliveryCount : %d - linkCredit: %d, len(messages): %d, len(inflight): %d", r.msg.deliveryID, r.l.deliveryCount, r.l.linkCredit, len(r.messages), r.inFlight.len())
 	// send to receiver

@@ -3,7 +3,7 @@
 ## 0.18.0 (Unreleased)
 
 ### Features Added
-* Added `ConnectionError` type that's returned when a connection is no longer functional.
+* Added `ConnError` type that's returned when a connection is no longer functional.
 * Added `SessionError` type that's returned when a session has been closed.
 * Added `SASLType` used when configuring the SASL authentication mechanism.
 * Added `Ptr()` method to `SenderSettleMode` and `ReceiverSettleMode` types.
@@ -33,8 +33,7 @@
 * Constant type `ErrorCondition` has been renamed to `ErrCond`.
   * The `ErrCond` values have had their names updated to include the `ErrCond` prefix.
 * `LinkFilterSource` and `LinkFilterSelector` have been renamed to `NewLinkFilter` and `NewSelectorFilter` respectively.
-* The `RemoteError *Error` field in `DetachError` has been removed.
-  * The `DetachError.Unwrap()` method will return the inner `*Error` if present.
+* The `RemoteError` field in `DetachError` has been renamed.
 
 ### Bugs Fixed
 * Fixed potential panic in `muxHandleFrame()` when checking for manual creditor.

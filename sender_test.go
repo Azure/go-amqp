@@ -161,7 +161,7 @@ func TestSenderSendOnConnClosed(t *testing.T) {
 	require.NoError(t, client.Close())
 	// sending on a closed sender returns a ConnectionError
 	err = snd.Send(context.Background(), NewMessage([]byte("failed")))
-	var connErr *ConnectionError
+	var connErr *ConnError
 	if !errors.As(err, &connErr) {
 		t.Fatalf("unexpected error type %T", err)
 	}
@@ -195,10 +195,10 @@ func TestSenderSendOnDetached(t *testing.T) {
 	err = snd.Send(context.Background(), NewMessage([]byte("failed")))
 	var de *DetachError
 	require.ErrorAs(t, err, &de)
-	var amqpErr *Error
-	require.ErrorAs(t, de, &amqpErr)
-	require.Equal(t, ErrCond(errcon), amqpErr.Condition)
-	require.Equal(t, errdesc, amqpErr.Description)
+	var detachErr *DetachError
+	require.ErrorAs(t, de, &detachErr)
+	require.Equal(t, ErrCond(errcon), detachErr.RemoteErr.Condition)
+	require.Equal(t, errdesc, detachErr.RemoteErr.Description)
 	require.NoError(t, client.Close())
 }
 
@@ -427,9 +427,8 @@ func TestSenderSendRejected(t *testing.T) {
 	cancel()
 	var deErr *DetachError
 	require.ErrorAs(t, err, &deErr)
-	var amqpErr *Error
-	require.ErrorAs(t, deErr, &amqpErr)
-	require.Equal(t, ErrCond("rejected"), amqpErr.Condition)
+	require.NotNil(t, deErr.RemoteErr)
+	require.Equal(t, ErrCond("rejected"), deErr.RemoteErr.Condition)
 
 	// link should now be detached
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -543,9 +542,10 @@ func TestSenderSendDetached(t *testing.T) {
 	cancel()
 	var deErr *DetachError
 	require.ErrorAs(t, err, &deErr)
-	var amqpErr *Error
-	require.ErrorAs(t, deErr, &amqpErr)
-	require.Equal(t, ErrCond("detached"), amqpErr.Condition)
+	var detachErr *DetachError
+	require.ErrorAs(t, deErr, &detachErr)
+	require.NotNil(t, deErr.RemoteErr)
+	require.Equal(t, ErrCond("detached"), deErr.RemoteErr.Condition)
 
 	require.NoError(t, client.Close())
 }
@@ -766,7 +766,7 @@ func TestSenderConnReaderError(t *testing.T) {
 	}()
 
 	err = snd.Send(context.Background(), NewMessage([]byte("failed")))
-	var connErr *ConnectionError
+	var connErr *ConnError
 	if !errors.As(err, &connErr) {
 		t.Fatalf("unexpected error type %T", err)
 	}
@@ -799,7 +799,7 @@ func TestSenderConnWriterError(t *testing.T) {
 	netConn.WriteErr <- errors.New("failed")
 
 	err = snd.Send(context.Background(), NewMessage([]byte("failed")))
-	var connErr *ConnectionError
+	var connErr *ConnError
 	require.ErrorAs(t, err, &connErr)
 	require.Equal(t, "failed", connErr.Error())
 
@@ -944,7 +944,7 @@ func TestNewSenderWriteError(t *testing.T) {
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	snd, err := session.NewSender(ctx, "target", nil)
 	cancel()
-	var connErr *ConnectionError
+	var connErr *ConnError
 	require.ErrorAs(t, err, &connErr)
 	require.Equal(t, "write error", connErr.Error())
 	require.Nil(t, snd)

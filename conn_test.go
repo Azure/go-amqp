@@ -336,7 +336,7 @@ func TestServerSideClose(t *testing.T) {
 	// wait a bit for connReader to read from the mock
 	time.Sleep(100 * time.Millisecond)
 	err = conn.Close()
-	var connErr *ConnectionError
+	var connErr *ConnError
 	if !errors.As(err, &connErr) {
 		t.Fatalf("unexpected error type %T", err)
 	}
@@ -390,7 +390,7 @@ func TestConnReaderError(t *testing.T) {
 	// wait a bit for the connReader goroutine to read from the mock
 	time.Sleep(100 * time.Millisecond)
 	err = conn.Close()
-	var connErr *ConnectionError
+	var connErr *ConnError
 	if !errors.As(err, &connErr) {
 		t.Fatalf("unexpected error type %T", err)
 	}
@@ -409,7 +409,7 @@ func TestConnWriterError(t *testing.T) {
 	// wait a bit for connReader to read from the mock
 	time.Sleep(100 * time.Millisecond)
 	err = conn.Close()
-	var connErr *ConnectionError
+	var connErr *ConnError
 	if !errors.As(err, &connErr) {
 		t.Fatalf("unexpected error type %T", err)
 	}
@@ -573,7 +573,7 @@ func TestClientNewSession(t *testing.T) {
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	session, err = client.NewSession(ctx, nil)
 	cancel()
-	var connErr *ConnectionError
+	var connErr *ConnError
 	if !errors.As(err, &connErr) {
 		t.Fatalf("unexpected error type %T", err)
 	}
@@ -862,7 +862,7 @@ func TestNewSessionWriteError(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	session, err := client.NewSession(ctx, nil)
 	cancel()
-	var connErr *ConnectionError
+	var connErr *ConnError
 	require.ErrorAs(t, err, &connErr)
 	require.Equal(t, "write error", connErr.Error())
 	require.Nil(t, session)

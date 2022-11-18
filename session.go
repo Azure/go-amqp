@@ -182,7 +182,7 @@ func (s *Session) Close(ctx context.Context) error {
 		return ctx.Err()
 	}
 	var sessionErr *SessionError
-	if errors.As(s.err, &sessionErr) && sessionErr.inner == nil {
+	if errors.As(s.err, &sessionErr) && sessionErr.RemoteErr == nil && sessionErr.inner == nil {
 		// an empty SessionError means the session was closed by the caller
 		return nil
 	}
@@ -245,9 +245,14 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 		s.conn.deleteSession(s)
 		if s.err == nil {
 			s.err = &SessionError{}
-		} else if connErr := (&ConnectionError{}); !errors.As(s.err, &connErr) {
+		} else if connErr := (&ConnError{}); !errors.As(s.err, &connErr) {
 			// only wrap non-ConnectionError error types
-			s.err = &SessionError{inner: s.err}
+			var amqpErr *Error
+			if errors.As(s.err, &amqpErr) {
+				s.err = &SessionError{RemoteErr: amqpErr}
+			} else {
+				s.err = &SessionError{inner: s.err}
+			}
 		}
 		// Signal goroutines waiting on the session.
 		close(s.done)
@@ -493,8 +498,6 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				_ = s.txFrame(&frames.PerformEnd{}, nil)
 				if body.Error != nil {
 					s.err = body.Error
-				} else {
-					s.err = &Error{Condition: "amqp:session:closed", Description: "session ended by peer but no error was specified"}
 				}
 				return
 

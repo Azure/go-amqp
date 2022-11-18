@@ -49,7 +49,7 @@ type Error = encoding.Error
 
 // DetachError is returned by methods on Sender/Receiver when the link has become detached/closed.
 type DetachError struct {
-	// RemoteErr contains any error information provided by the peer in a peer-initiated detach.
+	// RemoteErr contains any error information provided by the peer if the peer detached the link.
 	RemoteErr *Error
 
 	inner error
@@ -65,10 +65,10 @@ func (e *DetachError) Error() string {
 	return e.inner.Error()
 }
 
-// ConnError is propagated to Session and Senders/Receivers
+// ConnError is returned by methods on Conn and propagated to Session and Senders/Receivers
 // when the connection has been closed.
 type ConnError struct {
-	// RemoteErr contains any error information provided by the peer when the peer closes the AMQP connection.
+	// RemoteErr contains any error information provided by the peer if the peer closed the AMQP connection.
 	RemoteErr *Error
 
 	inner error
@@ -84,10 +84,10 @@ func (e *ConnError) Error() string {
 	return e.inner.Error()
 }
 
-// SessionError is propagated to Senders/Receivers when the session
-// has been closed.
+// SessionError is returned by methods on Session and propagated to Senders/Receivers
+// when the session has been closed.
 type SessionError struct {
-	// RemoteErr contains any error information provided by the peer when the peer closes the session.
+	// RemoteErr contains any error information provided by the peer if the peer closed the session.
 	RemoteErr *Error
 
 	inner error

@@ -494,7 +494,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				if body.Error != nil {
 					s.err = body.Error
 				} else {
-					s.err = errors.New("session ended by peer but no error was specified")
+					s.err = &Error{Condition: "amqp:session:closed", Description: "session ended by peer but no error was specified"}
 				}
 				return
 

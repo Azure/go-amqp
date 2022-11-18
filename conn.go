@@ -121,9 +121,7 @@ func NewConn(conn net.Conn, opts *ConnOptions) (*Conn, error) {
 	return c, nil
 }
 
-// conn is an AMQP connection.
-// only exported fields and methods are part of public surface area,
-// all others are considered to be internal implementation details.
+// Conn is an AMQP connection.
 type Conn struct {
 	net            net.Conn      // underlying connection
 	connectTimeout time.Duration // time to wait for reads/writes during conn establishment
@@ -487,6 +485,8 @@ func (c *Conn) mux() {
 			case *frames.PerformClose:
 				if body.Error != nil {
 					c.doneErr = body.Error
+				} else {
+					c.doneErr = &Error{Condition: "amqp:connection:closed", Description: "connection closed by peer but no error was specified"}
 				}
 				return
 

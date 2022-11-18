@@ -88,6 +88,15 @@ func (c *ConnectionError) Error() string {
 	return c.inner.Error()
 }
 
+// Unwrap returns the inner *Error or nil.
+func (e *ConnectionError) Unwrap() error {
+	var err *Error
+	if errors.As(e.inner, &err) {
+		return err
+	}
+	return nil
+}
+
 // SessionError is propagated to Senders/Receivers when the session
 // has been closed.
 type SessionError struct {

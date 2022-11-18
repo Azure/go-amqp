@@ -784,7 +784,10 @@ func (c *Conn) writeFrame(fr frames.Frame) error {
 	}
 
 	// write to network
-	_, err = c.net.Write(c.txBuf.Bytes())
+	n, err := c.net.Write(c.txBuf.Bytes())
+	if l := c.txBuf.Len(); n > 0 && n < l && err != nil {
+		debug.Log(1, "wrote %d bytes less than len %d: %v", n, l, err)
+	}
 	return err
 }
 

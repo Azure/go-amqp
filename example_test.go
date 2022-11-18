@@ -163,14 +163,14 @@ func ExampleSessionError() {
 	// attempt to send message on a closed session
 	err = sender.Send(ctx, amqp.NewMessage([]byte("Hello!")))
 
-	var connErr *amqp.SessionError
-	if !errors.As(err, &connErr) {
+	var sessionErr *amqp.SessionError
+	if !errors.As(err, &sessionErr) {
 		log.Fatalf("unexpected error type %T", err)
 	}
 
 	// similarly, methods on session will fail in the same way
 	_, err = session.NewReceiver(ctx, "/queue-name", nil)
-	if !errors.As(err, &connErr) {
+	if !errors.As(err, &sessionErr) {
 		log.Fatalf("unexpected error type %T", err)
 	}
 }

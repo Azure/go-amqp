@@ -131,7 +131,7 @@ func ExampleConnError() {
 }
 
 func ExampleSessionError() {
-	// *SessionErrors are returned when a session has been clossed.
+	// *SessionErrors are returned when a session has been closed.
 	// this error is propagated to all child Sender and Receiver instances.
 
 	// create connection
@@ -210,10 +210,7 @@ func ExampleDetachError() {
 	}
 
 	// now close the sender
-	err = sender.Close(ctx)
-	if err != nil {
-		log.Fatal("Creating AMQP session:", err)
-	}
+	sender.Close(ctx)
 
 	// attempt to send a message after close
 	err = sender.Send(ctx, amqp.NewMessage([]byte("Hello!")))

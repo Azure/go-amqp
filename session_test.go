@@ -600,3 +600,41 @@ func TestSessionInvalidAttachDeadlock(t *testing.T) {
 	require.Nil(t, snd)
 	require.NoError(t, client.Close())
 }
+
+func TestNewSessionContextCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	responder := func(req frames.FrameBody) ([]byte, error) {
+		switch req.(type) {
+		case *mocks.AMQPProto:
+			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
+		case *frames.PerformOpen:
+			return mocks.PerformOpen("container")
+		case *frames.PerformBegin:
+			cancel()
+			return mocks.PerformBegin(0)
+		case *frames.PerformEnd:
+			return mocks.PerformEnd(0, nil)
+		default:
+			return nil, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+	netConn := mocks.NewNetConn(responder)
+
+	client, err := NewConn(netConn, nil)
+	require.NoError(t, err)
+
+	session, err := client.NewSession(ctx, nil)
+
+	// context cancellation and receiving ack are within the same select.
+	// if they happen at the same time, the result is non-deterministic.
+	if err == nil {
+		require.NotNil(t, session)
+	} else {
+		require.ErrorIs(t, err, context.Canceled)
+		require.Nil(t, session)
+	}
+
+	// wait some time for the begin ack to be read
+	time.Sleep(time.Second)
+}

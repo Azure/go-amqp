@@ -1004,3 +1004,44 @@ func TestNewSenderTimedOutAckTimedOut(t *testing.T) {
 
 	// cannot check handle count in this case as detach is asynchronous
 }
+
+func TestNewSenderContextCancelled(t *testing.T) {
+	senderCtx, senderCancel := context.WithCancel(context.Background())
+
+	responder := func(req frames.FrameBody) ([]byte, error) {
+		switch tt := req.(type) {
+		case *mocks.AMQPProto:
+			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
+		case *frames.PerformOpen:
+			return mocks.PerformOpen("container")
+		case *frames.PerformBegin:
+			return mocks.PerformBegin(0)
+		case *frames.PerformEnd:
+			return mocks.PerformEnd(0, nil)
+		case *frames.PerformAttach:
+			// cancel the context to trigger early exit and clean-up
+			senderCancel()
+			return mocks.SenderAttach(0, tt.Name, 0, SenderSettleModeUnsettled)
+		case *frames.PerformDetach:
+			return mocks.PerformDetach(0, 0, nil)
+		default:
+			return nil, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+	netConn := mocks.NewNetConn(responder)
+
+	client, err := NewConn(netConn, nil)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+
+	snd, err := session.NewSender(senderCtx, "target", nil)
+	require.ErrorIs(t, err, context.Canceled)
+	require.Nil(t, snd)
+
+	// don't let the test exit before the attach frame has a chance to arrive
+	time.Sleep(time.Second)
+}

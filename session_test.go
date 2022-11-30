@@ -612,7 +612,8 @@ func TestNewSessionContextCancelled(t *testing.T) {
 			return mocks.PerformOpen("container")
 		case *frames.PerformBegin:
 			cancel()
-			return mocks.PerformBegin(0)
+			// swallow frame to prevent non-determinism of cancellation
+			return nil, nil
 		case *frames.PerformEnd:
 			return mocks.PerformEnd(0, nil)
 		default:
@@ -626,15 +627,6 @@ func TestNewSessionContextCancelled(t *testing.T) {
 
 	session, err := client.NewSession(ctx, nil)
 
-	// context cancellation and receiving ack are within the same select.
-	// if they happen at the same time, the result is non-deterministic.
-	if err == nil {
-		require.NotNil(t, session)
-	} else {
-		require.ErrorIs(t, err, context.Canceled)
-		require.Nil(t, session)
-	}
-
-	// wait some time for the begin ack to be read
-	time.Sleep(time.Second)
+	require.ErrorIs(t, err, context.Canceled)
+	require.Nil(t, session)
 }

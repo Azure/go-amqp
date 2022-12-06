@@ -1,6 +1,6 @@
 # Release History
 
-## 0.18.0 (Unreleased)
+## 0.18.0 (2022-12-06)
 
 ### Features Added
 * Added `ConnError` type that's returned when a connection is no longer functional.
@@ -46,7 +46,7 @@
 * Fixed an issue causing dispositions to hang indefinitely with batching enabled when the receiver link is detached.
 
 ### Other Changes
-* Errors when reading/writing to the underlying `net.Conn` are now wrapped in a `ConnectionError` type.
+* Errors when reading/writing to the underlying `net.Conn` are now wrapped in a `ConnError` type.
 * Disambiguate error message for distinct cases where a session wasn't found for the specified remote channel.
 * Removed `link.Paused` as it didn't add much value and was broken in some cases.
 * Only send one flow frame when a drain has been requested.

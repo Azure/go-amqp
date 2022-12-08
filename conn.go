@@ -378,8 +378,8 @@ func (c *Conn) close() {
 	// for up to c.idleTimeout
 	<-c.rxDone
 
-	if errors.Is(c.rxErr, net.ErrClosed) {
-		// this is the expected error when the connection is closed, swallow it
+	if errors.Is(c.rxErr, net.ErrClosed) || errors.Is(c.rxErr, context.DeadlineExceeded) {
+		// these are expected errors when the connection is closed, swallow them
 		c.rxErr = nil
 	}
 
@@ -388,7 +388,7 @@ func (c *Conn) close() {
 		c.doneErr = &ConnError{}
 	} else if amqpErr, ok := c.rxErr.(*Error); ok {
 		// we experienced a peer-initiated close that contained an Error.  return it
-		c.doneErr = &ConnError{inner: amqpErr}
+		c.doneErr = &ConnError{RemoteErr: amqpErr}
 	} else if c.txErr != nil {
 		c.doneErr = &ConnError{inner: c.txErr}
 	} else if c.rxErr != nil {

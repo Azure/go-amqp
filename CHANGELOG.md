@@ -1,5 +1,11 @@
 # Release History
 
+## 0.18.1 (unreleased)
+
+### Other Changes
+
+* The connection mux goroutine has been removed, eliminating a potential source of deadlocks.
+
 ## 0.18.0 (2022-12-06)
 
 ### Features Added

@@ -396,6 +396,48 @@ func TestKeepAlives(t *testing.T) {
 	require.NoError(t, conn.Close())
 }
 
+func TestKeepAlivesIdleTimeout(t *testing.T) {
+	responder := func(req frames.FrameBody) ([]byte, error) {
+		switch req.(type) {
+		case *mocks.AMQPProto:
+			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
+		case *frames.PerformOpen:
+			return mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformOpen{ContainerID: "container", IdleTimeout: time.Minute})
+		case *mocks.KeepAlive:
+			return nil, nil
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
+		default:
+			return nil, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+
+	const idleTimeout = 100 * time.Millisecond
+
+	netConn := mocks.NewNetConn(responder)
+	conn, err := newConn(netConn, &ConnOptions{
+		IdleTimeout: idleTimeout,
+	})
+	require.NoError(t, err)
+	require.NoError(t, conn.start())
+
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		for {
+			select {
+			case <-time.After(idleTimeout / 2):
+				netConn.SendKeepAlive()
+			case <-done:
+				return
+			}
+		}
+	}()
+
+	time.Sleep(2 * idleTimeout)
+	require.NoError(t, conn.Close())
+}
+
 func TestConnReaderError(t *testing.T) {
 	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 	conn, err := newConn(netConn, nil)

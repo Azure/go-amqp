@@ -162,10 +162,9 @@ type Conn struct {
 	sessionsByChannelMu sync.RWMutex
 
 	// connReader
-	rxBuf         buffer.Buffer // incoming bytes buffer
-	rxDone        chan struct{} // closed when connReader exits
-	rxErr         error         // contains last error reading from c.net; DO NOT TOUCH outside of connReader until rxDone has been closed!
-	connReaderRun chan func()   // functions to be run by conn reader (set deadline on conn to run)
+	rxBuf  buffer.Buffer // incoming bytes buffer
+	rxDone chan struct{} // closed when connReader exits
+	rxErr  error         // contains last error reading from c.net; DO NOT TOUCH outside of connReader until rxDone has been closed!
 
 	// connWriter
 	txFrame chan frames.Frame // AMQP frames to be sent by connWriter
@@ -257,7 +256,6 @@ func newConn(netConn net.Conn, opts *ConnOptions) (*Conn, error) {
 		done:              make(chan struct{}),
 		rxtxExit:          make(chan struct{}),
 		rxDone:            make(chan struct{}),
-		connReaderRun:     make(chan func(), 1), // buffered to allow queueing function before interrupt
 		txFrame:           make(chan frames.Frame),
 		txDone:            make(chan struct{}),
 		sessionsByChannel: map[uint16]*Session{},
@@ -552,16 +550,7 @@ func (c *Conn) readFrame() (frames.Frame, error) {
 			err := c.rxBuf.ReadFromOnce(c.net)
 			if err != nil {
 				debug.Log(1, "readFrame error: %v", err)
-				select {
-				// if there is a pending connReaderRun function, execute it
-				case f := <-c.connReaderRun:
-					f()
-					continue
-
-				// return error to caller
-				default:
-					return frames.Frame{}, err
-				}
+				return frames.Frame{}, err
 			}
 		}
 
@@ -858,33 +847,17 @@ func (c *Conn) readProtoHeader() (protoHeader, error) {
 func (c *Conn) startTLS() (stateFunc, error) {
 	c.initTLSConfig()
 
-	// buffered so connReaderRun won't block
-	done := make(chan error, 1)
+	_ = c.net.SetReadDeadline(time.Time{}) // clear timeout
 
-	// this function will be executed by connReader
-	c.connReaderRun <- func() {
-		defer close(done)
-		_ = c.net.SetReadDeadline(time.Time{}) // clear timeout
-
-		// wrap existing net.Conn and perform TLS handshake
-		tlsConn := tls.Client(c.net, c.tlsConfig)
-		if c.connectTimeout != 0 {
-			_ = tlsConn.SetWriteDeadline(time.Now().Add(c.connectTimeout))
-		}
-		done <- tlsConn.Handshake()
-		// TODO: return?
-
-		// swap net.Conn
-		c.net = tlsConn
-		c.tlsComplete = true
-	}
-
-	// set deadline to interrupt connReader
-	_ = c.net.SetReadDeadline(time.Time{}.Add(1))
-
-	if err := <-done; err != nil {
+	// wrap existing net.Conn and perform TLS handshake
+	tlsConn := tls.Client(c.net, c.tlsConfig)
+	if err := tlsConn.Handshake(); err != nil {
 		return nil, err
 	}
+
+	// swap net.Conn
+	c.net = tlsConn
+	c.tlsComplete = true
 
 	// go to next protocol
 	return c.negotiateProto, nil

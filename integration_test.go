@@ -833,6 +833,88 @@ func TestConcurrentSessionsOpenClose(t *testing.T) {
 	checkLeaks()
 }
 
+func TestReceiverModeFirst(t *testing.T) {
+	if localBrokerAddr == "" {
+		t.Skip()
+	}
+
+	checkLeaks := leaktest.Check(t)
+
+	client, err := amqp.Dial(localBrokerAddr, nil)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	sender, err := session.NewSender(ctx, "TestReceiverModeFirst", nil)
+	cancel()
+	require.NoError(t, err)
+
+	const (
+		linkCredit = 10
+		msgCount   = 2 * linkCredit
+	)
+
+	// prime with a bunch of messages
+	for i := 0; i < msgCount; i++ {
+		err = sender.Send(context.Background(), amqp.NewMessage([]byte(fmt.Sprintf("test %d", i))))
+		require.NoError(t, err)
+	}
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	err = sender.Close(ctx)
+	cancel()
+	require.NoError(t, err)
+
+	// create a new sender
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	sender, err = session.NewSender(ctx, "TestReceiverModeFirstOther", nil)
+	cancel()
+	require.NoError(t, err)
+
+	// now drain the messages
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	recv, err := session.NewReceiver(ctx, "TestReceiverModeFirst", &amqp.ReceiverOptions{
+		Credit: linkCredit,
+	})
+	cancel()
+	require.NoError(t, err)
+
+	msgs := make(chan *amqp.Message, linkCredit)
+	for i := 0; i < msgCount; i++ {
+		// receive one message
+		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+		msg, err := recv.Receive(ctx)
+		cancel()
+		require.NoError(t, err)
+
+		msgs <- msg
+
+		// send to other sender
+		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+		err = sender.Send(ctx, msg)
+		cancel()
+		require.NoError(t, err)
+
+		if (i+1)%linkCredit == 0 {
+			for j := 0; j < linkCredit; j++ {
+				msg = <-msgs
+				ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+				err = recv.AcceptMessage(ctx, msg)
+				cancel()
+				require.NoError(t, err)
+			}
+		}
+	}
+
+	client.Close()
+	checkLeaks()
+}
+
 func repeatStrings(count int, strs ...string) []string {
 	var out []string
 	for i := 0; i < count; i += len(strs) {

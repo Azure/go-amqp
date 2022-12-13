@@ -369,7 +369,7 @@ func TestReceiveSuccessReceiverSettleModeFirst(t *testing.T) {
 			// ignore future flow frames as we have no response
 			return nil, nil
 		case *frames.PerformDisposition:
-			return mocks.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
+			return nil, nil
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -389,6 +389,17 @@ func TestReceiveSuccessReceiverSettleModeFirst(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	msg, err := r.Receive(ctx)
+	cancel()
+	require.NoError(t, err)
+	if c := r.countUnsettled(); c != 1 {
+		t.Fatalf("unexpected unsettled count %d", c)
+	}
+	// link credit should be 0
+	if c := r.l.linkCredit; c != 0 {
+		t.Fatalf("unexpected link credit %d", c)
+	}
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+	err = r.AcceptMessage(ctx, msg)
 	cancel()
 	require.NoError(t, err)
 	if c := r.countUnsettled(); c != 0 {

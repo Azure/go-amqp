@@ -364,6 +364,13 @@ func (r *Receiver) messageDisposition(ctx context.Context, msg *Message, state e
 	}
 
 	if wait == nil {
+		// mode first, there will be no settlement ack
+		r.deleteUnsettled(msg)
+		// cause mux() to check our flow conditions.
+		select {
+		case r.receiverReady <- struct{}{}:
+		default:
+		}
 		return nil
 	}
 
@@ -805,7 +812,7 @@ func (r *Receiver) muxReceive(fr frames.PerformTransfer) error {
 	}
 	debug.Log(1, "deliveryID %d before push to receiver - deliveryCount : %d - linkCredit: %d, len(messages): %d, len(inflight): %d", r.msg.deliveryID, r.l.deliveryCount, r.l.availableCredit, len(r.messages), r.inFlight.len())
 	// send to receiver
-	if receiverSettleModeValue(r.l.receiverSettleMode) == ReceiverSettleModeSecond {
+	if !r.msg.settled {
 		r.addUnsettled(&r.msg)
 	}
 	select {

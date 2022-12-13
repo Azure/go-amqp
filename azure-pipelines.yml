@@ -56,7 +56,8 @@ jobs:
           installationPath: $(Agent.ToolsDirectory)/dotnet
 
       - script: |
-          git clone https://github.com/jhendrixMSFT/azure-amqp $(Pipeline.Workspace)/azure-amqp
+          git clone https://github.com/Azure/azure-amqp $(Pipeline.Workspace)/azure-amqp
+          git checkout v2.6.0
           pushd $(Pipeline.Workspace)/azure-amqp/test/TestAmqpBroker
           dotnet restore
           dotnet build

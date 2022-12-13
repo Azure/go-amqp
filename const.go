@@ -26,12 +26,15 @@ func senderSettleModeValue(m *SenderSettleMode) SenderSettleMode {
 
 // Receiver Settlement Modes
 const (
-	// Receiver will spontaneously settle all incoming transfers.
+	// Receiver is the first to consider the message as settled.
+	// Once the corresponding disposition frame is sent, the message
+	// is considered to be settled.
 	ReceiverSettleModeFirst ReceiverSettleMode = encoding.ReceiverSettleModeFirst
 
-	// Receiver will only settle after sending the disposition to the
-	// sender and receiving a disposition indicating settlement of
-	// the delivery from the sender.
+	// Receiver is the second to consider the message as settled.
+	// Once the corresponding disposition frame is sent, the settlement
+	// is considered in-flight and the message will not be considered as
+	// settled until the sender replies acknowledging the settlement.
 	ReceiverSettleModeSecond ReceiverSettleMode = encoding.ReceiverSettleModeSecond
 )
 

@@ -348,8 +348,7 @@ func (c *Conn) start() error {
 
 // Close closes the connection.
 func (c *Conn) Close() error {
-	c.closeOnce.Do(func() { c.close() })
-
+	c.close()
 	var connErr *ConnError
 	if errors.As(c.doneErr, &connErr) && connErr.RemoteErr == nil && connErr.inner == nil {
 		// an empty ConnectionError means the connection was closed by the caller
@@ -363,37 +362,39 @@ func (c *Conn) Close() error {
 
 // close is called once, either from Close() or when connReader/connWriter exits
 func (c *Conn) close() {
-	defer close(c.done)
+	c.closeOnce.Do(func() {
+		defer close(c.done)
 
-	close(c.rxtxExit)
+		close(c.rxtxExit)
 
-	// wait for writing to stop, allows it to send the final close frame
-	<-c.txDone
+		// wait for writing to stop, allows it to send the final close frame
+		<-c.txDone
 
-	closeErr := c.net.Close()
+		closeErr := c.net.Close()
 
-	// check rxDone after closing net, otherwise may block
-	// for up to c.idleTimeout
-	<-c.rxDone
+		// check rxDone after closing net, otherwise may block
+		// for up to c.idleTimeout
+		<-c.rxDone
 
-	if errors.Is(c.rxErr, net.ErrClosed) {
-		// this is the expected error when the connection is closed, swallow it
-		c.rxErr = nil
-	}
+		if errors.Is(c.rxErr, net.ErrClosed) {
+			// this is the expected error when the connection is closed, swallow it
+			c.rxErr = nil
+		}
 
-	if c.txErr == nil && c.rxErr == nil && closeErr == nil {
-		// if there are no errors, it means user initiated close() and we shut down cleanly
-		c.doneErr = &ConnError{}
-	} else if amqpErr, ok := c.rxErr.(*Error); ok {
-		// we experienced a peer-initiated close that contained an Error.  return it
-		c.doneErr = &ConnError{RemoteErr: amqpErr}
-	} else if c.txErr != nil {
-		c.doneErr = &ConnError{inner: c.txErr}
-	} else if c.rxErr != nil {
-		c.doneErr = &ConnError{inner: c.rxErr}
-	} else {
-		c.doneErr = &ConnError{inner: closeErr}
-	}
+		if c.txErr == nil && c.rxErr == nil && closeErr == nil {
+			// if there are no errors, it means user initiated close() and we shut down cleanly
+			c.doneErr = &ConnError{}
+		} else if amqpErr, ok := c.rxErr.(*Error); ok {
+			// we experienced a peer-initiated close that contained an Error.  return it
+			c.doneErr = &ConnError{RemoteErr: amqpErr}
+		} else if c.txErr != nil {
+			c.doneErr = &ConnError{inner: c.txErr}
+		} else if c.rxErr != nil {
+			c.doneErr = &ConnError{inner: c.rxErr}
+		} else {
+			c.doneErr = &ConnError{inner: closeErr}
+		}
+	})
 }
 
 func (c *Conn) NewSession(ctx context.Context, opts *SessionOptions) (*Session, error) {
@@ -438,7 +439,7 @@ func (c *Conn) deleteSession(s *Session) {
 func (c *Conn) connReader() {
 	defer func() {
 		close(c.rxDone)
-		c.closeOnce.Do(func() { c.close() })
+		c.close()
 	}()
 
 	var sessionsByRemoteChannel = make(map[uint16]*Session)
@@ -606,7 +607,7 @@ func (c *Conn) readFrame() (frames.Frame, error) {
 func (c *Conn) connWriter() {
 	defer func() {
 		close(c.txDone)
-		c.closeOnce.Do(func() { c.close() })
+		c.close()
 	}()
 
 	// disable write timeout

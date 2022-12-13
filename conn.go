@@ -824,7 +824,7 @@ func (c *Conn) readProtoHeader() (protoHeader, error) {
 		return protoHeader{}, errors.New("invalid protoHeader")
 	}
 	// bounds check hint to compiler; see golang.org/issue/14808
-	_ = buf[7]
+	_ = buf[protoHeaderSize-1]
 
 	if !bytes.Equal(buf[:4], []byte{'A', 'M', 'Q', 'P'}) {
 		return protoHeader{}, fmt.Errorf("unexpected protocol %q", buf[:4])

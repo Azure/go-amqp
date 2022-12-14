@@ -6,7 +6,7 @@
 
 * The connection mux goroutine has been removed, eliminating a potential source of deadlocks.
 * Automatic link flow control is built on the manual creditor.
-* Clarified docs that all received messages must be acknowledged.
+* Clarified docs that messages received from a sender configured in a mode other than `SenderSettleModeSettled` must be acknowledged.
 
 ## 0.18.0 (2022-12-06)
 

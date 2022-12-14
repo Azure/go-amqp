@@ -89,7 +89,8 @@ func (r *Receiver) DrainCredit(ctx context.Context) error {
 // and returns immediately if the prefetch cache is empty. To receive from the
 // prefetch and wait for messages from the remote Sender use `Receive`.
 //
-// Once a message is received, you *must* take an action on the message by calling
+// Once a message is received, and if the sender is configured in any mode other
+// than SenderSettleModeSettled, you *must* take an action on the message by calling
 // one of the following: AcceptMessage, RejectMessage, ReleaseMessage, ModifyMessage.
 func (r *Receiver) Prefetched() *Message {
 	select {
@@ -113,7 +114,8 @@ func (r *Receiver) Prefetched() *Message {
 // Receive returns the next message from the sender.
 // Blocks until a message is received, ctx completes, or an error occurs.
 //
-// Once a message is received, you *must* take an action on the message by calling
+// Once a message is received, and if the sender is configured in any mode other
+// than SenderSettleModeSettled, you *must* take an action on the message by calling
 // one of the following: AcceptMessage, RejectMessage, ReleaseMessage, ModifyMessage.
 func (r *Receiver) Receive(ctx context.Context) (*Message, error) {
 	if msg := r.Prefetched(); msg != nil {

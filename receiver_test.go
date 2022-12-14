@@ -395,7 +395,7 @@ func TestReceiveSuccessReceiverSettleModeFirst(t *testing.T) {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	// link credit should be 0
-	if c := r.l.linkCredit; c != 0 {
+	if c := r.l.availableCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)

@@ -501,7 +501,7 @@ func (r *Receiver) attach(ctx context.Context) error {
 	if r.manualCreditor != nil {
 		r.l.rx = make(chan frames.FrameBody, r.maxCredit)
 	} else {
-		r.l.rx = make(chan frames.FrameBody, r.l.linkCredit)
+		r.l.rx = make(chan frames.FrameBody, r.l.availableCredit)
 	}
 
 	if err := r.l.attach(ctx, func(pa *frames.PerformAttach) {
@@ -552,25 +552,25 @@ func (r *Receiver) mux() {
 	for {
 		switch {
 		case r.manualCreditor != nil:
-			drain, credits := r.manualCreditor.FlowBits(r.l.linkCredit)
+			drain, credits := r.manualCreditor.FlowBits(r.l.availableCredit)
 
 			if drain || credits > 0 {
 				debug.Log(1, "receiver (manual): source: %s, inflight: %d, credit: %d, creditsToAdd: %d, drain: %v, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s",
-					r.l.source.Address, r.inFlight.len(), r.l.linkCredit, credits, drain, r.l.deliveryCount, len(r.messages), r.countUnsettled(), r.maxCredit, r.l.receiverSettleMode.String())
+					r.l.source.Address, r.inFlight.len(), r.l.availableCredit, credits, drain, r.l.deliveryCount, len(r.messages), r.countUnsettled(), r.maxCredit, r.l.receiverSettleMode.String())
 
 				// send a flow frame.
 				r.l.err = r.muxFlow(credits, drain)
 			}
 
 		// if receiver && half maxCredits have been processed, send more credits
-		case r.l.linkCredit+uint32(r.countUnsettled()) <= r.maxCredit/2:
-			debug.Log(1, "receiver (half): source: %s, inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s", r.l.source.Address, r.inFlight.len(), r.l.linkCredit, r.l.deliveryCount, len(r.messages), r.countUnsettled(), r.maxCredit, r.l.receiverSettleMode.String())
+		case r.l.availableCredit+uint32(r.countUnsettled()) <= r.maxCredit/2:
+			debug.Log(1, "receiver (half): source: %s, inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s", r.l.source.Address, r.inFlight.len(), r.l.availableCredit, r.l.deliveryCount, len(r.messages), r.countUnsettled(), r.maxCredit, r.l.receiverSettleMode.String())
 
 			linkCredit := r.maxCredit - uint32(r.countUnsettled())
 			r.l.err = r.muxFlow(linkCredit, false)
 
-		case r.l.linkCredit == 0:
-			debug.Log(1, "receiver (pause): inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s", r.inFlight.len(), r.l.linkCredit, r.l.deliveryCount, len(r.messages), r.countUnsettled(), r.maxCredit, r.l.receiverSettleMode.String())
+		case r.l.availableCredit == 0:
+			debug.Log(1, "receiver (pause): inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s", r.inFlight.len(), r.l.availableCredit, r.l.deliveryCount, len(r.messages), r.countUnsettled(), r.maxCredit, r.l.receiverSettleMode.String())
 		}
 
 		if r.l.err != nil {
@@ -598,7 +598,7 @@ func (r *Receiver) mux() {
 }
 
 // muxFlow sends tr to the session mux.
-// l.linkCredit will also be updated to `linkCredit`
+// l.availableCredit will also be updated to `linkCredit`
 func (r *Receiver) muxFlow(linkCredit uint32, drain bool) error {
 	var (
 		deliveryCount = r.l.deliveryCount
@@ -622,7 +622,7 @@ func (r *Receiver) muxFlow(linkCredit uint32, drain bool) error {
 	if !drain {
 		// if we're draining we don't want to touch our internal credit - we're not changing it so any issued credits
 		// are still valid until drain completes, at which point they will be naturally zeroed.
-		r.l.linkCredit = linkCredit
+		r.l.availableCredit = linkCredit
 	}
 
 	// Ensure the session mux is not blocked
@@ -657,7 +657,7 @@ func (r *Receiver) muxHandleFrame(fr frames.FrameBody) error {
 			// if the 'drain' flag has been set in the frame sent to the _receiver_ then
 			// we signal whomever is waiting (the service has seen and acknowledged our drain)
 			if fr.Drain && r.manualCreditor != nil {
-				r.l.linkCredit = 0 // we have no active credits at this point.
+				r.l.availableCredit = 0 // we have no active credits at this point.
 				r.manualCreditor.EndDrain()
 			}
 			return nil
@@ -665,7 +665,7 @@ func (r *Receiver) muxHandleFrame(fr frames.FrameBody) error {
 
 		var (
 			// copy because sent by pointer below; prevent race
-			linkCredit    = r.l.linkCredit
+			linkCredit    = r.l.availableCredit
 			deliveryCount = r.l.deliveryCount
 		)
 
@@ -806,7 +806,7 @@ func (r *Receiver) muxReceive(fr frames.PerformTransfer) error {
 	if err != nil {
 		return &DetachError{inner: err}
 	}
-	debug.Log(1, "deliveryID %d before push to receiver - deliveryCount : %d - linkCredit: %d, len(messages): %d, len(inflight): %d", r.msg.deliveryID, r.l.deliveryCount, r.l.linkCredit, len(r.messages), r.inFlight.len())
+	debug.Log(1, "deliveryID %d before push to receiver - deliveryCount : %d - linkCredit: %d, len(messages): %d, len(inflight): %d", r.msg.deliveryID, r.l.deliveryCount, r.l.availableCredit, len(r.messages), r.inFlight.len())
 	// send to receiver
 	if receiverSettleModeValue(r.l.receiverSettleMode) == ReceiverSettleModeSecond {
 		r.addUnsettled(&r.msg)
@@ -819,7 +819,7 @@ func (r *Receiver) muxReceive(fr frames.PerformTransfer) error {
 		return r.l.err
 	}
 
-	debug.Log(1, "deliveryID %d after push to receiver - deliveryCount : %d - linkCredit: %d, len(messages): %d, len(inflight): %d", r.msg.deliveryID, r.l.deliveryCount, r.l.linkCredit, len(r.messages), r.inFlight.len())
+	debug.Log(1, "deliveryID %d after push to receiver - deliveryCount : %d - linkCredit: %d, len(messages): %d, len(inflight): %d", r.msg.deliveryID, r.l.deliveryCount, r.l.availableCredit, len(r.messages), r.inFlight.len())
 
 	// reset progress
 	r.msgBuf.Reset()
@@ -827,8 +827,8 @@ func (r *Receiver) muxReceive(fr frames.PerformTransfer) error {
 
 	// decrement link-credit after entire message received
 	r.l.deliveryCount++
-	r.l.linkCredit--
-	debug.Log(1, "deliveryID %d before exit - deliveryCount : %d - linkCredit: %d, len(messages): %d", r.msg.deliveryID, r.l.deliveryCount, r.l.linkCredit, len(r.messages))
+	r.l.availableCredit--
+	debug.Log(1, "deliveryID %d before exit - deliveryCount : %d - linkCredit: %d, len(messages): %d", r.msg.deliveryID, r.l.deliveryCount, r.l.availableCredit, len(r.messages))
 	return nil
 }
 

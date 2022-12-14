@@ -86,11 +86,11 @@ func TestLinkFlowWithZeroCredits(t *testing.T) {
 func TestLinkFlowDrain(t *testing.T) {
 	l := newTestLink(t)
 	// now initialize it as a manual credit link
-	l.manualCreditor = &manualCreditor{}
+	l.autoSendFlow = false
 
 	go func() {
 		<-l.receiverReady
-		l.manualCreditor.EndDrain()
+		l.creditor.EndDrain()
 	}()
 
 	require.NoError(t, l.DrainCredit(context.Background()))
@@ -98,8 +98,9 @@ func TestLinkFlowDrain(t *testing.T) {
 
 func TestLinkFlowWithManualCreditor(t *testing.T) {
 	l := newTestLink(t)
-	l.manualCreditor = &manualCreditor{}
+	l.autoSendFlow = false
 	l.l.availableCredit = 1
+	l.maxCredit = 1000
 	go l.mux()
 	defer close(l.l.close)
 
@@ -117,9 +118,20 @@ func TestLinkFlowWithManualCreditor(t *testing.T) {
 	}
 }
 
+func TestLinkFlowWithManualCreditorTooManyCredits(t *testing.T) {
+	l := newTestLink(t)
+	l.autoSendFlow = false
+	l.l.availableCredit = 1
+	l.maxCredit = 100
+	go l.mux()
+	defer close(l.l.close)
+
+	require.Error(t, l.IssueCredit(100))
+}
+
 func TestLinkFlowWithDrain(t *testing.T) {
 	l := newTestLink(t)
-	l.manualCreditor = &manualCreditor{}
+	l.autoSendFlow = false
 	go l.mux()
 	defer close(l.l.close)
 
@@ -164,7 +176,7 @@ func TestLinkFlowWithDrain(t *testing.T) {
 
 func TestLinkFlowWithManualCreditorAndNoFlowNeeded(t *testing.T) {
 	l := newTestLink(t)
-	l.manualCreditor = &manualCreditor{}
+	l.autoSendFlow = false
 	l.l.availableCredit = 1
 	go l.mux()
 	defer close(l.l.close)
@@ -187,7 +199,7 @@ func TestLinkFlowWithManualCreditorAndNoFlowNeeded(t *testing.T) {
 
 func TestMuxFlowHandlesDrainProperly(t *testing.T) {
 	l := newTestLink(t)
-	l.manualCreditor = &manualCreditor{}
+	l.autoSendFlow = false
 	l.l.availableCredit = 101
 	go l.mux()
 	defer close(l.l.close)
@@ -216,6 +228,7 @@ func newTestLink(t *testing.T) *Receiver {
 			rx:    make(chan frames.FrameBody, 100),
 			close: make(chan struct{}),
 		},
+		autoSendFlow:  true,
 		inFlight:      inFlight{},
 		receiverReady: make(chan struct{}, 1),
 	}

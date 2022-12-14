@@ -5,6 +5,7 @@
 ### Other Changes
 
 * The connection mux goroutine has been removed, eliminating a potential source of deadlocks.
+* Automatic link flow control is built on the manual creditor.
 
 ## 0.18.0 (2022-12-06)
 

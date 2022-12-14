@@ -11,56 +11,56 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestManualCreditorIssueCredits(t *testing.T) {
-	mc := manualCreditor{}
-	require.NoError(t, mc.IssueCredit(3))
+func TestCreditorIssueCredits(t *testing.T) {
+	r := newTestLink(t)
+	r.maxCredit = 100
+	require.NoError(t, r.creditor.IssueCredit(3, r))
 
-	drain, credits := mc.FlowBits(1)
+	drain, credits := r.creditor.FlowBits(1)
 	require.False(t, drain)
-	require.EqualValues(t, 3+1, credits, "flow frame includes the pending credits and  our current credits")
+	require.EqualValues(t, 3+1, credits, "flow frame includes the pending credits and our current credits")
 
 	// flow clears the previous data once it's been called.
-	drain, credits = mc.FlowBits(4)
+	drain, credits = r.creditor.FlowBits(4)
 	require.False(t, drain)
 	require.EqualValues(t, 0, credits, "drain flow frame always sets link-credit to 0")
 }
 
-func TestManualCreditorDrain(t *testing.T) {
+func TestCreditorDrain(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*2)
 	defer cancel()
 
-	mc := manualCreditor{}
-
-	require.NoError(t, mc.IssueCredit(3))
+	r := newTestLink(t)
+	r.maxCredit = 100
+	require.NoError(t, r.creditor.IssueCredit(3, r))
 
 	// only one drain allowed at a time.
 	drainRoutines := sync.WaitGroup{}
 	drainRoutines.Add(2)
 
-	l := newTestLink(t)
 	var err1, err2 error
 
 	go func() {
 		defer drainRoutines.Done()
-		err1 = mc.Drain(ctx, l)
+		err1 = r.creditor.Drain(ctx, r)
 	}()
 
 	go func() {
 		defer drainRoutines.Done()
-		err2 = mc.Drain(ctx, l)
+		err2 = r.creditor.Drain(ctx, r)
 	}()
 
 	// one of the drain calls will have succeeded, the other one should still be blocking.
 	time.Sleep(time.Second * 2)
 
 	// the next time someone requests a flow frame it'll drain (this doesn't affect the blocked Drain() calls)
-	drain, credits := mc.FlowBits(101)
+	drain, credits := r.creditor.FlowBits(101)
 	require.True(t, drain)
 	require.EqualValues(t, 0, credits, "Drain always drains with 0 credit")
 
 	// unblock the last of the drainers
-	mc.EndDrain()
-	require.Nil(t, mc.drained, "drain completes and removes the drained channel")
+	r.creditor.EndDrain()
+	require.Nil(t, r.creditor.drained, "drain completes and removes the drained channel")
 
 	// wait for all the drain routines to end
 	drainRoutines.Wait()
@@ -75,12 +75,13 @@ func TestManualCreditorDrain(t *testing.T) {
 	}
 }
 
-func TestManualCreditorIssueCreditsWhileDrainingFails(t *testing.T) {
+func TestCreditorIssueCreditsWhileDrainingFails(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*2)
 	defer cancel()
 
-	mc := manualCreditor{}
-	require.NoError(t, mc.IssueCredit(3))
+	r := newTestLink(t)
+	r.maxCredit = 100
+	require.NoError(t, r.creditor.IssueCredit(3, r))
 
 	// only one drain allowed at a time.
 	drainRoutines := sync.WaitGroup{}
@@ -91,31 +92,31 @@ func TestManualCreditorIssueCreditsWhileDrainingFails(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-		err := mc.Drain(ctx, newTestLink(t))
+		err := r.creditor.Drain(ctx, newTestLink(t))
 		require.NoError(t, err)
 	}()
 
 	time.Sleep(time.Second * 2)
 
 	// drain is still active, so...
-	require.Error(t, mc.IssueCredit(1), errLinkDraining.Error())
+	require.Error(t, r.creditor.IssueCredit(1, r), errLinkDraining.Error())
 
-	mc.EndDrain()
+	r.creditor.EndDrain()
 	wg.Wait()
 }
 
-func TestManualCreditorDrainRespectsContext(t *testing.T) {
+func TestCreditorDrainRespectsContext(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*2)
 	defer cancel()
 
-	mc := manualCreditor{}
+	mc := creditor{}
 
 	cancel()
 
 	require.Error(t, mc.Drain(ctx, newTestLink(t)), context.Canceled.Error())
 }
 
-func TestManualCreditorDrainReturnsProperError(t *testing.T) {
+func TestCreditorDrainReturnsProperError(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*2)
 	defer cancel()
 
@@ -128,7 +129,7 @@ func TestManualCreditorDrainReturnsProperError(t *testing.T) {
 
 	for i, err := range errs {
 		t.Run(fmt.Sprintf("Error[%d]", i), func(t *testing.T) {
-			mc := manualCreditor{}
+			mc := creditor{}
 			link := newTestLink(t)
 
 			link.l.detachError = err

@@ -459,7 +459,7 @@ func TestSenderSendRejectedNoDetach(t *testing.T) {
 			return mocks.SenderAttach(0, tt.Name, 0, SenderSettleModeUnsettled)
 		case *frames.PerformTransfer:
 			// reject first delivery
-			if *tt.DeliveryID == 1 {
+			if *tt.DeliveryID == 0 {
 				return mocks.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, nil, &encoding.StateRejected{
 					Error: &Error{
 						Condition:   "rejected",

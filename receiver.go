@@ -427,8 +427,6 @@ func newReceiver(source string, session *Session, opts *ReceiverOptions) (*Recei
 	}
 	if opts.Credit > 0 {
 		r.maxCredit = opts.Credit
-	} else {
-		r.maxCredit = defaultLinkCredit
 	}
 	if opts.Durability > DurabilityUnsettledState {
 		return nil, fmt.Errorf("invalid Durability %d", opts.Durability)

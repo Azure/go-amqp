@@ -500,7 +500,8 @@ func newReceiver(source string, session *Session, opts *ReceiverOptions) (*Recei
 // attach sends the Attach performative to establish the link with its parent session.
 // this is automatically called by the new*Link constructors.
 func (r *Receiver) attach(ctx context.Context) error {
-	r.l.rx = make(chan frames.FrameBody, 1)
+	// TODO: remove double-buffering
+	r.l.rx = make(chan frames.FrameBody, r.maxCredit)
 
 	if err := r.l.attach(ctx, func(pa *frames.PerformAttach) {
 		pa.Role = encoding.RoleReceiver

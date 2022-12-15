@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"sync/atomic"
 
 	"github.com/Azure/go-amqp/internal/buffer"
 	"github.com/Azure/go-amqp/internal/debug"
@@ -110,7 +109,6 @@ func (s *Sender) send(ctx context.Context, msg *Message) (chan encoding.Delivery
 		maxPayloadSize = int64(s.l.session.conn.peerMaxFrameSize) - maxTransferFrameHeader
 		sndSettleMode  = s.l.senderSettleMode
 		senderSettled  = sndSettleMode != nil && (*sndSettleMode == SenderSettleModeSettled || (*sndSettleMode == SenderSettleModeMixed && msg.SendSettled))
-		deliveryID     = atomic.AddUint32(&s.l.session.nextDeliveryID, 1)
 	)
 
 	deliveryTag := msg.DeliveryTag
@@ -123,7 +121,7 @@ func (s *Sender) send(ctx context.Context, msg *Message) (chan encoding.Delivery
 
 	fr := frames.PerformTransfer{
 		Handle:        s.l.handle,
-		DeliveryID:    &deliveryID,
+		DeliveryID:    &needsDeliveryID,
 		DeliveryTag:   deliveryTag,
 		MessageFormat: &msg.Format,
 		More:          s.buf.Len() > 0,

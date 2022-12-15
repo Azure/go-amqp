@@ -55,8 +55,6 @@ type Session struct {
 
 	handleMax uint32
 
-	nextDeliveryID uint32 // atomically accessed sequence for deliveryIDs
-
 	// link management
 	linksMu    sync.RWMutex      // used to synchronize link handle allocation
 	linksByKey map[linkKey]*link // mapping of name+role link
@@ -258,6 +256,8 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 		handlesByRemoteDeliveryID = make(map[uint32]uint32) // mapping of remote deliveryID to handles
 
 		settlementByDeliveryID = make(map[uint32]chan encoding.DeliveryState)
+
+		nextDeliveryID uint32 // tracks the next delivery ID for outgoing transfers
 
 		// flow control values
 		nextOutgoingID       uint32
@@ -503,8 +503,10 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 			// record current delivery ID
 			var deliveryID uint32
-			if fr.DeliveryID != nil {
-				deliveryID = *fr.DeliveryID
+			if fr.DeliveryID == &needsDeliveryID {
+				deliveryID = nextDeliveryID
+				fr.DeliveryID = &deliveryID
+				nextDeliveryID++
 				deliveryIDByHandle[fr.Handle] = deliveryID
 
 				// add to handleByDeliveryID if not sender-settled
@@ -603,3 +605,7 @@ func (s *Session) muxFrameToLink(l *link, fr frames.FrameBody) {
 		// conn is closed
 	}
 }
+
+// the address of this var is a sentinel value indicating
+// that a transfer frame is in need of a delivery ID
+var needsDeliveryID uint32

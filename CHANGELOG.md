@@ -6,6 +6,10 @@
 
 * Fixed an issue that could cause `Conn.connReader()` to become blocked in rare circumstances.
 
+### Bugs Fixed
+
+* Fixed an issue that could cause outgoing transfers to be rejected by some brokers due to out-of-sequence delivery IDs.
+
 ### Other Changes
 
 * The connection mux goroutine has been removed, eliminating a potential source of deadlocks.

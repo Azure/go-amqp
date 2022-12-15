@@ -252,12 +252,6 @@ func newSender(target string, session *Session, opts *SenderOptions) (*Sender, e
 }
 
 func (s *Sender) attach(ctx context.Context) error {
-	// sending unsettled messages when the receiver is in mode-second is currently
-	// broken and causes a hang after sending, so just disallow it for now.
-	if senderSettleModeValue(s.l.senderSettleMode) != SenderSettleModeSettled && receiverSettleModeValue(s.l.receiverSettleMode) == ReceiverSettleModeSecond {
-		return errors.New("sender does not support exactly-once guarantee")
-	}
-
 	s.l.rx = make(chan frames.FrameBody, 1)
 
 	if err := s.l.attach(ctx, func(pa *frames.PerformAttach) {
@@ -327,11 +321,9 @@ Loop:
 						return
 					}
 				case <-s.l.close:
-					s.l.err = &DetachError{}
-					return
+					continue Loop
 				case <-s.l.session.done:
-					s.l.err = s.l.session.doneErr
-					return
+					continue Loop
 				}
 			}
 
@@ -392,6 +384,9 @@ func (s *Sender) muxHandleFrame(fr frames.FrameBody) error {
 			return nil
 		}
 
+		// peer is in mode second, so we must send confirmation of disposition.
+		// NOTE: the ack must be sent through the session so it can close out
+		// the in-flight disposition.
 		resp := &frames.PerformDisposition{
 			Role:    encoding.RoleSender,
 			First:   fr.First,
@@ -399,7 +394,22 @@ func (s *Sender) muxHandleFrame(fr frames.FrameBody) error {
 			Settled: true,
 		}
 		debug.Log(1, "TX (sender): %s", resp)
-		_ = s.l.session.txFrame(resp, nil)
+		// Ensure the session mux is not blocked
+		for {
+			select {
+			case s.l.session.tx <- resp:
+				return nil
+			case fr := <-s.l.rx:
+				// TODO: potentially recursive call
+				if err := s.muxHandleFrame(fr); err != nil {
+					return err
+				}
+			case <-s.l.close:
+				return &DetachError{}
+			case <-s.l.session.done:
+				return s.l.session.doneErr
+			}
+		}
 
 	default:
 		return s.l.muxHandleFrame(fr)

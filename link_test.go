@@ -459,26 +459,4 @@ func TestSessionFlowDisablesTransfer(t *testing.T) {
 	require.NoError(t, client.Close())
 }
 
-func TestExactlyOnceDoesntWork(t *testing.T) {
-	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
-
-	client, err := NewConn(netConn, nil)
-	require.NoError(t, err)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	session, err := client.NewSession(ctx, nil)
-	cancel()
-	require.NoError(t, err)
-
-	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := session.NewSender(ctx, "doesntwork", &SenderOptions{
-		SettlementMode:              SenderSettleModeMixed.Ptr(),
-		RequestedReceiverSettleMode: ReceiverSettleModeSecond.Ptr(),
-	})
-	cancel()
-	require.Error(t, err)
-	require.Nil(t, snd)
-	require.NoError(t, client.Close())
-}
-
 // TODO: echo flow frame

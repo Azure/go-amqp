@@ -915,6 +915,52 @@ func TestReceiverModeFirst(t *testing.T) {
 	checkLeaks()
 }
 
+func TestSenderExactlyOnce(t *testing.T) {
+	if localBrokerAddr == "" {
+		t.Skip()
+	}
+
+	checkLeaks := leaktest.Check(t)
+
+	// Create client
+	client, err := amqp.Dial(localBrokerAddr, nil)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	sender, err := session.NewSender(ctx, "TestSenderExactlyOnce", &amqp.SenderOptions{
+		SettlementMode:              amqp.SenderSettleModeUnsettled.Ptr(),
+		RequestedReceiverSettleMode: amqp.ReceiverSettleModeSecond.Ptr(),
+	})
+	cancel()
+	require.NoError(t, err)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	err = sender.Send(ctx, amqp.NewMessage([]byte("hello!")))
+	cancel()
+	require.NoError(t, err)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	receiver, err := session.NewReceiver(ctx, "TestSenderExactlyOnce", &amqp.ReceiverOptions{
+		SettlementMode: amqp.ReceiverSettleModeSecond.Ptr(),
+	})
+	cancel()
+	require.NoError(t, err)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	msg, err := receiver.Receive(ctx)
+	cancel()
+	require.NoError(t, err)
+
+	require.Equal(t, "hello!", string(msg.GetData()))
+	client.Close()
+	checkLeaks()
+}
+
 func repeatStrings(count int, strs ...string) []string {
 	var out []string
 	for i := 0; i < count; i += len(strs) {

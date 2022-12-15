@@ -185,7 +185,7 @@ func (s *Source) Unmarshal(r *buffer.Buffer) error {
 
 func (s Source) String() string {
 	return fmt.Sprintf("source{Address: %s, Durable: %d, ExpiryPolicy: %s, Timeout: %d, "+
-		"Dynamic: %t, DynamicNodeProperties: %v, DistributionMode: %s, Filter: %v, DefaultOutcome: %v"+
+		"Dynamic: %t, DynamicNodeProperties: %v, DistributionMode: %s, Filter: %v, DefaultOutcome: %v "+
 		"Outcomes: %v, Capabilities: %v}",
 		s.Address,
 		s.Durable,
@@ -1210,7 +1210,7 @@ type PerformDisposition struct {
 func (d *PerformDisposition) frameBody() {}
 
 func (d PerformDisposition) String() string {
-	return fmt.Sprintf("Disposition{Role: %s, First: %d, Last: %s, Settled: %t, State: %s, Batchable: %t}",
+	return fmt.Sprintf("Disposition{Role: %s, First: %d, Last: %s, Settled: %t, State: %v, Batchable: %t}",
 		d.Role,
 		d.First,
 		formatUint32Ptr(d.Last),

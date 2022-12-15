@@ -14,41 +14,56 @@ import (
 )
 
 func TestLinkFlowThatNeedsToReplenishCredits(t *testing.T) {
-	l := newTestLink(t)
-	go l.mux()
-	defer close(l.l.close)
+	for times := 0; times < 100; times++ {
+		l := newTestLink(t)
+		go l.mux()
 
-	err := l.DrainCredit(context.Background())
-	require.Error(t, err, "drain can only be used with receiver links using manual credit management")
+		err := l.DrainCredit(context.Background())
+		require.Error(t, err, "drain can only be used with receiver links using manual credit management")
 
-	err = l.IssueCredit(1)
-	require.Error(t, err, "issueCredit can only be used with receiver links using manual credit management")
+		err = l.IssueCredit(1)
+		require.Error(t, err, "issueCredit can only be used with receiver links using manual credit management")
 
-	// and flow goes through the non-manual credit path
-	require.EqualValues(t, 0, l.l.availableCredit, "No link credits have been added")
+		// and flow goes through the non-manual credit path
+		require.EqualValues(t, 0, l.l.availableCredit, "No link credits have been added")
 
-	// we've consumed half of the maximum credit we're allowed to have - reflow!
-	l.maxCredit = 2
-	l.l.availableCredit = 1
-	l.unsettledMessages = map[string]struct{}{}
+		// we've consumed half of the maximum credit we're allowed to have - reflow!
+		l.maxCredit = 2
+		l.l.availableCredit = 1
+		l.unsettledMessages = map[string]struct{}{}
 
-	select {
-	case l.receiverReady <- struct{}{}:
-		// woke up mux
-	default:
-		t.Fatal("failed to wake up mux")
-	}
+		select {
+		case l.receiverReady <- struct{}{}:
+			// woke up mux
+		default:
+			t.Fatal("failed to wake up mux")
+		}
 
-	// flow happens immmediately in 'mux'
-	txFrame := <-l.l.session.tx
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	Loop:
+		for {
+			// the first flow frame we receive isn't always the one with the updated credit.
+			// to avoid the race, we continue to receive frames until we get the flow frame
+			// with the correct value, a wrong frame, or the context expires.
+			select {
+			case txFrame := <-l.l.session.tx:
+				switch frame := txFrame.(type) {
+				case *frames.PerformFlow:
+					require.False(t, frame.Drain)
+					// replenished credits: l.receiver.maxCredit-uint32(l.countUnsettled())
+					if *frame.LinkCredit == 2 {
+						break Loop
+					}
+				default:
+					require.Fail(t, fmt.Sprintf("Unexpected frame was transferred: %+v", txFrame))
+				}
+			case <-ctx.Done():
+				t.Fatal(ctx.Err())
+			}
+		}
 
-	switch frame := txFrame.(type) {
-	case *frames.PerformFlow:
-		require.False(t, frame.Drain)
-		// replenished credits: l.receiver.maxCredit-uint32(l.countUnsettled())
-		require.EqualValues(t, 2, *frame.LinkCredit)
-	default:
-		require.Fail(t, fmt.Sprintf("Unexpected frame was transferred: %+v", txFrame))
+		cancel()
+		close(l.l.close)
 	}
 }
 

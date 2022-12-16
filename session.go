@@ -66,7 +66,7 @@ type Session struct {
 	close     chan struct{}
 	closeOnce sync.Once
 	done      chan struct{} // part of internal public surface area
-	err       error
+	doneErr   error         // contains the error state returned from Close(); DO NOT TOUCH outside of session.go until done has been closed!
 }
 
 func newSession(c *Conn, channel uint16, opts *SessionOptions) *Session {
@@ -175,11 +175,11 @@ func (s *Session) Close(ctx context.Context) error {
 		return ctx.Err()
 	}
 	var sessionErr *SessionError
-	if errors.As(s.err, &sessionErr) && sessionErr.RemoteErr == nil && sessionErr.inner == nil {
+	if errors.As(s.doneErr, &sessionErr) && sessionErr.RemoteErr == nil && sessionErr.inner == nil {
 		// an empty SessionError means the session was closed by the caller
 		return nil
 	}
-	return s.err
+	return s.doneErr
 }
 
 // txFrame sends a frame to the connWriter.
@@ -236,15 +236,15 @@ func (s *Session) NewSender(ctx context.Context, target string, opts *SenderOpti
 func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 	defer func() {
 		s.conn.deleteSession(s)
-		if s.err == nil {
-			s.err = &SessionError{}
-		} else if connErr := (&ConnError{}); !errors.As(s.err, &connErr) {
+		if s.doneErr == nil {
+			s.doneErr = &SessionError{}
+		} else if connErr := (&ConnError{}); !errors.As(s.doneErr, &connErr) {
 			// only wrap non-ConnectionError error types
 			var amqpErr *Error
-			if errors.As(s.err, &amqpErr) {
-				s.err = &SessionError{RemoteErr: amqpErr}
+			if errors.As(s.doneErr, &amqpErr) {
+				s.doneErr = &SessionError{RemoteErr: amqpErr}
 			} else {
-				s.err = &SessionError{inner: s.err}
+				s.doneErr = &SessionError{inner: s.doneErr}
 			}
 		}
 		// Signal goroutines waiting on the session.
@@ -279,7 +279,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 		select {
 		// conn has completed, exit
 		case <-s.conn.done:
-			s.err = s.conn.doneErr
+			s.doneErr = s.conn.doneErr
 			return
 
 		// session is being closed by user
@@ -298,7 +298,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 						break EndLoop
 					}
 				case <-s.conn.done:
-					s.err = s.conn.doneErr
+					s.doneErr = s.conn.doneErr
 					return
 				}
 			}
@@ -362,7 +362,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 							Description: "next-incoming-id not set after session established",
 						},
 					}, nil)
-					s.err = errors.New("protocol error: received flow without next-incoming-id after session established")
+					s.doneErr = errors.New("protocol error: received flow without next-incoming-id after session established")
 					return
 				}
 
@@ -418,7 +418,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				link, linkOk := s.linksByKey[linkKey{name: body.Name, role: !body.Role}]
 				s.linksMu.RUnlock()
 				if !linkOk {
-					s.err = fmt.Errorf("protocol error: received mismatched attach frame %+v", body)
+					s.doneErr = fmt.Errorf("protocol error: received mismatched attach frame %+v", body)
 					return
 				}
 
@@ -490,7 +490,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 			case *frames.PerformEnd:
 				_ = s.txFrame(&frames.PerformEnd{}, nil)
 				if body.Error != nil {
-					s.err = body.Error
+					s.doneErr = body.Error
 				}
 				return
 

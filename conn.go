@@ -150,7 +150,7 @@ type Conn struct {
 
 	// conn state
 	done    chan struct{} // indicates the connection has terminated
-	doneErr error         // contains the error state returned from Close(); DO NOT TOUCH outside of conn.go until Done has been closed!
+	doneErr error         // contains the error state returned from Close(); DO NOT TOUCH outside of conn.go until done has been closed!
 
 	// connReader and connWriter management
 	rxtxExit  chan struct{} // signals connReader and connWriter to exit
@@ -515,6 +515,10 @@ func (c *Conn) connReader() {
 
 		select {
 		case session.rx <- fr:
+			// sent to session
+		case <-session.done:
+			// the session has terminated (or at least its mux has)
+			// we should only hit this if a session's mux abnormally terminated
 		case <-c.rxtxExit:
 			return
 		}

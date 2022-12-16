@@ -111,7 +111,7 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 		return ctx.Err()
 	case <-l.session.done:
 		// session has terminated, no need to deallocate in this case
-		return l.session.err
+		return l.session.doneErr
 	case fr = <-l.rx:
 	}
 	debug.Log(3, "RX (attachLink): %s", fr)
@@ -141,7 +141,7 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 			}()
 			return ctx.Err()
 		case <-l.session.done:
-			return l.session.err
+			return l.session.doneErr
 		case fr = <-l.rx:
 			l.session.deallocateHandle(l)
 		}
@@ -314,7 +314,7 @@ Loop:
 			}
 		case <-l.session.done:
 			if l.err == nil {
-				l.err = l.session.err
+				l.err = l.session.doneErr
 			}
 			return
 		}
@@ -346,7 +346,7 @@ Loop:
 		// connection has ended
 		case <-l.session.done:
 			if l.err == nil {
-				l.err = l.session.err
+				l.err = l.session.doneErr
 			}
 			return
 		}

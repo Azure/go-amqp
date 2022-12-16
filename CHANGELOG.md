@@ -2,6 +2,10 @@
 
 ## 0.18.1 (Unreleased)
 
+### Bugs Fixed
+
+* Fixed an issue that could cause `Conn.connReader()` to become blocked in rare circumstances.
+
 ### Other Changes
 
 * The connection mux goroutine has been removed, eliminating a potential source of deadlocks.

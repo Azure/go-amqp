@@ -588,7 +588,7 @@ func (r *Receiver) mux() {
 			r.l.err = &DetachError{}
 			return
 		case <-r.l.session.done:
-			r.l.err = r.l.session.err
+			r.l.err = r.l.session.doneErr
 			return
 		}
 	}
@@ -635,7 +635,7 @@ func (r *Receiver) muxFlow(linkCredit uint32, drain bool) error {
 		case <-r.l.close:
 			return &DetachError{}
 		case <-r.l.session.done:
-			return r.l.session.err
+			return r.l.session.doneErr
 		}
 	}
 }

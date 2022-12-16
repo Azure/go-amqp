@@ -332,7 +332,7 @@ Loop:
 					s.l.err = &DetachError{}
 					return
 				case <-s.l.session.done:
-					s.l.err = s.l.session.err
+					s.l.err = s.l.session.doneErr
 					return
 				}
 			}
@@ -341,7 +341,7 @@ Loop:
 			s.l.err = &DetachError{}
 			return
 		case <-s.l.session.done:
-			s.l.err = s.l.session.err
+			s.l.err = s.l.session.doneErr
 			return
 		}
 	}

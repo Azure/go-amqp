@@ -38,12 +38,12 @@ type ConnOptions struct {
 	// Open frame and TLS ServerName (if not otherwise set).
 	HostName string
 
-	// IdleTimeout specifies the maximum period in milliseconds between
+	// IdleTimeout specifies the maximum period between
 	// receiving frames from the peer.
 	//
 	// Specify a value less than zero to disable idle timeout.
 	//
-	// Default: 1 minute.
+	// Default: 1 minute (60000000000).
 	IdleTimeout time.Duration
 
 	// MaxFrameSize sets the maximum frame size that

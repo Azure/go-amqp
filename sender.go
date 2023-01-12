@@ -302,6 +302,17 @@ Loop:
 			outgoingDisps = outgoingDisps[1:]
 		}
 
+		handleFrame := func(fr frames.FrameBody) error {
+			var disp *frames.PerformDisposition
+			disp, s.l.err = s.muxHandleFrame(fr)
+			if s.l.err != nil {
+				return s.l.err
+			} else if disp != nil {
+				outgoingDisps = append(outgoingDisps, disp)
+			}
+			return nil
+		}
+
 		select {
 		case dr := <-outgoingDisp:
 			debug.Log(3, "TX (sender): %s", dr)
@@ -312,12 +323,8 @@ Loop:
 				case s.l.session.tx <- dr:
 					continue Loop
 				case fr := <-s.l.rx:
-					var disp *frames.PerformDisposition
-					disp, s.l.err = s.muxHandleFrame(fr)
-					if s.l.err != nil {
+					if err := handleFrame(fr); err != nil {
 						return
-					} else if disp != nil {
-						outgoingDisps = append(outgoingDisps, disp)
 					}
 				case <-s.l.close:
 					continue Loop
@@ -328,12 +335,8 @@ Loop:
 
 		// received frame
 		case fr := <-s.l.rx:
-			var disp *frames.PerformDisposition
-			disp, s.l.err = s.muxHandleFrame(fr)
-			if s.l.err != nil {
+			if err := handleFrame(fr); err != nil {
 				return
-			} else if disp != nil {
-				outgoingDisps = append(outgoingDisps, disp)
 			}
 
 		// send data
@@ -353,12 +356,8 @@ Loop:
 					}
 					continue Loop
 				case fr := <-s.l.rx:
-					var disp *frames.PerformDisposition
-					disp, s.l.err = s.muxHandleFrame(fr)
-					if s.l.err != nil {
+					if err := handleFrame(fr); err != nil {
 						return
-					} else if disp != nil {
-						outgoingDisps = append(outgoingDisps, disp)
 					}
 				case <-s.l.close:
 					continue Loop

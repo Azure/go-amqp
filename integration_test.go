@@ -89,9 +89,11 @@ func TestIntegrationRoundTrip(t *testing.T) {
 			checkLeaks := leaktest.CheckTimeout(t, 60*time.Second)
 
 			// Create client
-			client, err := amqp.Dial(localBrokerAddr, &amqp.ConnOptions{
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			client, err := amqp.Dial(ctx, localBrokerAddr, &amqp.ConnOptions{
 				MaxSessions: tt.sessions,
 			})
+			cancel()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -242,14 +244,16 @@ func TestIntegrationRoundTrip_Buffered(t *testing.T) {
 			checkLeaks := leaktest.CheckTimeout(t, 60*time.Second)
 
 			// Create client
-			client, err := amqp.Dial(localBrokerAddr, nil)
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			client, err := amqp.Dial(ctx, localBrokerAddr, nil)
+			cancel()
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer client.Close()
 
 			// Open a session
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 			session, err := client.NewSession(ctx, nil)
 			cancel()
 			if err != nil {
@@ -353,7 +357,9 @@ func TestIntegrationReceiverModeSecond(t *testing.T) {
 			checkLeaks := leaktest.CheckTimeout(t, 60*time.Second)
 
 			// Create client
-			client, err := amqp.Dial(localBrokerAddr, nil)
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			client, err := amqp.Dial(ctx, localBrokerAddr, nil)
+			cancel()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -502,14 +508,16 @@ func TestIntegrationSessionHandleMax(t *testing.T) {
 			// checkLeaks := leaktest.CheckTimeout(t, 60*time.Second)
 
 			// Create client
-			client, err := amqp.Dial(localBrokerAddr, nil)
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			client, err := amqp.Dial(ctx, localBrokerAddr, nil)
+			cancel()
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer client.Close()
 
 			// Open a session
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 			session, err := client.NewSession(ctx, &amqp.SessionOptions{
 				MaxLinks: tt.maxLinks,
 			})
@@ -573,14 +581,16 @@ func TestIntegrationLinkName(t *testing.T) {
 		label := fmt.Sprintf("name %v", tt.name)
 		t.Run(label, func(t *testing.T) {
 			// Create client
-			client, err := amqp.Dial(localBrokerAddr, nil)
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			client, err := amqp.Dial(ctx, localBrokerAddr, nil)
+			cancel()
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer client.Close()
 
 			// Open a session
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 			session, err := client.NewSession(ctx, nil)
 			cancel()
 			if err != nil {
@@ -629,14 +639,16 @@ func TestIntegrationClose(t *testing.T) {
 		checkLeaks := leaktest.CheckTimeout(t, 60*time.Second)
 
 		// Create client
-		client, err := amqp.Dial(localBrokerAddr, nil)
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		client, err := amqp.Dial(ctx, localBrokerAddr, nil)
+		cancel()
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer client.Close()
 
 		// Open a session
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 		session, err := client.NewSession(ctx, nil)
 		cancel()
 		if err != nil {
@@ -670,14 +682,16 @@ func TestIntegrationClose(t *testing.T) {
 		checkLeaks := leaktest.CheckTimeout(t, 60*time.Second)
 
 		// Create client
-		client, err := amqp.Dial(localBrokerAddr, nil)
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		client, err := amqp.Dial(ctx, localBrokerAddr, nil)
+		cancel()
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer client.Close()
 
 		// Open a session
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 		session, err := client.NewSession(ctx, nil)
 		cancel()
 		if err != nil {
@@ -714,14 +728,16 @@ func TestIntegrationClose(t *testing.T) {
 		checkLeaks := leaktest.CheckTimeout(t, 60*time.Second)
 
 		// Create client
-		client, err := amqp.Dial(localBrokerAddr, nil)
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		client, err := amqp.Dial(ctx, localBrokerAddr, nil)
+		cancel()
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer client.Close()
 
 		// Open a session
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 		session, err := client.NewSession(ctx, nil)
 		cancel()
 		if err != nil {
@@ -763,7 +779,9 @@ func TestMultipleSessionsOpenClose(t *testing.T) {
 	checkLeaks := leaktest.Check(t)
 
 	// Create client
-	client, err := amqp.Dial(localBrokerAddr, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := amqp.Dial(ctx, localBrokerAddr, nil)
+	cancel()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -802,7 +820,9 @@ func TestConcurrentSessionsOpenClose(t *testing.T) {
 	checkLeaks := leaktest.Check(t)
 
 	// Create client
-	client, err := amqp.Dial(localBrokerAddr, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := amqp.Dial(ctx, localBrokerAddr, nil)
+	cancel()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -840,10 +860,12 @@ func TestReceiverModeFirst(t *testing.T) {
 
 	checkLeaks := leaktest.Check(t)
 
-	client, err := amqp.Dial(localBrokerAddr, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := amqp.Dial(ctx, localBrokerAddr, nil)
+	cancel()
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
@@ -923,10 +945,12 @@ func TestSenderExactlyOnce(t *testing.T) {
 	checkLeaks := leaktest.Check(t)
 
 	// Create client
-	client, err := amqp.Dial(localBrokerAddr, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := amqp.Dial(ctx, localBrokerAddr, nil)
+	cancel()
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)

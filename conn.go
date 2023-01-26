@@ -66,15 +66,6 @@ type ConnOptions struct {
 	// SASLType contains the specified SASL authentication mechanism.
 	SASLType SASLType
 
-	// Timeout configures how long to wait for the
-	// server during connection establishment.
-	//
-	// Once the connection has been established, IdleTimeout
-	// applies. If duration is zero, no timeout will be applied.
-	//
-	// Default: 0.
-	Timeout time.Duration
-
 	// TLSConfig sets the tls.Config to be used during
 	// TLS negotiation.
 	//
@@ -95,12 +86,13 @@ type ConnOptions struct {
 // credentials, equal to passing ConnSASLPlain option.
 //
 // opts: pass nil to accept the default values.
-func Dial(addr string, opts *ConnOptions) (*Conn, error) {
-	c, err := dialConn(addr, opts)
+func Dial(ctx context.Context, addr string, opts *ConnOptions) (*Conn, error) {
+	deadline, _ := ctx.Deadline()
+	c, err := dialConn(deadline, addr, opts)
 	if err != nil {
 		return nil, err
 	}
-	err = c.start()
+	err = c.start(deadline)
 	if err != nil {
 		return nil, err
 	}
@@ -109,12 +101,13 @@ func Dial(addr string, opts *ConnOptions) (*Conn, error) {
 
 // NewConn establishes a new AMQP client connection over conn.
 // opts: pass nil to accept the default values.
-func NewConn(conn net.Conn, opts *ConnOptions) (*Conn, error) {
+func NewConn(ctx context.Context, conn net.Conn, opts *ConnOptions) (*Conn, error) {
 	c, err := newConn(conn, opts)
 	if err != nil {
 		return nil, err
 	}
-	err = c.start()
+	deadline, _ := ctx.Deadline()
+	err = c.start(deadline)
 	if err != nil {
 		return nil, err
 	}
@@ -123,9 +116,8 @@ func NewConn(conn net.Conn, opts *ConnOptions) (*Conn, error) {
 
 // Conn is an AMQP connection.
 type Conn struct {
-	net            net.Conn      // underlying connection
-	connectTimeout time.Duration // time to wait for reads/writes during conn establishment
-	dialer         dialer        // used for testing purposes, it allows faking dialing TCP/TLS endpoints
+	net    net.Conn // underlying connection
+	dialer dialer   // used for testing purposes, it allows faking dialing TCP/TLS endpoints
 
 	// TLS
 	tlsNegotiation bool        // negotiate TLS
@@ -175,26 +167,26 @@ type Conn struct {
 
 // used to abstract the underlying dialer for testing purposes
 type dialer interface {
-	NetDialerDial(c *Conn, host, port string) error
-	TLSDialWithDialer(c *Conn, host, port string) error
+	NetDialerDial(deadline time.Time, c *Conn, host, port string) error
+	TLSDialWithDialer(deadline time.Time, c *Conn, host, port string) error
 }
 
 // implements the dialer interface
 type defaultDialer struct{}
 
-func (defaultDialer) NetDialerDial(c *Conn, host, port string) (err error) {
-	dialer := &net.Dialer{Timeout: c.connectTimeout}
+func (defaultDialer) NetDialerDial(deadline time.Time, c *Conn, host, port string) (err error) {
+	dialer := &net.Dialer{Deadline: deadline}
 	c.net, err = dialer.Dial("tcp", net.JoinHostPort(host, port))
 	return
 }
 
-func (defaultDialer) TLSDialWithDialer(c *Conn, host, port string) (err error) {
-	dialer := &net.Dialer{Timeout: c.connectTimeout}
+func (defaultDialer) TLSDialWithDialer(deadline time.Time, c *Conn, host, port string) (err error) {
+	dialer := &net.Dialer{Deadline: deadline}
 	c.net, err = tls.DialWithDialer(dialer, "tcp", net.JoinHostPort(host, port), c.tlsConfig)
 	return
 }
 
-func dialConn(addr string, opts *ConnOptions) (*Conn, error) {
+func dialConn(deadline time.Time, addr string, opts *ConnOptions) (*Conn, error) {
 	u, err := url.Parse(addr)
 	if err != nil {
 		return nil, err
@@ -229,11 +221,11 @@ func dialConn(addr string, opts *ConnOptions) (*Conn, error) {
 
 	switch u.Scheme {
 	case "amqp", "":
-		err = c.dialer.NetDialerDial(c, host, port)
+		err = c.dialer.NetDialerDial(deadline, c, host, port)
 	case "amqps", "amqp+ssl":
 		c.initTLSConfig()
 		c.tlsNegotiation = false
-		err = c.dialer.TLSDialWithDialer(c, host, port)
+		err = c.dialer.TLSDialWithDialer(deadline, c, host, port)
 	default:
 		err = fmt.Errorf("unsupported scheme %q", u.Scheme)
 	}
@@ -290,9 +282,6 @@ func newConn(netConn net.Conn, opts *ConnOptions) (*Conn, error) {
 			return nil, err
 		}
 	}
-	if opts.Timeout > 0 {
-		c.connectTimeout = opts.Timeout
-	}
 	if opts.Properties != nil {
 		c.properties = make(map[encoding.Symbol]any)
 		for key, val := range opts.Properties {
@@ -322,7 +311,12 @@ func (c *Conn) initTLSConfig() {
 
 // start establishes the connection and begins multiplexing network IO.
 // It is an error to call Start() on a connection that's been closed.
-func (c *Conn) start() error {
+func (c *Conn) start(deadline time.Time) error {
+	if !deadline.IsZero() {
+		// set connection establishment deadline
+		_ = c.net.SetDeadline(deadline)
+	}
+
 	// run connection establishment state machine
 	for state := c.negotiateProto; state != nil; {
 		var err error
@@ -334,6 +328,11 @@ func (c *Conn) start() error {
 			_ = c.Close()
 			return err
 		}
+	}
+
+	if !deadline.IsZero() {
+		// remove connection establishment deadline
+		_ = c.net.SetDeadline(time.Time{})
 	}
 
 	// we can't create the channel bitmap until the connection has been established.
@@ -614,12 +613,6 @@ func (c *Conn) connWriter() {
 		c.close()
 	}()
 
-	// disable write timeout
-	if c.connectTimeout != 0 {
-		c.connectTimeout = 0
-		_ = c.net.SetWriteDeadline(time.Time{})
-	}
-
 	var (
 		// keepalives are sent at a rate of 1/2 idle timeout
 		keepaliveInterval = c.peerIdleTimeout / 2
@@ -683,10 +676,6 @@ func (c *Conn) connWriter() {
 // writeFrame writes a frame to the network.
 // used externally by SASL only.
 func (c *Conn) writeFrame(fr frames.Frame) error {
-	if c.connectTimeout != 0 {
-		_ = c.net.SetWriteDeadline(time.Now().Add(c.connectTimeout))
-	}
-
 	// writeFrame into txBuf
 	c.txBuf.Reset()
 	err := frames.Write(&c.txBuf, fr)
@@ -711,9 +700,6 @@ func (c *Conn) writeFrame(fr frames.Frame) error {
 // writeProtoHeader writes an AMQP protocol header to the
 // network
 func (c *Conn) writeProtoHeader(pID protoID) error {
-	if c.connectTimeout != 0 {
-		_ = c.net.SetWriteDeadline(time.Now().Add(c.connectTimeout))
-	}
 	_, err := c.net.Write([]byte{'A', 'M', 'Q', 'P', byte(pID), 1, 0, 0})
 	return err
 }
@@ -802,10 +788,6 @@ func (c *Conn) readProtoHeader() (protoHeader, error) {
 	// protocol doesn't actually work this way.
 	if c.rxBuf.Len() == 0 {
 		for {
-			if c.connectTimeout != 0 {
-				_ = c.net.SetReadDeadline(time.Now().Add(c.connectTimeout))
-			}
-
 			err := c.rxBuf.ReadFromOnce(c.net)
 			if err != nil {
 				return protoHeader{}, err
@@ -815,11 +797,6 @@ func (c *Conn) readProtoHeader() (protoHeader, error) {
 			if c.rxBuf.Len() >= protoHeaderSize {
 				break
 			}
-		}
-
-		// reset outside the loop
-		if c.connectTimeout != 0 {
-			_ = c.net.SetReadDeadline(time.Time{})
 		}
 	}
 
@@ -973,11 +950,6 @@ func (c *Conn) saslOutcome() (stateFunc, error) {
 //
 // After setup, conn.connReader handles incoming frames.
 func (c *Conn) readSingleFrame() (frames.Frame, error) {
-	if c.connectTimeout != 0 {
-		_ = c.net.SetDeadline(time.Now().Add(c.connectTimeout))
-		defer func() { _ = c.net.SetDeadline(time.Time{}) }()
-	}
-
 	fr, err := c.readFrame()
 	if err != nil {
 		return frames.Frame{}, err

@@ -434,10 +434,12 @@ func TestSessionFlowDisablesTransfer(t *testing.T) {
 	nextIncomingID := uint32(0)
 	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 
-	client, err := NewConn(netConn, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)

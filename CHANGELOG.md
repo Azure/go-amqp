@@ -1,5 +1,12 @@
 # Release History
 
+## 0.19.0 (Unreleased)
+
+### Breaking Changes
+
+* `Dial()` and `NewConn()` now require a `context.Context` as their first parameter.
+  * As a result, the `ConnOptions.Timeout` field has been removed.
+
 ## 0.18.1 (2023-01-17)
 
 ### Bugs Fixed

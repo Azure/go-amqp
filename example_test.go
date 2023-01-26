@@ -11,16 +11,16 @@ import (
 )
 
 func Example() {
+	ctx := context.TODO()
+
 	// create connection
-	conn, err := amqp.Dial("amqps://my-namespace.servicebus.windows.net", &amqp.ConnOptions{
+	conn, err := amqp.Dial(ctx, "amqps://my-namespace.servicebus.windows.net", &amqp.ConnOptions{
 		SASLType: amqp.SASLTypePlain("access-key-name", "access-key"),
 	})
 	if err != nil {
 		log.Fatal("Dialing AMQP server:", err)
 	}
 	defer conn.Close()
-
-	ctx := context.TODO()
 
 	// open a session
 	session, err := conn.NewSession(ctx, nil)
@@ -84,15 +84,15 @@ func ExampleConnError() {
 	// *ConnErrors are returned when the underlying connection has been closed.
 	// this error is propagated to all child Session, Sender, and Receiver instances.
 
+	ctx := context.TODO()
+
 	// create connection
-	conn, err := amqp.Dial("amqps://my-namespace.servicebus.windows.net", &amqp.ConnOptions{
+	conn, err := amqp.Dial(ctx, "amqps://my-namespace.servicebus.windows.net", &amqp.ConnOptions{
 		SASLType: amqp.SASLTypePlain("access-key-name", "access-key"),
 	})
 	if err != nil {
 		log.Fatal("Dialing AMQP server:", err)
 	}
-
-	ctx := context.TODO()
 
 	// open a session
 	session, err := conn.NewSession(ctx, nil)
@@ -134,16 +134,16 @@ func ExampleSessionError() {
 	// *SessionErrors are returned when a session has been closed.
 	// this error is propagated to all child Sender and Receiver instances.
 
+	ctx := context.TODO()
+
 	// create connection
-	conn, err := amqp.Dial("amqps://my-namespace.servicebus.windows.net", &amqp.ConnOptions{
+	conn, err := amqp.Dial(ctx, "amqps://my-namespace.servicebus.windows.net", &amqp.ConnOptions{
 		SASLType: amqp.SASLTypePlain("access-key-name", "access-key"),
 	})
 	if err != nil {
 		log.Fatal("Dialing AMQP server:", err)
 	}
 	defer conn.Close()
-
-	ctx := context.TODO()
 
 	// open a session
 	session, err := conn.NewSession(ctx, nil)
@@ -180,16 +180,16 @@ func ExampleDetachError() {
 	// it can also be returned if the peer has detached from the link. in this case, the *RemoteErr
 	// field should contain additional information about why the peer detached.
 
+	ctx := context.TODO()
+
 	// create connection
-	conn, err := amqp.Dial("amqps://my-namespace.servicebus.windows.net", &amqp.ConnOptions{
+	conn, err := amqp.Dial(ctx, "amqps://my-namespace.servicebus.windows.net", &amqp.ConnOptions{
 		SASLType: amqp.SASLTypePlain("access-key-name", "access-key"),
 	})
 	if err != nil {
 		log.Fatal("Dialing AMQP server:", err)
 	}
 	defer conn.Close()
-
-	ctx := context.TODO()
 
 	// open a session
 	session, err := conn.NewSession(ctx, nil)

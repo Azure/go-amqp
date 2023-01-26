@@ -43,7 +43,9 @@ func TestSessionClose(t *testing.T) {
 	}
 	netConn := mocks.NewNetConn(responder)
 
-	client, err := NewConn(netConn, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
 	require.NoError(t, err)
 	for i := 0; i < 4; i++ {
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -79,10 +81,12 @@ func TestSessionServerClose(t *testing.T) {
 	}
 	netConn := mocks.NewNetConn(responder)
 
-	client, err := NewConn(netConn, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
@@ -125,10 +129,12 @@ func TestSessionCloseTimeout(t *testing.T) {
 	}
 	netConn := mocks.NewNetConn(responder)
 
-	client, err := NewConn(netConn, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
@@ -142,10 +148,12 @@ func TestSessionCloseTimeout(t *testing.T) {
 func TestConnCloseSessionClose(t *testing.T) {
 	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 
-	client, err := NewConn(netConn, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
@@ -168,10 +176,12 @@ func TestConnCloseSessionClose(t *testing.T) {
 func TestSessionNewReceiverBadOptionFails(t *testing.T) {
 	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 
-	client, err := NewConn(netConn, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
@@ -214,10 +224,12 @@ func TestSessionNewReceiverBatchingOneCredit(t *testing.T) {
 	}
 	netConn := mocks.NewNetConn(responder)
 
-	client, err := NewConn(netConn, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
@@ -259,10 +271,12 @@ func TestSessionNewReceiverBatchingEnabled(t *testing.T) {
 	}
 	netConn := mocks.NewNetConn(responder)
 
-	client, err := NewConn(netConn, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
@@ -303,10 +317,12 @@ func TestSessionNewReceiverMismatchedLinkName(t *testing.T) {
 	}
 	netConn := mocks.NewNetConn(responder)
 
-	client, err := NewConn(netConn, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
@@ -328,10 +344,12 @@ func TestSessionNewReceiverMismatchedLinkName(t *testing.T) {
 func TestSessionNewSenderBadOptionFails(t *testing.T) {
 	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 
-	client, err := NewConn(netConn, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
@@ -372,10 +390,12 @@ func TestSessionNewSenderMismatchedLinkName(t *testing.T) {
 	}
 	netConn := mocks.NewNetConn(responder)
 
-	client, err := NewConn(netConn, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
@@ -394,10 +414,12 @@ func TestSessionNewSenderMismatchedLinkName(t *testing.T) {
 func TestSessionNewSenderDuplicateLinks(t *testing.T) {
 	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 
-	client, err := NewConn(netConn, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
@@ -425,10 +447,12 @@ func TestSessionNewSenderDuplicateLinks(t *testing.T) {
 func TestSessionNewSenderMaxHandles(t *testing.T) {
 	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 
-	client, err := NewConn(netConn, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	session, err := client.NewSession(ctx, &SessionOptions{MaxLinks: 1})
 	cancel()
 	require.NoError(t, err)
@@ -456,10 +480,12 @@ func TestSessionNewSenderMaxHandles(t *testing.T) {
 func TestSessionUnexpectedFrame(t *testing.T) {
 	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 
-	client, err := NewConn(netConn, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
@@ -479,10 +505,12 @@ func TestSessionUnexpectedFrame(t *testing.T) {
 func TestSessionInvalidFlowFrame(t *testing.T) {
 	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 
-	client, err := NewConn(netConn, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
@@ -539,10 +567,12 @@ func TestSessionFlowFrameWithEcho(t *testing.T) {
 	}
 	netConn := mocks.NewNetConn(responder)
 
-	client, err := NewConn(netConn, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
@@ -586,10 +616,13 @@ func TestSessionInvalidAttachDeadlock(t *testing.T) {
 		}
 	}
 	netConn := mocks.NewNetConn(responder)
-	client, err := NewConn(netConn, nil)
-	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
+	require.NoError(t, err)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
@@ -635,13 +668,17 @@ func TestNewSessionContextCancelled(t *testing.T) {
 			return nil, nil
 		case *frames.PerformEnd:
 			return mocks.PerformEnd(0, nil)
+		case *mocks.KeepAlive:
+			return nil, nil
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
 	netConn := mocks.NewNetConn(responder)
 
-	client, err := NewConn(netConn, nil)
+	newCtx, newCancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(newCtx, netConn, nil)
+	newCancel()
 	require.NoError(t, err)
 
 	session, err := client.NewSession(ctx, nil)

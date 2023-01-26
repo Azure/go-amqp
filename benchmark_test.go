@@ -14,13 +14,15 @@ func BenchmarkSimple(b *testing.B) {
 	if localBrokerAddr == "" {
 		b.Skip()
 	}
-	client, err := amqp.Dial(localBrokerAddr, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := amqp.Dial(ctx, localBrokerAddr, nil)
+	cancel()
 	if err != nil {
 		b.Fatal(err)
 	}
 	defer client.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	session, err := client.NewSession(ctx, nil)
 	cancel()
 	if err != nil {

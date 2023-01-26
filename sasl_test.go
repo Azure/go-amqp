@@ -2,6 +2,7 @@ package amqp
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"fmt"
 	"strings"
@@ -104,10 +105,12 @@ func TestConnSASLXOAUTH2AuthSuccess(t *testing.T) {
 	}
 
 	c := testconn.New(buf)
-	client, err := NewConn(c, &ConnOptions{
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	client, err := NewConn(ctx, c, &ConnOptions{
 		IdleTimeout: 10 * time.Minute,
 		SASLType:    SASLTypeXOAUTH2("someuser@example.com", "ya29.vF9dft4qmTc2Nvb3RlckBhdHRhdmlzdGEuY29tCg", 512),
 	})
+	cancel()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,10 +137,12 @@ func TestConnSASLXOAUTH2AuthFail(t *testing.T) {
 	}
 
 	c := testconn.New(buf)
-	client, err := NewConn(c, &ConnOptions{
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	client, err := NewConn(ctx, c, &ConnOptions{
 		IdleTimeout: 10 * time.Minute,
 		SASLType:    SASLTypeXOAUTH2("someuser@example.com", "ya29.vF9dft4qmTc2Nvb3RlckBhdHRhdmlzdGEuY29tCg", 512),
 	})
+	cancel()
 	if err == nil {
 		defer client.Close()
 	}
@@ -174,10 +179,12 @@ func TestConnSASLXOAUTH2AuthFailWithErrorResponse(t *testing.T) {
 	}
 
 	c := testconn.New(buf)
-	client, err := NewConn(c, &ConnOptions{
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	client, err := NewConn(ctx, c, &ConnOptions{
 		IdleTimeout: 10 * time.Minute,
 		SASLType:    SASLTypeXOAUTH2("someuser@example.com", "ya29.vF9dft4qmTc2Nvb3RlckBhdHRhdmlzdGEuY29tCg", 512),
 	})
+	cancel()
 	if err == nil {
 		defer client.Close()
 	}
@@ -214,10 +221,12 @@ func TestConnSASLXOAUTH2AuthFailsAdditionalErrorResponse(t *testing.T) {
 	}
 
 	c := testconn.New(buf)
-	client, err := NewConn(c, &ConnOptions{
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	client, err := NewConn(ctx, c, &ConnOptions{
 		IdleTimeout: 10 * time.Minute,
 		SASLType:    SASLTypeXOAUTH2("someuser@example.com", "ya29.vF9dft4qmTc2Nvb3RlckBhdHRhdmlzdGEuY29tCg", 512),
 	})
+	cancel()
 	if err == nil {
 		defer client.Close()
 	}
@@ -255,10 +264,12 @@ func TestConnSASLExternal(t *testing.T) {
 	}
 
 	c := testconn.New(buf)
-	client, err := NewConn(c, &ConnOptions{
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	client, err := NewConn(ctx, c, &ConnOptions{
 		IdleTimeout: 10 * time.Minute,
 		SASLType:    SASLTypeExternal(""),
 	})
+	cancel()
 	if err != nil {
 		t.Fatal(err)
 	}

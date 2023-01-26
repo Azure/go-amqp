@@ -18,11 +18,12 @@ import (
 
 func fuzzConn(data []byte) int {
 	// Receive
-	client, err := NewConn(testconn.New(data), &ConnOptions{
-		Timeout:     10 * time.Millisecond,
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	client, err := NewConn(ctx, testconn.New(data), &ConnOptions{
 		IdleTimeout: 10 * time.Millisecond,
 		SASLType:    SASLTypePlain("listen", "3aCXZYFcuZA89xe6lZkfYJvOPnTGipA3ap7NvPruBhI="),
 	})
+	cancel()
 	if err != nil {
 		return 0
 	}
@@ -57,10 +58,12 @@ func fuzzConn(data []byte) int {
 	s.Close(ctx)
 
 	// Send
-	client, err = NewConn(testconn.New(data), &ConnOptions{
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+	client, err = NewConn(ctx, testconn.New(data), &ConnOptions{
 		IdleTimeout: 10 * time.Millisecond,
 		SASLType:    SASLTypePlain("listen", "3aCXZYFcuZA89xe6lZkfYJvOPnTGipA3ap7NvPruBhI="),
 	})
+	cancel()
 	if err != nil {
 		return 0
 	}

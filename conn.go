@@ -312,10 +312,8 @@ func (c *Conn) initTLSConfig() {
 // start establishes the connection and begins multiplexing network IO.
 // It is an error to call Start() on a connection that's been closed.
 func (c *Conn) start(deadline time.Time) error {
-	if !deadline.IsZero() {
-		// set connection establishment deadline
-		_ = c.net.SetDeadline(deadline)
-	}
+	// set connection establishment deadline
+	_ = c.net.SetDeadline(deadline)
 
 	// run connection establishment state machine
 	for state := c.negotiateProto; state != nil; {
@@ -330,10 +328,8 @@ func (c *Conn) start(deadline time.Time) error {
 		}
 	}
 
-	if !deadline.IsZero() {
-		// remove connection establishment deadline
-		_ = c.net.SetDeadline(time.Time{})
-	}
+	// remove connection establishment deadline
+	_ = c.net.SetDeadline(time.Time{})
 
 	// we can't create the channel bitmap until the connection has been established.
 	// this is because our peer can tell us the max channels they support.

@@ -16,6 +16,7 @@
 * Fixed an issue that could cause senders and receivers within the same session to deadlock if the receiver was configured with `ReceiverSettleModeFirst`.
 * Enabled support for senders in an at-most-once configuration.
 * Don't discard incoming frames while closing a Session.
+* Client-side termination of a Session due to invalid state will wait for the peer to acknowledge the Session's end.
 
 ### Other Changes
 

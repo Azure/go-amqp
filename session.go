@@ -61,7 +61,7 @@ type Session struct {
 	handles    *bitmap.Bitmap    // allocated handles
 
 	// used for gracefully closing session
-	close     chan struct{}
+	close     chan *Error
 	closeOnce sync.Once
 
 	// part of internal public surface area
@@ -81,7 +81,7 @@ func newSession(c *Conn, channel uint16, opts *SessionOptions) *Session {
 		handleMax:      math.MaxUint32,
 		linksMu:        sync.RWMutex{},
 		linksByKey:     make(map[linkKey]*link),
-		close:          make(chan struct{}),
+		close:          make(chan *Error, 1), // buffered so we can queue up an error from the mux
 		done:           make(chan struct{}),
 	}
 
@@ -296,9 +296,9 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 			return
 
 		// session is being closed by user
-		case <-closed:
+		case err := <-closed:
 			clientClosed = true
-			fr := frames.PerformEnd{}
+			fr := frames.PerformEnd{Error: err}
 			debug.Log(1, "TX(Session): %s", fr)
 			_ = s.txFrame(&fr, nil)
 			// TODO: per spec, after end has been sent, the session is no longer allowed to send frames
@@ -355,14 +355,12 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 					// This is a protocol error:
 					//       "[...] MUST be set if the peer has received
 					//        the begin frame for the session"
-					_ = s.txFrame(&frames.PerformEnd{
-						Error: &Error{
-							Condition:   ErrCondNotAllowed,
-							Description: "next-incoming-id not set after session established",
-						},
-					}, nil)
+					s.close <- &Error{
+						Condition:   ErrCondNotAllowed,
+						Description: "next-incoming-id not set after session established",
+					}
 					s.doneErr = errors.New("protocol error: received flow without next-incoming-id after session established")
-					return
+					continue
 				}
 
 				// "When the endpoint receives a flow frame from its peer,
@@ -417,14 +415,12 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				link, linkOk := s.linksByKey[linkKey{name: body.Name, role: !body.Role}]
 				s.linksMu.RUnlock()
 				if !linkOk {
-					_ = s.txFrame(&frames.PerformEnd{
-						Error: &Error{
-							Condition:   ErrCondNotAllowed,
-							Description: "received mismatched attach frame",
-						},
-					}, nil)
+					s.close <- &Error{
+						Condition:   ErrCondNotAllowed,
+						Description: "received mismatched attach frame",
+					}
 					s.doneErr = fmt.Errorf("protocol error: received mismatched attach frame %+v", body)
-					return
+					continue
 				}
 
 				link.remoteHandle = body.Handle

@@ -1310,6 +1310,10 @@ type PerformEnd struct {
 
 func (e *PerformEnd) frameBody() {}
 
+func (d PerformEnd) String() string {
+	return fmt.Sprintf("End{Error: %v}", d.Error)
+}
+
 func (e *PerformEnd) Marshal(wr *buffer.Buffer) error {
 	return encoding.MarshalComposite(wr, encoding.TypeCodeEnd, []encoding.MarshalField{
 		{Value: e.Error, Omit: e.Error == nil},

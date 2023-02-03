@@ -417,6 +417,12 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				link, linkOk := s.linksByKey[linkKey{name: body.Name, role: !body.Role}]
 				s.linksMu.RUnlock()
 				if !linkOk {
+					_ = s.txFrame(&frames.PerformEnd{
+						Error: &Error{
+							Condition:   ErrCondNotAllowed,
+							Description: "received mismatched attach frame",
+						},
+					}, nil)
 					s.doneErr = fmt.Errorf("protocol error: received mismatched attach frame %+v", body)
 					return
 				}

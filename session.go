@@ -637,9 +637,9 @@ func (s *Session) muxFrameToLink(l *link, fr frames.FrameBody) {
 	select {
 	case l.rx <- fr:
 		// frame successfully sent to link
-	case <-l.detached:
+	case <-l.done:
 		// link is closed
-		// this should be impossible to hit as the link has been removed from the session once Detached is closed
+		// this should be impossible to hit as the link has been removed from the session once done is closed
 	case <-s.conn.done:
 		// conn is closed
 	}

@@ -20,6 +20,7 @@
 * Fixed an issue that could cause outgoing transfers to be rejected by some brokers due to out-of-sequence delivery IDs.
 * Fixed an issue that could cause senders and receivers within the same session to deadlock if the receiver was configured with `ReceiverSettleModeFirst`.
 * Enabled support for senders in an at-most-once configuration.
+* Fixed an issue that could cause `creditor.Drain()` to return the wrong error when a link is terminated.
 
 ### Other Changes
 

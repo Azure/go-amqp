@@ -53,8 +53,8 @@ func (s *Sender) Send(ctx context.Context, msg *Message) error {
 	// check if the link is dead.  while it's safe to call s.send
 	// in this case, this will avoid some allocations etc.
 	select {
-	case <-s.l.detached:
-		return s.l.err
+	case <-s.l.done:
+		return s.l.doneErr
 	default:
 		// link is still active
 	}
@@ -74,8 +74,8 @@ func (s *Sender) Send(ctx context.Context, msg *Message) error {
 			return state.Error
 		}
 		return nil
-	case <-s.l.detached:
-		return s.l.err
+	case <-s.l.done:
+		return s.l.doneErr
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -146,8 +146,8 @@ func (s *Sender) send(ctx context.Context, msg *Message) (chan encoding.Delivery
 
 		select {
 		case s.transfers <- fr:
-		case <-s.l.detached:
-			return nil, s.l.err
+		case <-s.l.done:
+			return nil, s.l.doneErr
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
@@ -178,12 +178,12 @@ func (s *Sender) Close(ctx context.Context) error {
 func newSender(target string, session *Session, opts *SenderOptions) (*Sender, error) {
 	s := &Sender{
 		l: link{
-			key:      linkKey{shared.RandString(40), encoding.RoleSender},
-			session:  session,
-			close:    make(chan struct{}),
-			detached: make(chan struct{}),
-			target:   &frames.Target{Address: target},
-			source:   new(frames.Source),
+			key:     linkKey{shared.RandString(40), encoding.RoleSender},
+			session: session,
+			close:   make(chan struct{}),
+			done:    make(chan struct{}),
+			target:  &frames.Target{Address: target},
+			source:  new(frames.Source),
 		},
 		detachOnDispositionError: true,
 	}
@@ -304,9 +304,9 @@ Loop:
 
 		handleFrame := func(fr frames.FrameBody) error {
 			var disp *frames.PerformDisposition
-			disp, s.l.err = s.muxHandleFrame(fr)
-			if s.l.err != nil {
-				return s.l.err
+			disp, s.l.doneErr = s.muxHandleFrame(fr)
+			if s.l.doneErr != nil {
+				return s.l.doneErr
 			} else if disp != nil {
 				outgoingDisps = append(outgoingDisps, disp)
 			}
@@ -367,10 +367,11 @@ Loop:
 			}
 
 		case <-s.l.close:
-			s.l.err = &DetachError{}
+			s.l.doneErr = &DetachError{}
 			return
 		case <-s.l.session.done:
-			s.l.err = s.l.session.doneErr
+			// TODO: per spec, if the session has terminated, we're not allowed to send frames
+			s.l.doneErr = s.l.session.doneErr
 			return
 		}
 	}

@@ -123,8 +123,8 @@ func waitForReceiver(r *Receiver, paused bool) error {
 			return err
 		}
 		select {
-		case <-r.l.detached:
-			return fmt.Errorf("link detached: detachErr %v, error %v", r.l.detachError, r.l.err)
+		case <-r.l.done:
+			return fmt.Errorf("link terminated:  %v", r.l.doneErr)
 		case <-time.After(50 * time.Millisecond):
 			// try again
 		}

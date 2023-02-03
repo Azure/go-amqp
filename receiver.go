@@ -128,8 +128,8 @@ func (r *Receiver) Receive(ctx context.Context) (*Message, error) {
 		debug.Log(3, "Receive() blocking %d", msg.deliveryID)
 		msg.rcvr = r
 		return &msg, nil
-	case <-r.l.detached:
-		return nil, r.l.err
+	case <-r.l.done:
+		return nil, r.l.doneErr
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
@@ -318,7 +318,7 @@ func (r *Receiver) dispositionBatcher() {
 			batchStarted = false
 			batchTimer.Stop()
 
-		case <-r.l.detached:
+		case <-r.l.done:
 			return
 		}
 	}
@@ -335,9 +335,10 @@ func (r *Receiver) sendDisposition(first uint32, last *uint32, state encoding.De
 	}
 
 	select {
-	case <-r.l.detached:
-		return r.l.err
+	case <-r.l.done:
+		return r.l.doneErr
 	default:
+		// TODO: this is racy
 		debug.Log(1, "TX (sendDisposition): %s", fr)
 		return r.l.session.txFrame(fr, nil)
 	}
@@ -353,8 +354,8 @@ func (r *Receiver) messageDisposition(ctx context.Context, msg *Message, state e
 	if r.batching {
 		select {
 		case r.dispositions <- messageDisposition{id: msg.deliveryID, state: state}:
-		case <-r.l.detached:
-			return r.l.err
+		case <-r.l.done:
+			return r.l.doneErr
 		}
 	} else {
 		err := r.sendDisposition(msg.deliveryID, nil, state)
@@ -407,12 +408,12 @@ func (r *Receiver) countUnsettled() int {
 func newReceiver(source string, session *Session, opts *ReceiverOptions) (*Receiver, error) {
 	r := &Receiver{
 		l: link{
-			key:      linkKey{shared.RandString(40), encoding.RoleReceiver},
-			session:  session,
-			close:    make(chan struct{}),
-			detached: make(chan struct{}),
-			source:   &frames.Source{Address: source},
-			target:   new(frames.Target),
+			key:     linkKey{shared.RandString(40), encoding.RoleReceiver},
+			session: session,
+			close:   make(chan struct{}),
+			done:    make(chan struct{}),
+			source:  &frames.Source{Address: source},
+			target:  new(frames.Target),
 		},
 		autoSendFlow:  true,
 		receiverReady: make(chan struct{}, 1),
@@ -543,7 +544,7 @@ func (r *Receiver) attach(ctx context.Context) error {
 func (r *Receiver) mux() {
 	defer r.l.muxDetach(context.Background(), func() {
 		// unblock any in flight message dispositions
-		r.inFlight.clear(r.l.err)
+		r.inFlight.clear(r.l.doneErr)
 
 		if !r.autoSendFlow {
 			// unblock any pending drain requests
@@ -562,12 +563,12 @@ func (r *Receiver) mux() {
 		// remains greater than half the link's max credit.
 		if pendingCredit := r.maxCredit - (r.l.availableCredit + uint32(r.countUnsettled())); pendingCredit > 0 && pendingCredit >= r.l.availableCredit && r.autoSendFlow {
 			debug.Log(1, "receiver (auto): source: %s, inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit: %d, settleMode: %s", r.l.source.Address, r.inFlight.len(), r.l.availableCredit, r.l.deliveryCount, len(r.messages), r.countUnsettled(), r.maxCredit, r.l.receiverSettleMode.String())
-			r.l.err = r.creditor.IssueCredit(pendingCredit, r)
+			r.l.doneErr = r.creditor.IssueCredit(pendingCredit, r)
 		} else if r.l.availableCredit == 0 {
 			debug.Log(1, "receiver (pause): source: %s, inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit: %d, settleMode: %s", r.l.source.Address, r.inFlight.len(), r.l.availableCredit, r.l.deliveryCount, len(r.messages), r.countUnsettled(), r.maxCredit, r.l.receiverSettleMode.String())
 		}
 
-		if r.l.err != nil {
+		if r.l.doneErr != nil {
 			return
 		}
 
@@ -577,28 +578,29 @@ func (r *Receiver) mux() {
 				r.l.source.Address, r.inFlight.len(), r.l.availableCredit, credits, drain, r.l.deliveryCount, len(r.messages), r.countUnsettled(), r.maxCredit, r.l.receiverSettleMode.String())
 
 			// send a flow frame.
-			r.l.err = r.muxFlow(credits, drain)
+			r.l.doneErr = r.muxFlow(credits, drain)
 		}
 
-		if r.l.err != nil {
+		if r.l.doneErr != nil {
 			return
 		}
 
 		select {
 		// received frame
 		case fr := <-r.l.rx:
-			r.l.err = r.muxHandleFrame(fr)
-			if r.l.err != nil {
+			r.l.doneErr = r.muxHandleFrame(fr)
+			if r.l.doneErr != nil {
 				return
 			}
 
 		case <-r.receiverReady:
 			continue
 		case <-r.l.close:
-			r.l.err = &DetachError{}
+			r.l.doneErr = &DetachError{}
 			return
 		case <-r.l.session.done:
-			r.l.err = r.l.session.doneErr
+			// TODO: per spec, if the session has terminated, we're not allowed to send frames
+			r.l.doneErr = r.l.session.doneErr
 			return
 		}
 	}
@@ -821,9 +823,9 @@ func (r *Receiver) muxReceive(fr frames.PerformTransfer) error {
 	select {
 	case r.messages <- r.msg:
 		// message received
-	case <-r.l.detached:
-		// link has been detached
-		return r.l.err
+	case <-r.l.done:
+		// link has terminated
+		return r.l.doneErr
 	}
 
 	debug.Log(1, "deliveryID %d after push to receiver - deliveryCount : %d - linkCredit: %d, len(messages): %d, len(inflight): %d", r.msg.deliveryID, r.l.deliveryCount, r.l.availableCredit, len(r.messages), r.inFlight.len())

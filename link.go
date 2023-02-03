@@ -33,16 +33,12 @@ type link struct {
 	dynamicAddr  bool                  // request a dynamic link address from the server
 	rx           chan frames.FrameBody // sessions sends frames for this link on this channel
 
-	closeOnce sync.Once // closeOnce protects close from being closed multiple times
+	// used for gracefully closing link
+	close     chan struct{} // signals a link's mux to shut down; DO NOT use this to check if a link has terminated, use done instead
+	closeOnce sync.Once     // closeOnce protects close from being closed multiple times
 
-	// close signals the mux to shutdown. This indicates that `Close()` was called on this link.
-	// NOTE: observers outside of link.go *must only* use the Detached channel to check if the link is unavailable.
-	// including the close channel will lead to a race condition.
-	close chan struct{}
-
-	// detached is closed by mux/muxDetach when the link is fully detached.
-	// This will be initiated if the service sends back an error or requests the link detach.
-	detached chan struct{}
+	done    chan struct{} // closed when the link has terminated
+	doneErr error         // contains the error state returned from Close(); DO NOT TOUCH outside of link.go until done has been closed!
 
 	detachErrorMu sync.Mutex              // protects detachError
 	detachError   *Error                  // error to send to remote on detach, set by closeWithError
@@ -68,7 +64,6 @@ type link struct {
 	receiverSettleMode *ReceiverSettleMode
 	maxMessageSize     uint64
 	detachReceived     bool
-	err                error // err returned on Close()
 }
 
 // attach sends the Attach performative to establish the link with its parent session.
@@ -236,18 +231,20 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 // Close closes the Sender and AMQP link.
 func (l *link) closeLink(ctx context.Context) error {
 	l.closeOnce.Do(func() { close(l.close) })
+
 	select {
-	case <-l.detached:
+	case <-l.done:
 		// mux exited
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+
 	var detachErr *DetachError
-	if errors.As(l.err, &detachErr) && detachErr.inner == nil {
+	if errors.As(l.doneErr, &detachErr) && detachErr.inner == nil {
 		// an empty DetachError means the link was closed by the caller
 		return nil
 	}
-	return l.err
+	return l.doneErr
 }
 
 func (l *link) muxDetach(ctx context.Context, deferred func(), onRXTransfer func(frames.PerformTransfer)) {
@@ -268,7 +265,7 @@ func (l *link) muxDetach(ctx context.Context, deferred func(), onRXTransfer func
 		}
 
 		// signal that the link mux has exited
-		close(l.detached)
+		close(l.done)
 	}()
 
 	// "A peer closes a link by sending the detach frame with the
@@ -313,8 +310,8 @@ Loop:
 				}
 			}
 		case <-l.session.done:
-			if l.err == nil {
-				l.err = l.session.doneErr
+			if l.doneErr == nil {
+				l.doneErr = l.session.doneErr
 			}
 			return
 		}
@@ -345,8 +342,8 @@ Loop:
 
 		// connection has ended
 		case <-l.session.done:
-			if l.err == nil {
-				l.err = l.session.doneErr
+			if l.doneErr == nil {
+				l.doneErr = l.session.doneErr
 			}
 			return
 		}

@@ -88,8 +88,8 @@ func (mc *creditor) Drain(ctx context.Context, r *Receiver) error {
 	select {
 	case <-drained:
 		return nil
-	case <-r.l.detached:
-		return r.l.detachError
+	case <-r.l.done:
+		return r.l.doneErr
 	case <-ctx.Done():
 		return ctx.Err()
 	}

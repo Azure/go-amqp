@@ -132,8 +132,8 @@ func TestCreditorDrainReturnsProperError(t *testing.T) {
 			mc := creditor{}
 			link := newTestLink(t)
 
-			link.l.detachError = err
-			close(link.l.detached)
+			link.l.doneErr = err
+			close(link.l.done)
 
 			detachErr := mc.Drain(ctx, link)
 			require.Equal(t, err, detachErr)

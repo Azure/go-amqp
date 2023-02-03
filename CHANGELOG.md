@@ -7,6 +7,11 @@
 * `Dial()` and `NewConn()` now require a `context.Context` as their first parameter.
   * As a result, the `ConnOptions.Timeout` field has been removed.
 
+### Bugs Fixed
+
+* Don't discard incoming frames while closing a Session.
+* Client-side termination of a Session due to invalid state will wait for the peer to acknowledge the Session's end.
+
 ## 0.18.1 (2023-01-17)
 
 ### Bugs Fixed
@@ -15,8 +20,6 @@
 * Fixed an issue that could cause outgoing transfers to be rejected by some brokers due to out-of-sequence delivery IDs.
 * Fixed an issue that could cause senders and receivers within the same session to deadlock if the receiver was configured with `ReceiverSettleModeFirst`.
 * Enabled support for senders in an at-most-once configuration.
-* Don't discard incoming frames while closing a Session.
-* Client-side termination of a Session due to invalid state will wait for the peer to acknowledge the Session's end.
 
 ### Other Changes
 

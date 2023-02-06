@@ -281,7 +281,7 @@ func (s *Sender) attach(ctx context.Context) error {
 }
 
 func (s *Sender) mux() {
-	defer s.l.muxDetach(context.Background(), nil, nil)
+	defer s.l.muxClose(context.Background(), nil, nil, nil)
 
 	// used to track and send disposition frames.
 	// frames are sent in FIFO order.

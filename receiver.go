@@ -38,6 +38,7 @@ type Receiver struct {
 	msgBuf                buffer.Buffer       // buffered bytes for current message
 	more                  bool                // if true, buf contains a partial message
 	msg                   Message             // current message being decoded
+	detachError           *Error              // error to send to peer on detach/close, set by closeWithError; NOT why link was terminated
 
 	autoSendFlow bool                    // automatically send flow frames as credit becomes available
 	batching     bool                    // enable batching of message dispositions
@@ -232,9 +233,7 @@ func (r *Receiver) Close(ctx context.Context) error {
 // returns the error passed in
 func (r *Receiver) closeWithError(de *Error) error {
 	r.l.closeOnce.Do(func() {
-		r.l.detachErrorMu.Lock()
-		r.l.detachError = de
-		r.l.detachErrorMu.Unlock()
+		r.detachError = de
 		close(r.l.close)
 	})
 	return &DetachError{inner: de}
@@ -542,7 +541,7 @@ func (r *Receiver) attach(ctx context.Context) error {
 }
 
 func (r *Receiver) mux() {
-	defer r.l.muxDetach(context.Background(), func() {
+	defer r.l.muxClose(context.Background(), r.detachError, func() {
 		// unblock any in flight message dispositions
 		r.inFlight.clear(r.l.doneErr)
 

@@ -40,12 +40,10 @@ type link struct {
 	done    chan struct{} // closed when the link has terminated
 	doneErr error         // contains the error state returned from Close(); DO NOT TOUCH outside of link.go until done has been closed!
 
-	detachErrorMu sync.Mutex              // protects detachError
-	detachError   *Error                  // error to send to remote on detach, set by closeWithError
-	session       *Session                // parent session
-	source        *frames.Source          // used for Receiver links
-	target        *frames.Target          // used for Sender links
-	properties    map[encoding.Symbol]any // additional properties sent upon link attach
+	session    *Session                // parent session
+	source     *frames.Source          // used for Receiver links
+	target     *frames.Target          // used for Sender links
+	properties map[encoding.Symbol]any // additional properties sent upon link attach
 
 	// "The delivery-count is initialized by the sender when a link endpoint is created,
 	// and is incremented whenever a message is sent. Only the sender MAY independently
@@ -63,7 +61,7 @@ type link struct {
 	senderSettleMode   *SenderSettleMode
 	receiverSettleMode *ReceiverSettleMode
 	maxMessageSize     uint64
-	detachReceived     bool
+	detachReceived     bool // set to true when the peer initiates link detach/close
 }
 
 // attach sends the Attach performative to establish the link with its parent session.
@@ -101,7 +99,7 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			l.muxDetach(ctx, nil, nil)
+			l.muxClose(ctx, nil, nil, nil)
 		}()
 		return ctx.Err()
 	case <-l.session.done:
@@ -132,7 +130,7 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 			go func() {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
-				l.muxDetach(ctx, nil, nil)
+				l.muxClose(ctx, nil, nil, nil)
 			}()
 			return ctx.Err()
 		case <-l.session.done:
@@ -168,7 +166,7 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 	afterAttach(resp)
 
 	if err := l.setSettleModes(resp); err != nil {
-		l.muxDetach(ctx, nil, nil)
+		l.muxClose(ctx, nil, nil, nil)
 		return err
 	}
 
@@ -247,7 +245,11 @@ func (l *link) closeLink(ctx context.Context) error {
 	return l.doneErr
 }
 
-func (l *link) muxDetach(ctx context.Context, deferred func(), onRXTransfer func(frames.PerformTransfer)) {
+// muxClose closes the link
+//   - err is the error sent to the peer if we're closing the link with an error
+//   - deferred is executed during the final phase of shutdown (can be nil)
+//   - onRXTransfer handles incoming transfer frames during shutdown (can be nil)
+func (l *link) muxClose(ctx context.Context, err *Error, deferred func(), onRXTransfer func(frames.PerformTransfer)) {
 	defer func() {
 		// final cleanup and signaling
 
@@ -279,14 +281,10 @@ func (l *link) muxDetach(ctx context.Context, deferred func(), onRXTransfer func
 	// the partner MUST signal that it has closed the link by
 	// reattaching and then sending a closing detach."
 
-	l.detachErrorMu.Lock()
-	detachError := l.detachError
-	l.detachErrorMu.Unlock()
-
 	fr := &frames.PerformDetach{
 		Handle: l.handle,
 		Closed: true,
-		Error:  detachError,
+		Error:  err,
 	}
 
 Loop:

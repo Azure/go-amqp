@@ -47,16 +47,16 @@ const (
 // Error is an AMQP error.
 type Error = encoding.Error
 
-// DetachError is returned by methods on Sender/Receiver when the link has become detached/closed.
-type DetachError struct {
+// LinkError is returned by methods on Sender/Receiver when the link has closed.
+type LinkError struct {
 	// RemoteErr contains any error information provided by the peer if the peer detached the link.
 	RemoteErr *Error
 
 	inner error
 }
 
-// Error implements the error interface for DetachError.
-func (e *DetachError) Error() string {
+// Error implements the error interface for LinkError.
+func (e *LinkError) Error() string {
 	if e.RemoteErr == nil && e.inner == nil {
 		return "amqp: link closed"
 	} else if e.RemoteErr != nil {

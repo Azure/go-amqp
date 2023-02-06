@@ -207,16 +207,16 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 		debug.Log(1, "RX (muxHandleFrame): %s", fr)
 		// don't currently support link detach and reattach
 		if !fr.Closed {
-			return &DetachError{inner: fmt.Errorf("non-closing detach not supported: %+v", fr)}
+			return &LinkError{inner: fmt.Errorf("non-closing detach not supported: %+v", fr)}
 		}
 
 		// set detach received and close link
 		l.detachReceived = true
 
 		if fr.Error != nil {
-			return &DetachError{RemoteErr: fr.Error}
+			return &LinkError{RemoteErr: fr.Error}
 		}
-		return &DetachError{}
+		return &LinkError{}
 
 	default:
 		// TODO: evaluate
@@ -237,9 +237,9 @@ func (l *link) closeLink(ctx context.Context) error {
 		return ctx.Err()
 	}
 
-	var detachErr *DetachError
-	if errors.As(l.doneErr, &detachErr) && detachErr.inner == nil {
-		// an empty DetachError means the link was closed by the caller
+	var linkErr *LinkError
+	if errors.As(l.doneErr, &linkErr) && linkErr.inner == nil {
+		// an empty LinkError means the link was closed by the caller
 		return nil
 	}
 	return l.doneErr

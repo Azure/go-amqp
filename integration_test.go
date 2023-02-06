@@ -666,8 +666,8 @@ func TestIntegrationClose(t *testing.T) {
 		testClose(t, receiver.Close)
 
 		_, err = receiver.Receive(context.Background(), nil)
-		var detachErr *amqp.DetachError
-		require.ErrorAs(t, err, &detachErr)
+		var linkErr *amqp.LinkError
+		require.ErrorAs(t, err, &linkErr)
 
 		err = client.Close() // close before leak check
 		if err != nil {

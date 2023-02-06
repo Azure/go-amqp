@@ -175,10 +175,10 @@ func ExampleSessionError() {
 	}
 }
 
-func ExampleDetachError() {
-	// *DetachErrors are returned by methods on Senders/Receivers after Close() has been called.
-	// it can also be returned if the peer has detached from the link. in this case, the *RemoteErr
-	// field should contain additional information about why the peer detached.
+func ExampleLinkError() {
+	// *LinkError are returned by methods on Senders/Receivers after Close() has been called.
+	// it can also be returned if the peer has closed the link. in this case, the *RemoteErr
+	// field should contain additional information about why the peer closed the link.
 
 	ctx := context.TODO()
 
@@ -215,8 +215,8 @@ func ExampleDetachError() {
 	// attempt to send a message after close
 	err = sender.Send(ctx, amqp.NewMessage([]byte("Hello!")), nil)
 
-	var detachErr *amqp.DetachError
-	if !errors.As(err, &detachErr) {
+	var linkErr *amqp.LinkError
+	if !errors.As(err, &linkErr) {
 		log.Fatalf("unexpected error type %T", err)
 	}
 }

@@ -151,10 +151,10 @@ func TestReceiverOnClosed(t *testing.T) {
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	require.NoError(t, r.Close(ctx))
 	cancel()
-	var deErr *DetachError
-	require.ErrorAs(t, <-errChan, &deErr)
+	var linkErr *LinkError
+	require.ErrorAs(t, <-errChan, &linkErr)
 	_, err = r.Receive(context.Background(), nil)
-	require.ErrorAs(t, err, &deErr)
+	require.ErrorAs(t, err, &linkErr)
 	var amqpErr *Error
 	// there should be no inner error when closed on our side
 	require.False(t, errors.As(err, &amqpErr))
@@ -253,13 +253,13 @@ func TestReceiverOnDetached(t *testing.T) {
 	require.NoError(t, err)
 	conn.SendFrame(b)
 
-	var deErr *DetachError
-	require.ErrorAs(t, <-errChan, &deErr)
-	require.Equal(t, ErrCond(errcon), deErr.RemoteErr.Condition)
-	require.Equal(t, errdesc, deErr.RemoteErr.Description)
+	var linkErr *LinkError
+	require.ErrorAs(t, <-errChan, &linkErr)
+	require.Equal(t, ErrCond(errcon), linkErr.RemoteErr.Condition)
+	require.Equal(t, errdesc, linkErr.RemoteErr.Description)
 	require.NoError(t, client.Close())
 	_, err = r.Receive(context.Background(), nil)
-	require.ErrorAs(t, err, &deErr)
+	require.ErrorAs(t, err, &linkErr)
 }
 
 func TestReceiveInvalidMessage(t *testing.T) {
@@ -321,12 +321,12 @@ func TestReceiveInvalidMessage(t *testing.T) {
 	conn.SendFrame(fr)
 
 	require.Nil(t, <-msgChan)
-	var detachErr *DetachError
-	require.ErrorAs(t, <-errChan, &detachErr)
-	require.Contains(t, detachErr.Error(), ErrCondNotAllowed)
+	var linkErr *LinkError
+	require.ErrorAs(t, <-errChan, &linkErr)
+	require.Contains(t, linkErr.Error(), ErrCondNotAllowed)
 
 	_, err = r.Receive(context.Background(), nil)
-	require.ErrorAs(t, err, &detachErr)
+	require.ErrorAs(t, err, &linkErr)
 
 	// missing MessageFormat
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -346,11 +346,11 @@ func TestReceiveInvalidMessage(t *testing.T) {
 	conn.SendFrame(fr)
 
 	require.Nil(t, <-msgChan)
-	require.ErrorAs(t, <-errChan, &detachErr)
-	require.Contains(t, detachErr.Error(), ErrCondNotAllowed)
+	require.ErrorAs(t, <-errChan, &linkErr)
+	require.Contains(t, linkErr.Error(), ErrCondNotAllowed)
 
 	_, err = r.Receive(context.Background(), nil)
-	require.ErrorAs(t, err, &detachErr)
+	require.ErrorAs(t, err, &linkErr)
 
 	// missing delivery tag
 	format := uint32(0)
@@ -372,11 +372,11 @@ func TestReceiveInvalidMessage(t *testing.T) {
 	conn.SendFrame(fr)
 
 	require.Nil(t, <-msgChan)
-	require.ErrorAs(t, <-errChan, &detachErr)
-	require.Contains(t, detachErr.Error(), ErrCondNotAllowed)
+	require.ErrorAs(t, <-errChan, &linkErr)
+	require.Contains(t, linkErr.Error(), ErrCondNotAllowed)
 
 	_, err = r.Receive(context.Background(), nil)
-	require.ErrorAs(t, err, &detachErr)
+	require.ErrorAs(t, err, &linkErr)
 
 	require.NoError(t, client.Close())
 }
@@ -591,8 +591,8 @@ func TestReceiveSuccessReceiverSettleModeSecondAcceptOnClosedLink(t *testing.T) 
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	err = r.AcceptMessage(ctx, msg)
 	cancel()
-	var deErr *DetachError
-	require.ErrorAs(t, err, &deErr)
+	var linkErr *LinkError
+	require.ErrorAs(t, err, &linkErr)
 }
 
 func TestReceiveSuccessReceiverSettleModeSecondReject(t *testing.T) {
@@ -1010,9 +1010,9 @@ func TestReceiveInvalidMultiFrameMessage(t *testing.T) {
 	}))
 	msg := <-msgChan
 	require.Nil(t, msg)
-	var detachErr *DetachError
-	require.ErrorAs(t, <-errChan, &detachErr)
-	require.Contains(t, detachErr.Error(), ErrCondNotAllowed)
+	var linkErr *LinkError
+	require.ErrorAs(t, <-errChan, &linkErr)
+	require.Contains(t, linkErr.Error(), ErrCondNotAllowed)
 
 	// mismatched MessageFormat
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -1036,8 +1036,8 @@ func TestReceiveInvalidMultiFrameMessage(t *testing.T) {
 	}))
 	msg = <-msgChan
 	require.Nil(t, msg)
-	require.ErrorAs(t, <-errChan, &detachErr)
-	require.Contains(t, detachErr.Error(), ErrCondNotAllowed)
+	require.ErrorAs(t, <-errChan, &linkErr)
+	require.Contains(t, linkErr.Error(), ErrCondNotAllowed)
 
 	// mismatched DeliveryTag
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -1060,8 +1060,8 @@ func TestReceiveInvalidMultiFrameMessage(t *testing.T) {
 	}))
 	msg = <-msgChan
 	require.Nil(t, msg)
-	require.ErrorAs(t, <-errChan, &detachErr)
-	require.Contains(t, detachErr.Error(), ErrCondNotAllowed)
+	require.ErrorAs(t, <-errChan, &linkErr)
+	require.Contains(t, linkErr.Error(), ErrCondNotAllowed)
 
 	require.NoError(t, client.Close())
 }
@@ -1169,9 +1169,9 @@ func TestReceiveMessageTooBig(t *testing.T) {
 	msg, err := r.Receive(ctx, nil)
 	cancel()
 	require.Nil(t, msg)
-	var detachErr *DetachError
-	require.ErrorAs(t, err, &detachErr)
-	require.Contains(t, detachErr.Error(), ErrCondMessageSizeExceeded)
+	var linkErr *LinkError
+	require.ErrorAs(t, err, &linkErr)
+	require.Contains(t, linkErr.Error(), ErrCondMessageSizeExceeded)
 	require.NoError(t, client.Close())
 }
 

@@ -33,7 +33,7 @@ type SenderOptions struct {
 	// Default: 0.
 	ExpiryTimeout uint32
 
-	// IgnoreDispositionErrors controls automatic detach on disposition errors.
+	// IgnoreDispositionErrors controls automatic close on disposition errors.
 	//
 	// Default: false.
 	IgnoreDispositionErrors bool

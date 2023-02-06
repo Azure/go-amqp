@@ -241,7 +241,7 @@ func (r *Receiver) closeWithError(de *Error) error {
 		r.detachError = de
 		close(r.l.close)
 	})
-	return &DetachError{inner: de}
+	return &LinkError{inner: de}
 }
 
 func (r *Receiver) dispositionBatcher() {
@@ -602,7 +602,7 @@ func (r *Receiver) mux() {
 		case <-r.receiverReady:
 			continue
 		case <-r.l.close:
-			r.l.doneErr = &DetachError{}
+			r.l.doneErr = &LinkError{}
 			return
 		case <-r.l.session.done:
 			// TODO: per spec, if the session has terminated, we're not allowed to send frames
@@ -651,7 +651,7 @@ func (r *Receiver) muxFlow(linkCredit uint32, drain bool) error {
 				return err
 			}
 		case <-r.l.close:
-			return &DetachError{}
+			return &LinkError{}
 		case <-r.l.session.done:
 			return r.l.session.doneErr
 		}
@@ -819,7 +819,7 @@ func (r *Receiver) muxReceive(fr frames.PerformTransfer) error {
 	// last frame in message
 	err := r.msg.Unmarshal(&r.msgBuf)
 	if err != nil {
-		return &DetachError{inner: err}
+		return &LinkError{inner: err}
 	}
 	debug.Log(1, "deliveryID %d before push to receiver - deliveryCount : %d - linkCredit: %d, len(messages): %d, len(inflight): %d", r.msg.deliveryID, r.l.deliveryCount, r.l.availableCredit, len(r.messages), r.inFlight.len())
 	// send to receiver

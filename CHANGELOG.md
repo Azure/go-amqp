@@ -9,6 +9,7 @@
 * Methods `Sender.Send()` and `Receiver.Receive()` now take their respective options-type as the final argument.
 * The `Credit` field in `ReceiverOptions` has been renamed to `MaxCredit` to better reflect its purpose.
 * Renamed fields in the `ReceiverOptions` for configuring options on the source.
+* Renamed `DetachError` to `LinkError` as "detach" has a specific meaning which doesn't equate to the returned link errors.
 
 ### Bugs Fixed
 

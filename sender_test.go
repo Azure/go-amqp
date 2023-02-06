@@ -115,9 +115,9 @@ func TestSenderSendOnClosed(t *testing.T) {
 	require.NoError(t, snd.Close(ctx))
 	cancel()
 	// sending on a closed sender returns ErrLinkClosed
-	var detachErr *DetachError
-	require.ErrorAs(t, snd.Send(context.Background(), NewMessage([]byte("failed")), nil), &detachErr)
-	require.Equal(t, "amqp: link closed", detachErr.Error())
+	var linkErr *LinkError
+	require.ErrorAs(t, snd.Send(context.Background(), NewMessage([]byte("failed")), nil), &linkErr)
+	require.Equal(t, "amqp: link closed", linkErr.Error())
 	require.NoError(t, client.Close())
 }
 
@@ -205,14 +205,12 @@ func TestSenderSendOnDetached(t *testing.T) {
 	b, err := mocks.PerformDetach(0, 0, &Error{Condition: errcon, Description: errdesc})
 	require.NoError(t, err)
 	netConn.SendFrame(b)
-	// sending on a detached link returns a DetachError
+	// sending on a detached link returns a LinkError
 	err = snd.Send(context.Background(), NewMessage([]byte("failed")), nil)
-	var de *DetachError
-	require.ErrorAs(t, err, &de)
-	var detachErr *DetachError
-	require.ErrorAs(t, de, &detachErr)
-	require.Equal(t, ErrCond(errcon), detachErr.RemoteErr.Condition)
-	require.Equal(t, errdesc, detachErr.RemoteErr.Description)
+	var linkErr *LinkError
+	require.ErrorAs(t, err, &linkErr)
+	require.Equal(t, ErrCond(errcon), linkErr.RemoteErr.Condition)
+	require.Equal(t, errdesc, linkErr.RemoteErr.Description)
 	require.NoError(t, client.Close())
 }
 
@@ -451,16 +449,16 @@ func TestSenderSendRejected(t *testing.T) {
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	err = snd.Send(ctx, NewMessage([]byte("test")), nil)
 	cancel()
-	var deErr *DetachError
-	require.ErrorAs(t, err, &deErr)
-	require.NotNil(t, deErr.RemoteErr)
-	require.Equal(t, ErrCond("rejected"), deErr.RemoteErr.Condition)
+	var linkErr *LinkError
+	require.ErrorAs(t, err, &linkErr)
+	require.NotNil(t, linkErr.RemoteErr)
+	require.Equal(t, ErrCond("rejected"), linkErr.RemoteErr.Condition)
 
 	// link should now be detached
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	err = snd.Send(ctx, NewMessage([]byte("test")), nil)
 	cancel()
-	if !errors.As(err, &deErr) {
+	if !errors.As(err, &linkErr) {
 		t.Fatalf("unexpected error type %T", err)
 	}
 	require.NoError(t, client.Close())
@@ -572,12 +570,10 @@ func TestSenderSendDetached(t *testing.T) {
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	err = snd.Send(ctx, NewMessage([]byte("test")), nil)
 	cancel()
-	var deErr *DetachError
-	require.ErrorAs(t, err, &deErr)
-	var detachErr *DetachError
-	require.ErrorAs(t, deErr, &detachErr)
-	require.NotNil(t, deErr.RemoteErr)
-	require.Equal(t, ErrCond("detached"), deErr.RemoteErr.Condition)
+	var linkErr *LinkError
+	require.ErrorAs(t, err, &linkErr)
+	require.NotNil(t, linkErr.RemoteErr)
+	require.Equal(t, ErrCond("detached"), linkErr.RemoteErr.Condition)
 
 	require.NoError(t, client.Close())
 }

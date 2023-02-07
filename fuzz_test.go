@@ -35,7 +35,7 @@ func fuzzConn(data []byte) int {
 	}
 
 	r, err := s.NewReceiver(context.Background(), "source", &ReceiverOptions{
-		Credit: 2,
+		MaxCredit: 2,
 	})
 	if err != nil {
 		return 0

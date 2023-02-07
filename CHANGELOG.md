@@ -7,6 +7,7 @@
 * `Dial()` and `NewConn()` now require a `context.Context` as their first parameter.
   * As a result, the `ConnOptions.Timeout` field has been removed.
 * Methods `Sender.Send()` and `Receiver.Receive()` now take their respective options-type as the final argument.
+* The `Credit` field in `ReceiverOptions` has been renamed to `MaxCredit` to better reflect its purpose.
 
 ### Bugs Fixed
 

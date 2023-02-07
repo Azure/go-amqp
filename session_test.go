@@ -282,8 +282,8 @@ func TestSessionNewReceiverBatchingEnabled(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	recv, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
-		Batching: true,
-		Credit:   10,
+		Batching:  true,
+		MaxCredit: 10,
 	})
 	cancel()
 	require.NoError(t, err)
@@ -328,8 +328,8 @@ func TestSessionNewReceiverMismatchedLinkName(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	recv, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
-		Batching: true,
-		Credit:   10,
+		Batching:  true,
+		MaxCredit: 10,
 	})
 	cancel()
 	require.Error(t, err)

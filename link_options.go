@@ -106,11 +106,11 @@ type ReceiverOptions struct {
 	// Capabilities is the list of extension capabilities the receiver supports.
 	Capabilities []string
 
-	// Credit specifies the maximum number of unacknowledged messages
+	// MaxCredit specifies the maximum number of unacknowledged messages
 	// the sender can transmit.
 	//
 	// Default: 1.
-	Credit uint32
+	MaxCredit uint32
 
 	// Durability indicates what state of the receiver will be retained durably.
 	//

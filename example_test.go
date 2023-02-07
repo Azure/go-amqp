@@ -52,7 +52,7 @@ func Example() {
 	{
 		// create a receiver
 		receiver, err := session.NewReceiver(ctx, "/queue-name", &amqp.ReceiverOptions{
-			Credit: 10,
+			MaxCredit: 10,
 		})
 		if err != nil {
 			log.Fatal("Creating receiver link:", err)

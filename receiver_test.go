@@ -1275,7 +1275,7 @@ func TestReceiverDispositionBatcherTimer(t *testing.T) {
 	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
 		Batching:       true,
 		BatchMaxAge:    time.Second,
-		Credit:         2,
+		MaxCredit:      2,
 		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 	})
 	cancel()
@@ -1343,7 +1343,7 @@ func TestReceiverDispositionBatcherFull(t *testing.T) {
 	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
 		Batching:       true,
 		BatchMaxAge:    time.Second,
-		Credit:         credit,
+		MaxCredit:      credit,
 		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 	})
 	cancel()
@@ -1419,7 +1419,7 @@ func TestReceiverDispositionBatcherRelease(t *testing.T) {
 	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
 		Batching:       true,
 		BatchMaxAge:    time.Second,
-		Credit:         credit,
+		MaxCredit:      credit,
 		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 	})
 	cancel()

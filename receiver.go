@@ -437,8 +437,8 @@ func newReceiver(source string, session *Session, opts *ReceiverOptions) (*Recei
 	for _, v := range opts.Capabilities {
 		r.l.target.Capabilities = append(r.l.target.Capabilities, encoding.Symbol(v))
 	}
-	if opts.Credit > 0 {
-		r.maxCredit = opts.Credit
+	if opts.MaxCredit > 0 {
+		r.maxCredit = opts.MaxCredit
 	}
 	if opts.Durability > DurabilityUnsettledState {
 		return nil, fmt.Errorf("invalid Durability %d", opts.Durability)

@@ -51,13 +51,13 @@ func BenchmarkSimple(b *testing.B) {
 		// simple send and receive message, no concurrency
 		for j := 0; j < 10000; j++ {
 			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-			if err := sender.Send(ctx, msg); err != nil {
+			if err := sender.Send(ctx, msg, nil); err != nil {
 				b.Fatal(err)
 			}
 			cancel()
 
 			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-			msg, err := receiver.Receive(ctx)
+			msg, err := receiver.Receive(ctx, nil)
 			cancel()
 			if err != nil {
 				b.Fatal(err)

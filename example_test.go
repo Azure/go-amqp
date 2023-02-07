@@ -39,7 +39,7 @@ func Example() {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 
 		// send message
-		err = sender.Send(ctx, amqp.NewMessage([]byte("Hello!")))
+		err = sender.Send(ctx, amqp.NewMessage([]byte("Hello!")), nil)
 		if err != nil {
 			log.Fatal("Sending message:", err)
 		}
@@ -65,7 +65,7 @@ func Example() {
 
 		for {
 			// receive next message
-			msg, err := receiver.Receive(ctx)
+			msg, err := receiver.Receive(ctx, nil)
 			if err != nil {
 				log.Fatal("Reading message from AMQP:", err)
 			}
@@ -110,7 +110,7 @@ func ExampleConnError() {
 	conn.Close()
 
 	// attempt to send message on a closed connection
-	err = sender.Send(ctx, amqp.NewMessage([]byte("Hello!")))
+	err = sender.Send(ctx, amqp.NewMessage([]byte("Hello!")), nil)
 
 	var connErr *amqp.ConnError
 	if !errors.As(err, &connErr) {
@@ -161,7 +161,7 @@ func ExampleSessionError() {
 	session.Close(ctx)
 
 	// attempt to send message on a closed session
-	err = sender.Send(ctx, amqp.NewMessage([]byte("Hello!")))
+	err = sender.Send(ctx, amqp.NewMessage([]byte("Hello!")), nil)
 
 	var sessionErr *amqp.SessionError
 	if !errors.As(err, &sessionErr) {
@@ -204,7 +204,7 @@ func ExampleDetachError() {
 	}
 
 	// send message
-	err = sender.Send(ctx, amqp.NewMessage([]byte("Hello!")))
+	err = sender.Send(ctx, amqp.NewMessage([]byte("Hello!")), nil)
 	if err != nil {
 		log.Fatal("Creating AMQP session:", err)
 	}
@@ -213,7 +213,7 @@ func ExampleDetachError() {
 	sender.Close(ctx)
 
 	// attempt to send a message after close
-	err = sender.Send(ctx, amqp.NewMessage([]byte("Hello!")))
+	err = sender.Send(ctx, amqp.NewMessage([]byte("Hello!")), nil)
 
 	var detachErr *amqp.DetachError
 	if !errors.As(err, &detachErr) {

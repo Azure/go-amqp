@@ -41,7 +41,7 @@ func fuzzConn(data []byte) int {
 		return 0
 	}
 
-	msg, err := r.Receive(context.Background())
+	msg, err := r.Receive(context.Background(), nil)
 	if err != nil {
 		return 0
 	}
@@ -79,7 +79,7 @@ func fuzzConn(data []byte) int {
 		return 0
 	}
 
-	err = sender.Send(context.Background(), NewMessage(data))
+	err = sender.Send(context.Background(), NewMessage(data), nil)
 	if err != nil {
 		return 0
 	}

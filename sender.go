@@ -40,6 +40,11 @@ func (s *Sender) MaxMessageSize() uint64 {
 	return s.l.maxMessageSize
 }
 
+// SendOptions contains any optional values for the Sender.Send method.
+type SendOptions struct {
+	// for future expansion
+}
+
 // Send sends a Message.
 //
 // Blocks until the message is sent, ctx completes, or an error occurs.
@@ -49,7 +54,7 @@ func (s *Sender) MaxMessageSize() uint64 {
 // has been requested (receiver settle mode is "Second"). In this case,
 // additional messages can be sent while the current goroutine is waiting
 // for the confirmation.
-func (s *Sender) Send(ctx context.Context, msg *Message) error {
+func (s *Sender) Send(ctx context.Context, msg *Message, opts *SendOptions) error {
 	// check if the link is dead.  while it's safe to call s.send
 	// in this case, this will avoid some allocations etc.
 	select {

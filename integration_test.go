@@ -139,7 +139,7 @@ func TestIntegrationRoundTrip(t *testing.T) {
 							msg.ApplicationProperties = make(map[string]any)
 							msg.ApplicationProperties["i"] = index
 							ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-							err := sender.Send(ctx, msg)
+							err := sender.Send(ctx, msg, nil)
 							cancel()
 							if err != nil {
 								sendErr.write(fmt.Errorf("error after %d sends: %+v", index, err))
@@ -167,7 +167,7 @@ func TestIntegrationRoundTrip(t *testing.T) {
 
 					for i := 0; i < len(tt.data); i++ {
 						ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-						msg, err := receiver.Receive(ctx)
+						msg, err := receiver.Receive(ctx, nil)
 						cancel()
 						if err != nil {
 							receiveErr.write(fmt.Errorf("error after %d receives: %+v", i, err))
@@ -272,7 +272,7 @@ func TestIntegrationRoundTrip_Buffered(t *testing.T) {
 
 			for i, data := range tt.data {
 				ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-				err = sender.Send(ctx, amqp.NewMessage([]byte(data)))
+				err = sender.Send(ctx, amqp.NewMessage([]byte(data)), nil)
 				cancel()
 				if err != nil {
 					t.Fatalf("Error after %d sends: %+v", i, err)
@@ -294,7 +294,7 @@ func TestIntegrationRoundTrip_Buffered(t *testing.T) {
 			// read buffered messages
 			for i, data := range tt.data {
 				ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-				msg, err := receiver.Receive(ctx)
+				msg, err := receiver.Receive(ctx, nil)
 				cancel()
 				if err != nil {
 					t.Fatalf("Error after %d receives: %+v", i, err)
@@ -396,7 +396,7 @@ func TestIntegrationReceiverModeSecond(t *testing.T) {
 
 					for i, data := range tt.data {
 						ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-						err = sender.Send(ctx, amqp.NewMessage([]byte(data)))
+						err = sender.Send(ctx, amqp.NewMessage([]byte(data)), nil)
 						cancel()
 						if err != nil {
 							sendErr.write(fmt.Errorf("Error after %d sends: %+v", i, err))
@@ -423,7 +423,7 @@ func TestIntegrationReceiverModeSecond(t *testing.T) {
 
 					for i, data := range tt.data {
 						ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-						msg, err := receiver.Receive(ctx)
+						msg, err := receiver.Receive(ctx, nil)
 						cancel()
 						if err != nil {
 							receiveErr.write(fmt.Errorf("Error after %d receives: %+v", i, err))
@@ -665,7 +665,7 @@ func TestIntegrationClose(t *testing.T) {
 
 		testClose(t, receiver.Close)
 
-		_, err = receiver.Receive(context.Background())
+		_, err = receiver.Receive(context.Background(), nil)
 		var detachErr *amqp.DetachError
 		require.ErrorAs(t, err, &detachErr)
 
@@ -708,7 +708,7 @@ func TestIntegrationClose(t *testing.T) {
 
 		testClose(t, session.Close)
 
-		msg, err := receiver.Receive(context.Background())
+		msg, err := receiver.Receive(context.Background(), nil)
 		var sessionErr *amqp.SessionError
 		require.ErrorAs(t, err, &sessionErr)
 		if msg != nil {
@@ -757,7 +757,7 @@ func TestIntegrationClose(t *testing.T) {
 			t.Fatalf("Expected nil error from client.Close(), got: %+v", err)
 		}
 
-		msg, err := receiver.Receive(context.Background())
+		msg, err := receiver.Receive(context.Background(), nil)
 		var connErr *amqp.ConnError
 		if !errors.As(err, &connErr) {
 			t.Fatalf("unexpected error type %T", err)
@@ -882,7 +882,7 @@ func TestReceiverModeFirst(t *testing.T) {
 
 	// prime with a bunch of messages
 	for i := 0; i < msgCount; i++ {
-		err = sender.Send(context.Background(), amqp.NewMessage([]byte(fmt.Sprintf("test %d", i))))
+		err = sender.Send(context.Background(), amqp.NewMessage([]byte(fmt.Sprintf("test %d", i))), nil)
 		require.NoError(t, err)
 	}
 
@@ -910,7 +910,7 @@ func TestReceiverModeFirst(t *testing.T) {
 	for i := 0; i < msgCount; i++ {
 		// receive one message
 		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-		msg, err := recv.Receive(ctx)
+		msg, err := recv.Receive(ctx, nil)
 		cancel()
 		require.NoError(t, err)
 
@@ -918,7 +918,7 @@ func TestReceiverModeFirst(t *testing.T) {
 
 		// send to other sender
 		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-		err = sender.Send(ctx, msg)
+		err = sender.Send(ctx, msg, nil)
 		cancel()
 		require.NoError(t, err)
 
@@ -964,7 +964,7 @@ func TestSenderExactlyOnce(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	err = sender.Send(ctx, amqp.NewMessage([]byte("hello!")))
+	err = sender.Send(ctx, amqp.NewMessage([]byte("hello!")), nil)
 	cancel()
 	require.NoError(t, err)
 
@@ -976,7 +976,7 @@ func TestSenderExactlyOnce(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	msg, err := receiver.Receive(ctx)
+	msg, err := receiver.Receive(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 

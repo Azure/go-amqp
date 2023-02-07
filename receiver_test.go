@@ -144,7 +144,7 @@ func TestReceiverOnClosed(t *testing.T) {
 
 	errChan := make(chan error)
 	go func() {
-		_, err := r.Receive(context.Background())
+		_, err := r.Receive(context.Background(), nil)
 		errChan <- err
 	}()
 
@@ -153,7 +153,7 @@ func TestReceiverOnClosed(t *testing.T) {
 	cancel()
 	var deErr *DetachError
 	require.ErrorAs(t, <-errChan, &deErr)
-	_, err = r.Receive(context.Background())
+	_, err = r.Receive(context.Background(), nil)
 	require.ErrorAs(t, err, &deErr)
 	var amqpErr *Error
 	// there should be no inner error when closed on our side
@@ -177,7 +177,7 @@ func TestReceiverOnSessionClosed(t *testing.T) {
 
 	errChan := make(chan error)
 	go func() {
-		_, err := r.Receive(context.Background())
+		_, err := r.Receive(context.Background(), nil)
 		errChan <- err
 	}()
 
@@ -186,7 +186,7 @@ func TestReceiverOnSessionClosed(t *testing.T) {
 	cancel()
 	var sessionErr *SessionError
 	require.ErrorAs(t, <-errChan, &sessionErr)
-	_, err = r.Receive(context.Background())
+	_, err = r.Receive(context.Background(), nil)
 	require.ErrorAs(t, err, &sessionErr)
 }
 
@@ -207,7 +207,7 @@ func TestReceiverOnConnClosed(t *testing.T) {
 
 	errChan := make(chan error)
 	go func() {
-		_, err := r.Receive(context.Background())
+		_, err := r.Receive(context.Background(), nil)
 		errChan <- err
 	}()
 
@@ -217,7 +217,7 @@ func TestReceiverOnConnClosed(t *testing.T) {
 	if !errors.As(err, &connErr) {
 		t.Fatalf("unexpected error type %T", err)
 	}
-	_, err = r.Receive(context.Background())
+	_, err = r.Receive(context.Background(), nil)
 	if !errors.As(err, &connErr) {
 		t.Fatalf("unexpected error type %T", err)
 	}
@@ -240,7 +240,7 @@ func TestReceiverOnDetached(t *testing.T) {
 
 	errChan := make(chan error)
 	go func() {
-		_, err := r.Receive(context.Background())
+		_, err := r.Receive(context.Background(), nil)
 		errChan <- err
 	}()
 
@@ -258,7 +258,7 @@ func TestReceiverOnDetached(t *testing.T) {
 	require.Equal(t, ErrCond(errcon), deErr.RemoteErr.Condition)
 	require.Equal(t, errdesc, deErr.RemoteErr.Description)
 	require.NoError(t, client.Close())
-	_, err = r.Receive(context.Background())
+	_, err = r.Receive(context.Background(), nil)
 	require.ErrorAs(t, err, &deErr)
 }
 
@@ -308,7 +308,7 @@ func TestReceiveInvalidMessage(t *testing.T) {
 	msgChan := make(chan *Message)
 	errChan := make(chan error)
 	go func() {
-		msg, err := r.Receive(context.Background())
+		msg, err := r.Receive(context.Background(), nil)
 		msgChan <- msg
 		errChan <- err
 	}()
@@ -325,7 +325,7 @@ func TestReceiveInvalidMessage(t *testing.T) {
 	require.ErrorAs(t, <-errChan, &detachErr)
 	require.Contains(t, detachErr.Error(), ErrCondNotAllowed)
 
-	_, err = r.Receive(context.Background())
+	_, err = r.Receive(context.Background(), nil)
 	require.ErrorAs(t, err, &detachErr)
 
 	// missing MessageFormat
@@ -334,7 +334,7 @@ func TestReceiveInvalidMessage(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	go func() {
-		msg, err := r.Receive(context.Background())
+		msg, err := r.Receive(context.Background(), nil)
 		msgChan <- msg
 		errChan <- err
 	}()
@@ -349,7 +349,7 @@ func TestReceiveInvalidMessage(t *testing.T) {
 	require.ErrorAs(t, <-errChan, &detachErr)
 	require.Contains(t, detachErr.Error(), ErrCondNotAllowed)
 
-	_, err = r.Receive(context.Background())
+	_, err = r.Receive(context.Background(), nil)
 	require.ErrorAs(t, err, &detachErr)
 
 	// missing delivery tag
@@ -359,7 +359,7 @@ func TestReceiveInvalidMessage(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	go func() {
-		msg, err := r.Receive(context.Background())
+		msg, err := r.Receive(context.Background(), nil)
 		msgChan <- msg
 		errChan <- err
 	}()
@@ -375,7 +375,7 @@ func TestReceiveInvalidMessage(t *testing.T) {
 	require.ErrorAs(t, <-errChan, &detachErr)
 	require.Contains(t, detachErr.Error(), ErrCondNotAllowed)
 
-	_, err = r.Receive(context.Background())
+	_, err = r.Receive(context.Background(), nil)
 	require.ErrorAs(t, err, &detachErr)
 
 	require.NoError(t, client.Close())
@@ -419,7 +419,7 @@ func TestReceiveSuccessReceiverSettleModeFirst(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
-	msg, err := r.Receive(ctx)
+	msg, err := r.Receive(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	if c := r.countUnsettled(); c != 1 {
@@ -491,7 +491,7 @@ func TestReceiveSuccessReceiverSettleModeSecondAccept(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
-	msg, err := r.Receive(ctx)
+	msg, err := r.Receive(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	if c := r.countUnsettled(); c != 1 {
@@ -513,7 +513,7 @@ func TestReceiveSuccessReceiverSettleModeSecondAccept(t *testing.T) {
 	require.Equal(t, true, msg.settled)
 	// perform a dummy receive with short timeout to trigger flow
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	_, err = r.Receive(ctx)
+	_, err = r.Receive(ctx, nil)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatal(err)
 	}
@@ -573,7 +573,7 @@ func TestReceiveSuccessReceiverSettleModeSecondAcceptOnClosedLink(t *testing.T) 
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
-	msg, err := r.Receive(ctx)
+	msg, err := r.Receive(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	if c := r.countUnsettled(); c != 1 {
@@ -636,7 +636,7 @@ func TestReceiveSuccessReceiverSettleModeSecondReject(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
-	msg, err := r.Receive(ctx)
+	msg, err := r.Receive(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	if c := r.countUnsettled(); c != 1 {
@@ -657,7 +657,7 @@ func TestReceiveSuccessReceiverSettleModeSecondReject(t *testing.T) {
 	}
 	// perform a dummy receive with short timeout to trigger flow
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	_, err = r.Receive(ctx)
+	_, err = r.Receive(ctx, nil)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatal(err)
 	}
@@ -712,7 +712,7 @@ func TestReceiveSuccessReceiverSettleModeSecondRelease(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
-	msg, err := r.Receive(ctx)
+	msg, err := r.Receive(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	if c := r.countUnsettled(); c != 1 {
@@ -733,7 +733,7 @@ func TestReceiveSuccessReceiverSettleModeSecondRelease(t *testing.T) {
 	}
 	// perform a dummy receive with short timeout to trigger flow
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	_, err = r.Receive(ctx)
+	_, err = r.Receive(ctx, nil)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatal(err)
 	}
@@ -793,7 +793,7 @@ func TestReceiveSuccessReceiverSettleModeSecondModify(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
-	msg, err := r.Receive(ctx)
+	msg, err := r.Receive(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	if c := r.countUnsettled(); c != 1 {
@@ -819,7 +819,7 @@ func TestReceiveSuccessReceiverSettleModeSecondModify(t *testing.T) {
 	}
 	// perform a dummy receive with short timeout to trigger flow
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	_, err = r.Receive(ctx)
+	_, err = r.Receive(ctx, nil)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatal(err)
 	}
@@ -897,7 +897,7 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 	msgChan := make(chan *Message)
 	errChan := make(chan error)
 	go func() {
-		msg, err := r.Receive(context.Background())
+		msg, err := r.Receive(context.Background(), nil)
 		msgChan <- msg
 		errChan <- err
 	}()
@@ -931,7 +931,7 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 	require.Equal(t, true, msg.settled)
 	// perform a dummy receive with short timeout to trigger flow
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	_, err = r.Receive(ctx)
+	_, err = r.Receive(ctx, nil)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatal(err)
 	}
@@ -992,7 +992,7 @@ func TestReceiveInvalidMultiFrameMessage(t *testing.T) {
 	msgChan := make(chan *Message)
 	errChan := make(chan error)
 	go func() {
-		msg, err := r.Receive(context.Background())
+		msg, err := r.Receive(context.Background(), nil)
 		msgChan <- msg
 		errChan <- err
 	}()
@@ -1022,7 +1022,7 @@ func TestReceiveInvalidMultiFrameMessage(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	go func() {
-		msg, err := r.Receive(context.Background())
+		msg, err := r.Receive(context.Background(), nil)
 		msgChan <- msg
 		errChan <- err
 	}()
@@ -1047,7 +1047,7 @@ func TestReceiveInvalidMultiFrameMessage(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	go func() {
-		msg, err := r.Receive(context.Background())
+		msg, err := r.Receive(context.Background(), nil)
 		msgChan <- msg
 		errChan <- err
 	}()
@@ -1104,7 +1104,7 @@ func TestReceiveMultiFrameMessageAborted(t *testing.T) {
 	msgChan := make(chan *Message)
 	errChan := make(chan error)
 	go func() {
-		msg, err := r.Receive(context.Background())
+		msg, err := r.Receive(context.Background(), nil)
 		errChan <- err
 		msgChan <- msg
 	}()
@@ -1166,7 +1166,7 @@ func TestReceiveMessageTooBig(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
-	msg, err := r.Receive(ctx)
+	msg, err := r.Receive(ctx, nil)
 	cancel()
 	require.Nil(t, msg)
 	var detachErr *DetachError
@@ -1211,7 +1211,7 @@ func TestReceiveSuccessAcceptFails(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
-	msg, err := r.Receive(ctx)
+	msg, err := r.Receive(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	if c := r.countUnsettled(); c != 1 {
@@ -1281,7 +1281,7 @@ func TestReceiverDispositionBatcherTimer(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
-	msg, err := r.Receive(ctx)
+	msg, err := r.Receive(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	if c := r.countUnsettled(); c != 1 {
@@ -1356,7 +1356,7 @@ func TestReceiverDispositionBatcherFull(t *testing.T) {
 		conn.SendFrame(b)
 		deliveryID++
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		msg, err := r.Receive(ctx)
+		msg, err := r.Receive(ctx, nil)
 		cancel()
 		require.NoError(t, err)
 		go func() {
@@ -1432,7 +1432,7 @@ func TestReceiverDispositionBatcherRelease(t *testing.T) {
 		conn.SendFrame(b)
 		deliveryID++
 		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
-		msg, err := r.Receive(ctx)
+		msg, err := r.Receive(ctx, nil)
 		cancel()
 		require.NoError(t, err)
 		go func(count int) {
@@ -1504,7 +1504,7 @@ func TestReceiverConnReaderError(t *testing.T) {
 
 	errChan := make(chan error)
 	go func() {
-		_, err := r.Receive(context.Background())
+		_, err := r.Receive(context.Background(), nil)
 		errChan <- err
 	}()
 
@@ -1516,7 +1516,7 @@ func TestReceiverConnReaderError(t *testing.T) {
 	if !errors.As(err, &connErr) {
 		t.Fatalf("unexpected error type %T", err)
 	}
-	_, err = r.Receive(context.Background())
+	_, err = r.Receive(context.Background(), nil)
 	if !errors.As(err, &connErr) {
 		t.Fatalf("unexpected error type %T", err)
 	}
@@ -1540,7 +1540,7 @@ func TestReceiverConnWriterError(t *testing.T) {
 
 	errChan := make(chan error)
 	go func() {
-		_, err := r.Receive(context.Background())
+		_, err := r.Receive(context.Background(), nil)
 		errChan <- err
 	}()
 
@@ -1553,7 +1553,7 @@ func TestReceiverConnWriterError(t *testing.T) {
 	if !errors.As(err, &connErr) {
 		t.Fatalf("unexpected error type %T", err)
 	}
-	_, err = r.Receive(context.Background())
+	_, err = r.Receive(context.Background(), nil)
 	if !errors.As(err, &connErr) {
 		t.Fatalf("unexpected error type %T", err)
 	}

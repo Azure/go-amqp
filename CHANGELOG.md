@@ -6,6 +6,7 @@
 
 * `Dial()` and `NewConn()` now require a `context.Context` as their first parameter.
   * As a result, the `ConnOptions.Timeout` field has been removed.
+* Methods `Sender.Send()` and `Receiver.Receive()` now take their respective options-type as the final argument.
 
 ### Bugs Fixed
 

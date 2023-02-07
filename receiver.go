@@ -112,13 +112,18 @@ func (r *Receiver) Prefetched() *Message {
 	}
 }
 
+// ReceiveOptions contains any optional values for the Receiver.Receive method.
+type ReceiveOptions struct {
+	// for future expansion
+}
+
 // Receive returns the next message from the sender.
 // Blocks until a message is received, ctx completes, or an error occurs.
 //
 // Once a message is received, and if the sender is configured in any mode other
 // than SenderSettleModeSettled, you *must* take an action on the message by calling
 // one of the following: AcceptMessage, RejectMessage, ReleaseMessage, ModifyMessage.
-func (r *Receiver) Receive(ctx context.Context) (*Message, error) {
+func (r *Receiver) Receive(ctx context.Context, opts *ReceiveOptions) (*Message, error) {
 	if msg := r.Prefetched(); msg != nil {
 		return msg, nil
 	}

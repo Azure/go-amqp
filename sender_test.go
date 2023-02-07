@@ -116,7 +116,7 @@ func TestSenderSendOnClosed(t *testing.T) {
 	cancel()
 	// sending on a closed sender returns ErrLinkClosed
 	var detachErr *DetachError
-	require.ErrorAs(t, snd.Send(context.Background(), NewMessage([]byte("failed"))), &detachErr)
+	require.ErrorAs(t, snd.Send(context.Background(), NewMessage([]byte("failed")), nil), &detachErr)
 	require.Equal(t, "amqp: link closed", detachErr.Error())
 	require.NoError(t, client.Close())
 }
@@ -144,7 +144,7 @@ func TestSenderSendOnSessionClosed(t *testing.T) {
 	cancel()
 	// sending on a closed sender returns SessionError
 	var sessionErr *SessionError
-	err = snd.Send(context.Background(), NewMessage([]byte("failed")))
+	err = snd.Send(context.Background(), NewMessage([]byte("failed")), nil)
 	require.ErrorAs(t, err, &sessionErr)
 	var amqpErr *Error
 	// there should be no inner error when closed on our side
@@ -172,7 +172,7 @@ func TestSenderSendOnConnClosed(t *testing.T) {
 
 	require.NoError(t, client.Close())
 	// sending on a closed sender returns a ConnectionError
-	err = snd.Send(context.Background(), NewMessage([]byte("failed")))
+	err = snd.Send(context.Background(), NewMessage([]byte("failed")), nil)
 	var connErr *ConnError
 	if !errors.As(err, &connErr) {
 		t.Fatalf("unexpected error type %T", err)
@@ -206,7 +206,7 @@ func TestSenderSendOnDetached(t *testing.T) {
 	require.NoError(t, err)
 	netConn.SendFrame(b)
 	// sending on a detached link returns a DetachError
-	err = snd.Send(context.Background(), NewMessage([]byte("failed")))
+	err = snd.Send(context.Background(), NewMessage([]byte("failed")), nil)
 	var de *DetachError
 	require.ErrorAs(t, err, &de)
 	var detachErr *DetachError
@@ -357,7 +357,7 @@ func TestSenderSendSuccess(t *testing.T) {
 	sendInitialFlowFrame(t, netConn, 0, 100)
 
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	require.NoError(t, snd.Send(ctx, NewMessage([]byte("test"))))
+	require.NoError(t, snd.Send(ctx, NewMessage([]byte("test")), nil))
 	cancel()
 
 	require.NoError(t, client.Close())
@@ -406,7 +406,7 @@ func TestSenderSendSettled(t *testing.T) {
 	sendInitialFlowFrame(t, netConn, 0, 100)
 
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	require.NoError(t, snd.Send(ctx, NewMessage([]byte("test"))))
+	require.NoError(t, snd.Send(ctx, NewMessage([]byte("test")), nil))
 	cancel()
 
 	require.NoError(t, client.Close())
@@ -449,7 +449,7 @@ func TestSenderSendRejected(t *testing.T) {
 	sendInitialFlowFrame(t, netConn, 0, 100)
 
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	err = snd.Send(ctx, NewMessage([]byte("test")))
+	err = snd.Send(ctx, NewMessage([]byte("test")), nil)
 	cancel()
 	var deErr *DetachError
 	require.ErrorAs(t, err, &deErr)
@@ -458,7 +458,7 @@ func TestSenderSendRejected(t *testing.T) {
 
 	// link should now be detached
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	err = snd.Send(ctx, NewMessage([]byte("test")))
+	err = snd.Send(ctx, NewMessage([]byte("test")), nil)
 	cancel()
 	if !errors.As(err, &deErr) {
 		t.Fatalf("unexpected error type %T", err)
@@ -519,7 +519,7 @@ func TestSenderSendRejectedNoDetach(t *testing.T) {
 	sendInitialFlowFrame(t, netConn, 0, 100)
 
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	err = snd.Send(ctx, NewMessage([]byte("test")))
+	err = snd.Send(ctx, NewMessage([]byte("test")), nil)
 	cancel()
 	var asErr *Error
 	if !errors.As(err, &asErr) {
@@ -529,7 +529,7 @@ func TestSenderSendRejectedNoDetach(t *testing.T) {
 
 	// link should *not* be detached
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	err = snd.Send(ctx, NewMessage([]byte("test")))
+	err = snd.Send(ctx, NewMessage([]byte("test")), nil)
 	cancel()
 	require.NoError(t, err)
 	require.NoError(t, client.Close())
@@ -570,7 +570,7 @@ func TestSenderSendDetached(t *testing.T) {
 	sendInitialFlowFrame(t, netConn, 0, 100)
 
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	err = snd.Send(ctx, NewMessage([]byte("test")))
+	err = snd.Send(ctx, NewMessage([]byte("test")), nil)
 	cancel()
 	var deErr *DetachError
 	require.ErrorAs(t, err, &deErr)
@@ -601,7 +601,7 @@ func TestSenderSendTimeout(t *testing.T) {
 
 	// no credits have been issued so the send will time out
 	ctx, cancel = context.WithTimeout(context.Background(), 10*time.Millisecond)
-	require.Error(t, snd.Send(ctx, NewMessage([]byte("test"))))
+	require.Error(t, snd.Send(ctx, NewMessage([]byte("test")), nil))
 	cancel()
 
 	require.NoError(t, client.Close())
@@ -661,7 +661,7 @@ func TestSenderSendMsgTooBig(t *testing.T) {
 	sendInitialFlowFrame(t, netConn, 0, 100)
 
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	require.Error(t, snd.Send(ctx, NewMessage([]byte("test message that's too big"))))
+	require.Error(t, snd.Send(ctx, NewMessage([]byte("test message that's too big")), nil))
 	cancel()
 
 	require.NoError(t, client.Close())
@@ -702,7 +702,7 @@ func TestSenderSendTagTooBig(t *testing.T) {
 	msg := NewMessage([]byte("test"))
 	// make the tag larger than max allowed of 32
 	msg.DeliveryTag = make([]byte, 33)
-	require.Error(t, snd.Send(ctx, msg))
+	require.Error(t, snd.Send(ctx, msg, nil))
 	cancel()
 
 	require.NoError(t, client.Close())
@@ -779,7 +779,7 @@ func TestSenderSendMultiTransfer(t *testing.T) {
 	for i := 0; i < maxReceiverFrameSize*4; i++ {
 		payload[i] = byte(i % 256)
 	}
-	require.NoError(t, snd.Send(ctx, NewMessage(payload)))
+	require.NoError(t, snd.Send(ctx, NewMessage(payload), nil))
 	cancel()
 
 	// split up into 8 transfers due to transfer frame header size
@@ -811,7 +811,7 @@ func TestSenderConnReaderError(t *testing.T) {
 		netConn.ReadErr <- errors.New("failed")
 	}()
 
-	err = snd.Send(context.Background(), NewMessage([]byte("failed")))
+	err = snd.Send(context.Background(), NewMessage([]byte("failed")), nil)
 	var connErr *ConnError
 	if !errors.As(err, &connErr) {
 		t.Fatalf("unexpected error type %T", err)
@@ -846,7 +846,7 @@ func TestSenderConnWriterError(t *testing.T) {
 	// simulate some connWriter error
 	netConn.WriteErr <- errors.New("failed")
 
-	err = snd.Send(context.Background(), NewMessage([]byte("failed")))
+	err = snd.Send(context.Background(), NewMessage([]byte("failed")), nil)
 	var connErr *ConnError
 	require.ErrorAs(t, err, &connErr)
 	require.Equal(t, "failed", connErr.Error())

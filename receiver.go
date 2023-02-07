@@ -833,12 +833,8 @@ func (r *Receiver) muxReceive(fr frames.PerformTransfer) error {
 	if !r.msg.settled {
 		r.addUnsettled(&r.msg)
 	}
-	select {
-	case r.messages <- r.msg:
-		// message received
-	case <-r.l.done:
-		// link has terminated
-		return r.l.doneErr
+	if !r.muxMsg() {
+		return nil
 	}
 
 	debug.Log(1, "deliveryID %d after push to receiver - deliveryCount : %d - linkCredit: %d, len(messages): %d, len(inflight): %d", r.msg.deliveryID, r.l.deliveryCount, r.l.availableCredit, len(r.messages), r.inFlight.len())

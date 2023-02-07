@@ -17,6 +17,7 @@
 * Client-side termination of a Session due to invalid state will wait for the peer to acknowledge the Session's end.
 * Fixed an issue that could cause `creditor.Drain()` to return the wrong error when a link is terminated.
 * Ensure that `Receiver.Receive()` drains prefetched messages when the link closed.
+* Fixed an issue that could cause closing a `Receiver` to hang under certain circumstances.
 
 ## 0.18.1 (2023-01-17)
 

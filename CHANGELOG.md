@@ -8,6 +8,7 @@
   * As a result, the `ConnOptions.Timeout` field has been removed.
 * Methods `Sender.Send()` and `Receiver.Receive()` now take their respective options-type as the final argument.
 * The `Credit` field in `ReceiverOptions` has been renamed to `MaxCredit` to better reflect its purpose.
+* Renamed fields in the `ReceiverOptions` for configuring options on the source.
 
 ### Bugs Fixed
 

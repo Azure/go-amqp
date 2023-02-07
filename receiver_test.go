@@ -266,11 +266,23 @@ func TestReceiveInvalidMessage(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ReceiverSettleModeFirst)(req)
-		if b != nil || err != nil {
-			return b, err
-		}
-		switch req.(type) {
+		switch tt := req.(type) {
+		case *mocks.AMQPProto:
+			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
+		case *frames.PerformOpen:
+			return mocks.PerformOpen("container")
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
+		case *frames.PerformBegin:
+			return mocks.PerformBegin(0)
+		case *frames.PerformEnd:
+			return mocks.PerformEnd(0, nil)
+		case *frames.PerformAttach:
+			return mocks.ReceiverAttach(0, tt.Name, 0, ReceiverSettleModeFirst, tt.Source.Filter)
+		case *frames.PerformDetach:
+			require.NotNil(t, tt.Error)
+			require.EqualValues(t, ErrCondNotAllowed, tt.Error.Condition)
+			return mocks.PerformDetach(0, 0, nil)
 		case *frames.PerformFlow, *mocks.KeepAlive:
 			return nil, nil
 		case *frames.PerformDisposition:
@@ -937,13 +949,27 @@ func TestReceiveInvalidMultiFrameMessage(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ReceiverSettleModeSecond)(req)
-		if b != nil || err != nil {
-			return b, err
-		}
-		switch req.(type) {
+		switch tt := req.(type) {
+		case *mocks.AMQPProto:
+			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
+		case *frames.PerformOpen:
+			return mocks.PerformOpen("container")
+		case *frames.PerformClose:
+			return mocks.PerformClose(nil)
+		case *frames.PerformBegin:
+			return mocks.PerformBegin(0)
+		case *frames.PerformEnd:
+			return mocks.PerformEnd(0, nil)
+		case *frames.PerformAttach:
+			return mocks.ReceiverAttach(0, tt.Name, 0, ReceiverSettleModeSecond, tt.Source.Filter)
+		case *frames.PerformDetach:
+			require.NotNil(t, tt.Error)
+			require.EqualValues(t, ErrCondNotAllowed, tt.Error.Condition)
+			return mocks.PerformDetach(0, 0, nil)
 		case *frames.PerformFlow, *mocks.KeepAlive:
 			return nil, nil
+		case *frames.PerformDisposition:
+			return mocks.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}

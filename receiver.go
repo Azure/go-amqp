@@ -541,17 +541,19 @@ func (r *Receiver) attach(ctx context.Context) error {
 }
 
 func (r *Receiver) mux() {
-	defer r.l.muxClose(context.Background(), r.detachError, func() {
-		// unblock any in flight message dispositions
-		r.inFlight.clear(r.l.doneErr)
+	defer func() {
+		r.l.muxClose(context.Background(), r.detachError, func() {
+			// unblock any in flight message dispositions
+			r.inFlight.clear(r.l.doneErr)
 
-		if !r.autoSendFlow {
-			// unblock any pending drain requests
-			r.creditor.EndDrain()
-		}
-	}, func(fr frames.PerformTransfer) {
-		_ = r.muxReceive(fr)
-	})
+			if !r.autoSendFlow {
+				// unblock any pending drain requests
+				r.creditor.EndDrain()
+			}
+		}, func(fr frames.PerformTransfer) {
+			_ = r.muxReceive(fr)
+		})
+	}()
 
 	for {
 		// max - (availableCredit + countUnsettled) == pending credit (i.e. credit we can reclaim)

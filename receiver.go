@@ -49,8 +49,9 @@ type Receiver struct {
 	creditor     creditor                // manages credits via calls to IssueCredit/DrainCredit
 }
 
-// IssueCredit adds credits to be requested in the next flow
-// request.
+// IssueCredit adds credits to be requested in the next flow request.
+// Attempting to issue more credit than the receiver's max credit as
+// specified in ReceiverOptions.Credit will result in an error.
 func (r *Receiver) IssueCredit(credit uint32) error {
 	if r.autoSendFlow {
 		return errors.New("issueCredit can only be used with receiver links using manual credit management")

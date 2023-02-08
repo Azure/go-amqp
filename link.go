@@ -37,7 +37,7 @@ type link struct {
 	close     chan struct{} // signals a link's mux to shut down; DO NOT use this to check if a link has terminated, use done instead
 	closeOnce sync.Once     // closeOnce protects close from being closed multiple times
 
-	done    chan struct{} // closed when the link has terminated
+	done    chan struct{} // closed when the link has terminated (mux exited); DO NOT wait on this from within a link's mux() as it will never trigger!
 	doneErr error         // contains the error state returned from Close(); DO NOT TOUCH outside of link.go until done has been closed!
 
 	session    *Session                // parent session

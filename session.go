@@ -65,7 +65,7 @@ type Session struct {
 	closeOnce sync.Once
 
 	// part of internal public surface area
-	done    chan struct{} // closed when the session has terminated
+	done    chan struct{} // closed when the session has terminated (mux exited); DO NOT wait on this from within Session.mux() as it will never trigger!
 	doneErr error         // contains the error state returned from Close(); DO NOT TOUCH outside of session.go until done has been closed!
 }
 

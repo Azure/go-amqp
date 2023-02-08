@@ -357,7 +357,7 @@ func TestKeepAlives(t *testing.T) {
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			// specify small idle timeout so we receive a lot of keep-alives
-			return mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformOpen{ContainerID: "container", IdleTimeout: 100 * time.Millisecond})
+			return mocks.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformOpen{ContainerID: "container", IdleTimeout: 100 * time.Millisecond})
 		case *mocks.KeepAlive:
 			keepAlives <- struct{}{}
 			return nil, nil
@@ -391,7 +391,7 @@ func TestKeepAlivesIdleTimeout(t *testing.T) {
 		case *mocks.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
-			return mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformOpen{ContainerID: "container", IdleTimeout: time.Minute})
+			return mocks.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformOpen{ContainerID: "container", IdleTimeout: time.Minute})
 		case *mocks.KeepAlive:
 			return nil, nil
 		case *frames.PerformClose:
@@ -703,7 +703,7 @@ func TestClientTooManySessions(t *testing.T) {
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			// return small number of max channels
-			return mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformOpen{
+			return mocks.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformOpen{
 				ChannelMax:   1,
 				ContainerID:  "test",
 				IdleTimeout:  time.Minute,
@@ -750,7 +750,7 @@ func TestClientNewSessionMissingRemoteChannel(t *testing.T) {
 			return mocks.PerformOpen("container")
 		case *frames.PerformBegin:
 			// return begin with nil RemoteChannel
-			return mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformBegin{
+			return mocks.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformBegin{
 				NextOutgoingID: 1,
 				IncomingWindow: 5000,
 				OutgoingWindow: 1000,

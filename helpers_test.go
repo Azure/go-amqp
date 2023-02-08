@@ -17,7 +17,7 @@ func sendInitialFlowFrame(t *testing.T, netConn *mocks.NetConn, handle uint32, c
 	nextIncoming := uint32(0)
 	count := uint32(0)
 	available := uint32(0)
-	b, err := mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformFlow{
+	b, err := mocks.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformFlow{
 		NextIncomingID: &nextIncoming,
 		IncomingWindow: 1000,
 		OutgoingWindow: 1000,

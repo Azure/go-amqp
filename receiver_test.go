@@ -314,7 +314,7 @@ func TestReceiveInvalidMessage(t *testing.T) {
 	}()
 
 	// missing DeliveryID
-	fr, err := mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformTransfer{
+	fr, err := mocks.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformTransfer{
 		Handle: linkHandle,
 	})
 	require.NoError(t, err)
@@ -338,7 +338,7 @@ func TestReceiveInvalidMessage(t *testing.T) {
 		msgChan <- msg
 		errChan <- err
 	}()
-	fr, err = mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformTransfer{
+	fr, err = mocks.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformTransfer{
 		DeliveryID: &deliveryID,
 		Handle:     linkHandle,
 	})
@@ -363,7 +363,7 @@ func TestReceiveInvalidMessage(t *testing.T) {
 		msgChan <- msg
 		errChan <- err
 	}()
-	fr, err = mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformTransfer{
+	fr, err = mocks.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformTransfer{
 		DeliveryID:    &deliveryID,
 		Handle:        linkHandle,
 		MessageFormat: &format,

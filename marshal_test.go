@@ -63,7 +63,7 @@ func TestFrameMarshalUnmarshal(t *testing.T) {
 			if header.Channel != want.Channel {
 				t.Errorf("Expected channel to be %d, but it is %d", want.Channel, header.Channel)
 			}
-			if header.FrameType != want.Type {
+			if header.FrameType != uint8(want.Type) {
 				t.Errorf("Expected channel to be %d, but it is %d", want.Type, header.FrameType)
 			}
 

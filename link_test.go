@@ -444,7 +444,7 @@ func TestSessionFlowDisablesTransfer(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 
-	b, err := mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformFlow{
+	b, err := mocks.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformFlow{
 		NextIncomingID: &nextIncomingID,
 		IncomingWindow: 0,
 		OutgoingWindow: 100,

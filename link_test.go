@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/Azure/go-amqp/internal/encoding"
+	"github.com/Azure/go-amqp/internal/fake"
 	"github.com/Azure/go-amqp/internal/frames"
-	"github.com/Azure/go-amqp/internal/mocks"
 	"github.com/stretchr/testify/require"
 )
 
@@ -432,7 +432,7 @@ func TestNewReceivingLink(t *testing.T) {
 func TestSessionFlowDisablesTransfer(t *testing.T) {
 	t.Skip("TODO: finish for link testing")
 	nextIncomingID := uint32(0)
-	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	client, err := NewConn(ctx, netConn, nil)
@@ -444,7 +444,7 @@ func TestSessionFlowDisablesTransfer(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 
-	b, err := mocks.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformFlow{
+	b, err := fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformFlow{
 		NextIncomingID: &nextIncomingID,
 		IncomingWindow: 0,
 		OutgoingWindow: 100,

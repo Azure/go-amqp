@@ -8,7 +8,7 @@ import (
 
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/frames"
-	"github.com/Azure/go-amqp/internal/mocks"
+	"github.com/Azure/go-amqp/internal/fake"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,12 +16,12 @@ func TestSessionClose(t *testing.T) {
 	channelNum := uint16(0)
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
-		case *mocks.AMQPProto:
+		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
-			return mocks.PerformOpen("container")
+			return fake.PerformOpen("container")
 		case *frames.PerformBegin:
-			b, err := mocks.PerformBegin(uint16(channelNum))
+			b, err := fake.PerformBegin(uint16(channelNum))
 			if err != nil {
 				return nil, err
 			}
@@ -29,19 +29,19 @@ func TestSessionClose(t *testing.T) {
 			return b, nil
 		case *frames.PerformEnd:
 			// channelNum was incremented
-			b, err := mocks.PerformEnd(channelNum-1, nil)
+			b, err := fake.PerformEnd(channelNum-1, nil)
 			if err != nil {
 				return nil, err
 			}
 			channelNum--
 			return b, nil
 		case *frames.PerformClose:
-			return mocks.PerformClose(nil)
+			return fake.PerformClose(nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := mocks.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -65,12 +65,12 @@ func TestSessionClose(t *testing.T) {
 func TestSessionServerClose(t *testing.T) {
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
-		case *mocks.AMQPProto:
+		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
-			return mocks.PerformOpen("container")
+			return fake.PerformOpen("container")
 		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
+			return fake.PerformBegin(0)
 		case *frames.PerformEnd:
 			return nil, nil // swallow
 		case *frames.PerformClose:
@@ -79,7 +79,7 @@ func TestSessionServerClose(t *testing.T) {
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := mocks.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -91,7 +91,7 @@ func TestSessionServerClose(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	// initiate server-side closing of session
-	fr, err := mocks.PerformEnd(0, &encoding.Error{Condition: "closing", Description: "server side close"})
+	fr, err := fake.PerformEnd(0, &encoding.Error{Condition: "closing", Description: "server side close"})
 	require.NoError(t, err)
 	netConn.SendFrame(fr)
 	// wait a bit for connReader to read from the mock
@@ -111,23 +111,23 @@ func TestSessionServerClose(t *testing.T) {
 func TestSessionCloseTimeout(t *testing.T) {
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
-		case *mocks.AMQPProto:
+		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
-			return mocks.PerformOpen("container")
+			return fake.PerformOpen("container")
 		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
+			return fake.PerformBegin(0)
 		case *frames.PerformEnd:
 			// sleep to trigger session close timeout
 			time.Sleep(1 * time.Second)
-			return mocks.PerformEnd(0, nil)
+			return fake.PerformEnd(0, nil)
 		case *frames.PerformClose:
-			return mocks.PerformClose(nil)
+			return fake.PerformClose(nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := mocks.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -146,7 +146,7 @@ func TestSessionCloseTimeout(t *testing.T) {
 }
 
 func TestConnCloseSessionClose(t *testing.T) {
-	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -174,7 +174,7 @@ func TestConnCloseSessionClose(t *testing.T) {
 }
 
 func TestSessionNewReceiverBadOptionFails(t *testing.T) {
-	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -204,25 +204,25 @@ func TestSessionNewReceiverBadOptionFails(t *testing.T) {
 func TestSessionNewReceiverBatchingOneCredit(t *testing.T) {
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {
-		case *mocks.AMQPProto:
+		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
-			return mocks.PerformOpen("container")
+			return fake.PerformOpen("container")
 		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
+			return fake.PerformBegin(0)
 		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
+			return fake.PerformEnd(0, nil)
 		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(0, tt.Name, 0, ReceiverSettleModeFirst, nil)
+			return fake.ReceiverAttach(0, tt.Name, 0, ReceiverSettleModeFirst, nil)
 		case *frames.PerformFlow:
 			return nil, nil
 		case *frames.PerformClose:
-			return mocks.PerformClose(nil)
+			return fake.PerformClose(nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := mocks.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -251,25 +251,25 @@ func TestSessionNewReceiverBatchingOneCredit(t *testing.T) {
 func TestSessionNewReceiverBatchingEnabled(t *testing.T) {
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {
-		case *mocks.AMQPProto:
+		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
-			return mocks.PerformOpen("container")
+			return fake.PerformOpen("container")
 		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
+			return fake.PerformBegin(0)
 		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
+			return fake.PerformEnd(0, nil)
 		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(0, tt.Name, 0, ReceiverSettleModeFirst, nil)
+			return fake.ReceiverAttach(0, tt.Name, 0, ReceiverSettleModeFirst, nil)
 		case *frames.PerformFlow:
 			return nil, nil
 		case *frames.PerformClose:
-			return mocks.PerformClose(nil)
+			return fake.PerformClose(nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := mocks.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -299,23 +299,23 @@ func TestSessionNewReceiverBatchingEnabled(t *testing.T) {
 func TestSessionNewReceiverMismatchedLinkName(t *testing.T) {
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
-		case *mocks.AMQPProto:
+		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
-			return mocks.PerformOpen("container")
+			return fake.PerformOpen("container")
 		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
+			return fake.PerformBegin(0)
 		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
+			return fake.PerformEnd(0, nil)
 		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(0, "wrong_name", 0, ReceiverSettleModeFirst, nil)
+			return fake.ReceiverAttach(0, "wrong_name", 0, ReceiverSettleModeFirst, nil)
 		case *frames.PerformClose:
-			return mocks.PerformClose(nil)
+			return fake.PerformClose(nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := mocks.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -342,7 +342,7 @@ func TestSessionNewReceiverMismatchedLinkName(t *testing.T) {
 }
 
 func TestSessionNewSenderBadOptionFails(t *testing.T) {
-	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -372,23 +372,23 @@ func TestSessionNewSenderBadOptionFails(t *testing.T) {
 func TestSessionNewSenderMismatchedLinkName(t *testing.T) {
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
-		case *mocks.AMQPProto:
+		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
-			return mocks.PerformOpen("container")
+			return fake.PerformOpen("container")
 		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
+			return fake.PerformBegin(0)
 		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
+			return fake.PerformEnd(0, nil)
 		case *frames.PerformAttach:
-			return mocks.SenderAttach(0, "wrong_name", 0, SenderSettleModeUnsettled)
+			return fake.SenderAttach(0, "wrong_name", 0, SenderSettleModeUnsettled)
 		case *frames.PerformClose:
-			return mocks.PerformClose(nil)
+			return fake.PerformClose(nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := mocks.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -412,7 +412,7 @@ func TestSessionNewSenderMismatchedLinkName(t *testing.T) {
 }
 
 func TestSessionNewSenderDuplicateLinks(t *testing.T) {
-	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -445,7 +445,7 @@ func TestSessionNewSenderDuplicateLinks(t *testing.T) {
 }
 
 func TestSessionNewSenderMaxHandles(t *testing.T) {
-	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -478,7 +478,7 @@ func TestSessionNewSenderMaxHandles(t *testing.T) {
 }
 
 func TestSessionUnexpectedFrame(t *testing.T) {
-	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -491,7 +491,7 @@ func TestSessionUnexpectedFrame(t *testing.T) {
 	require.NoError(t, err)
 
 	// this frame is swallowed
-	b, err := mocks.EncodeFrame(frames.TypeSASL, 0, &frames.SASLMechanisms{})
+	b, err := fake.EncodeFrame(frames.TypeSASL, 0, &frames.SASLMechanisms{})
 	require.NoError(t, err)
 	netConn.SendFrame(b)
 
@@ -503,7 +503,7 @@ func TestSessionUnexpectedFrame(t *testing.T) {
 }
 
 func TestSessionInvalidFlowFrame(t *testing.T) {
-	netConn := mocks.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -516,7 +516,7 @@ func TestSessionInvalidFlowFrame(t *testing.T) {
 	require.NoError(t, err)
 
 	// NextIncomingID cannot be nil once the session has been established
-	b, err := mocks.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformFlow{})
+	b, err := fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformFlow{})
 	require.NoError(t, err)
 	netConn.SendFrame(b)
 
@@ -535,12 +535,12 @@ func TestSessionFlowFrameWithEcho(t *testing.T) {
 	echo := make(chan struct{})
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {
-		case *mocks.AMQPProto:
+		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
-			return mocks.PerformOpen("container")
+			return fake.PerformOpen("container")
 		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
+			return fake.PerformBegin(0)
 		case *frames.PerformFlow:
 			defer func() { close(echo) }()
 			// here we receive the echo.  verify state
@@ -558,14 +558,14 @@ func TestSessionFlowFrameWithEcho(t *testing.T) {
 			}
 			return nil, nil
 		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
+			return fake.PerformEnd(0, nil)
 		case *frames.PerformClose:
-			return mocks.PerformClose(nil)
+			return fake.PerformClose(nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := mocks.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -577,7 +577,7 @@ func TestSessionFlowFrameWithEcho(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 
-	b, err := mocks.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformFlow{
+	b, err := fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformFlow{
 		NextIncomingID: &nextIncomingID,
 		IncomingWindow: 100,
 		OutgoingWindow: 100,
@@ -598,24 +598,24 @@ func TestSessionInvalidAttachDeadlock(t *testing.T) {
 	var enqueueFrames func(string)
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {
-		case *mocks.AMQPProto:
+		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
-			return mocks.PerformOpen("container")
+			return fake.PerformOpen("container")
 		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
+			return fake.PerformBegin(0)
 		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
+			return fake.PerformEnd(0, nil)
 		case *frames.PerformAttach:
 			enqueueFrames(tt.Name)
 			return nil, nil
 		case *frames.PerformClose:
-			return mocks.PerformClose(nil)
+			return fake.PerformClose(nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := mocks.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -629,14 +629,14 @@ func TestSessionInvalidAttachDeadlock(t *testing.T) {
 
 	enqueueFrames = func(n string) {
 		// send an invalid attach response
-		b, err := mocks.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformAttach{
+		b, err := fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformAttach{
 			Name: "mismatched",
 			Role: encoding.RoleReceiver,
 		})
 		require.NoError(t, err)
 		netConn.SendFrame(b)
 		// now follow up with a detach frame
-		b, err = mocks.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformDetach{
+		b, err = fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformDetach{
 			Error: &encoding.Error{
 				Condition:   "boom",
 				Description: "failed",
@@ -658,23 +658,23 @@ func TestNewSessionContextCancelled(t *testing.T) {
 
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
-		case *mocks.AMQPProto:
+		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
-			return mocks.PerformOpen("container")
+			return fake.PerformOpen("container")
 		case *frames.PerformBegin:
 			cancel()
 			// swallow frame to prevent non-determinism of cancellation
 			return nil, nil
 		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
-		case *mocks.KeepAlive:
+			return fake.PerformEnd(0, nil)
+		case *fake.KeepAlive:
 			return nil, nil
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := mocks.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder)
 
 	newCtx, newCancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(newCtx, netConn, nil)

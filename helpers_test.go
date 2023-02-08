@@ -8,16 +8,16 @@ import (
 	"time"
 
 	"github.com/Azure/go-amqp/internal/encoding"
+	"github.com/Azure/go-amqp/internal/fake"
 	"github.com/Azure/go-amqp/internal/frames"
-	"github.com/Azure/go-amqp/internal/mocks"
 	"github.com/stretchr/testify/require"
 )
 
-func sendInitialFlowFrame(t *testing.T, netConn *mocks.NetConn, handle uint32, credit uint32) {
+func sendInitialFlowFrame(t *testing.T, netConn *fake.NetConn, handle uint32, credit uint32) {
 	nextIncoming := uint32(0)
 	count := uint32(0)
 	available := uint32(0)
-	b, err := mocks.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformFlow{
+	b, err := fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformFlow{
 		NextIncomingID: &nextIncoming,
 		IncomingWindow: 1000,
 		OutgoingWindow: 1000,
@@ -36,20 +36,20 @@ func sendInitialFlowFrame(t *testing.T, netConn *mocks.NetConn, handle uint32, c
 func senderFrameHandler(ssm encoding.SenderSettleMode) func(frames.FrameBody) ([]byte, error) {
 	return func(req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {
-		case *mocks.AMQPProto:
+		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
-			return mocks.PerformOpen("container")
+			return fake.PerformOpen("container")
 		case *frames.PerformClose:
-			return mocks.PerformClose(nil)
+			return fake.PerformClose(nil)
 		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
+			return fake.PerformBegin(0)
 		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
+			return fake.PerformEnd(0, nil)
 		case *frames.PerformAttach:
-			return mocks.SenderAttach(0, tt.Name, 0, ssm)
+			return fake.SenderAttach(0, tt.Name, 0, ssm)
 		case *frames.PerformDetach:
-			return mocks.PerformDetach(0, 0, nil)
+			return fake.PerformDetach(0, 0, nil)
 		default:
 			return nil, nil
 		}
@@ -72,20 +72,20 @@ func senderFrameHandlerNoUnhandled(ssm encoding.SenderSettleMode) func(frames.Fr
 func receiverFrameHandler(rsm encoding.ReceiverSettleMode) func(frames.FrameBody) ([]byte, error) {
 	return func(req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {
-		case *mocks.AMQPProto:
+		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
-			return mocks.PerformOpen("container")
+			return fake.PerformOpen("container")
 		case *frames.PerformClose:
-			return mocks.PerformClose(nil)
+			return fake.PerformClose(nil)
 		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
+			return fake.PerformBegin(0)
 		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
+			return fake.PerformEnd(0, nil)
 		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(0, tt.Name, 0, rsm, tt.Source.Filter)
+			return fake.ReceiverAttach(0, tt.Name, 0, rsm, tt.Source.Filter)
 		case *frames.PerformDetach:
-			return mocks.PerformDetach(0, 0, nil)
+			return fake.PerformDetach(0, 0, nil)
 		default:
 			return nil, nil
 		}
@@ -101,7 +101,7 @@ func receiverFrameHandlerNoUnhandled(rsm encoding.ReceiverSettleMode) func(frame
 			return b, err
 		}
 		switch req.(type) {
-		case *frames.PerformFlow, *mocks.KeepAlive:
+		case *frames.PerformFlow, *fake.KeepAlive:
 			return nil, nil
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)

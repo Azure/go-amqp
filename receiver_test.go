@@ -9,13 +9,13 @@ import (
 	"time"
 
 	"github.com/Azure/go-amqp/internal/encoding"
+	"github.com/Azure/go-amqp/internal/fake"
 	"github.com/Azure/go-amqp/internal/frames"
-	"github.com/Azure/go-amqp/internal/mocks"
 	"github.com/stretchr/testify/require"
 )
 
 func TestReceiverInvalidOptions(t *testing.T) {
-	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
+	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -54,24 +54,24 @@ func TestReceiverMethodsNoReceive(t *testing.T) {
 	const linkName = "test"
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch ff := req.(type) {
-		case *mocks.AMQPProto:
-			return mocks.ProtoHeader(mocks.ProtoAMQP)
+		case *fake.AMQPProto:
+			return fake.ProtoHeader(fake.ProtoAMQP)
 		case *frames.PerformOpen:
-			return mocks.PerformOpen("test")
+			return fake.PerformOpen("test")
 		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
+			return fake.PerformBegin(0)
 		case *frames.PerformAttach:
 			require.Equal(t, DurabilityUnsettledState, ff.Target.Durable)
 			require.Equal(t, ExpiryPolicyNever, ff.Target.ExpiryPolicy)
 			require.Equal(t, uint32(300), ff.Target.Timeout)
-			return mocks.ReceiverAttach(0, linkName, 0, ReceiverSettleModeFirst, nil)
-		case *frames.PerformFlow, *mocks.KeepAlive:
+			return fake.ReceiverAttach(0, linkName, 0, ReceiverSettleModeFirst, nil)
+		case *frames.PerformFlow, *fake.KeepAlive:
 			return nil, nil
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	conn := mocks.NewNetConn(responder)
+	conn := fake.NewNetConn(responder)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -99,7 +99,7 @@ func TestReceiverMethodsNoReceive(t *testing.T) {
 }
 
 func TestReceiverLinkSourceFilter(t *testing.T) {
-	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
+	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -128,7 +128,7 @@ func TestReceiverLinkSourceFilter(t *testing.T) {
 }
 
 func TestReceiverOnClosed(t *testing.T) {
-	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
+	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -161,7 +161,7 @@ func TestReceiverOnClosed(t *testing.T) {
 }
 
 func TestReceiverOnSessionClosed(t *testing.T) {
-	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
+	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -191,7 +191,7 @@ func TestReceiverOnSessionClosed(t *testing.T) {
 }
 
 func TestReceiverOnConnClosed(t *testing.T) {
-	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
+	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -224,7 +224,7 @@ func TestReceiverOnConnClosed(t *testing.T) {
 }
 
 func TestReceiverOnDetached(t *testing.T) {
-	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
+	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -249,7 +249,7 @@ func TestReceiverOnDetached(t *testing.T) {
 		errcon  = "detaching"
 		errdesc = "server side detach"
 	)
-	b, err := mocks.PerformDetach(0, 0, &Error{Condition: errcon, Description: errdesc})
+	b, err := fake.PerformDetach(0, 0, &Error{Condition: errcon, Description: errdesc})
 	require.NoError(t, err)
 	conn.SendFrame(b)
 
@@ -267,31 +267,31 @@ func TestReceiveInvalidMessage(t *testing.T) {
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {
-		case *mocks.AMQPProto:
+		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
-			return mocks.PerformOpen("container")
+			return fake.PerformOpen("container")
 		case *frames.PerformClose:
-			return mocks.PerformClose(nil)
+			return fake.PerformClose(nil)
 		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
+			return fake.PerformBegin(0)
 		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
+			return fake.PerformEnd(0, nil)
 		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(0, tt.Name, 0, ReceiverSettleModeFirst, tt.Source.Filter)
+			return fake.ReceiverAttach(0, tt.Name, 0, ReceiverSettleModeFirst, tt.Source.Filter)
 		case *frames.PerformDetach:
 			require.NotNil(t, tt.Error)
 			require.EqualValues(t, ErrCondNotAllowed, tt.Error.Condition)
-			return mocks.PerformDetach(0, 0, nil)
-		case *frames.PerformFlow, *mocks.KeepAlive:
+			return fake.PerformDetach(0, 0, nil)
+		case *frames.PerformFlow, *fake.KeepAlive:
 			return nil, nil
 		case *frames.PerformDisposition:
-			return mocks.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
+			return fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	conn := mocks.NewNetConn(responder)
+	conn := fake.NewNetConn(responder)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -314,7 +314,7 @@ func TestReceiveInvalidMessage(t *testing.T) {
 	}()
 
 	// missing DeliveryID
-	fr, err := mocks.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformTransfer{
+	fr, err := fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformTransfer{
 		Handle: linkHandle,
 	})
 	require.NoError(t, err)
@@ -338,7 +338,7 @@ func TestReceiveInvalidMessage(t *testing.T) {
 		msgChan <- msg
 		errChan <- err
 	}()
-	fr, err = mocks.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformTransfer{
+	fr, err = fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformTransfer{
 		DeliveryID: &deliveryID,
 		Handle:     linkHandle,
 	})
@@ -363,7 +363,7 @@ func TestReceiveInvalidMessage(t *testing.T) {
 		msgChan <- msg
 		errChan <- err
 	}()
-	fr, err = mocks.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformTransfer{
+	fr, err = fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformTransfer{
 		DeliveryID:    &deliveryID,
 		Handle:        linkHandle,
 		MessageFormat: &format,
@@ -393,7 +393,7 @@ func TestReceiveSuccessReceiverSettleModeFirst(t *testing.T) {
 		case *frames.PerformFlow:
 			if *ff.NextIncomingID == deliveryID {
 				// this is the first flow frame, send our payload
-				return mocks.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
+				return fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
 			}
 			// ignore future flow frames as we have no response
 			return nil, nil
@@ -403,7 +403,7 @@ func TestReceiveSuccessReceiverSettleModeFirst(t *testing.T) {
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	conn := mocks.NewNetConn(responder)
+	conn := fake.NewNetConn(responder)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -462,7 +462,7 @@ func TestReceiveSuccessReceiverSettleModeSecondAccept(t *testing.T) {
 		case *frames.PerformFlow:
 			if *ff.NextIncomingID == deliveryID {
 				// this is the first flow frame, send our payload
-				return mocks.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
+				return fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
 			}
 			// ignore future flow frames as we have no response
 			return nil, nil
@@ -470,12 +470,12 @@ func TestReceiveSuccessReceiverSettleModeSecondAccept(t *testing.T) {
 			if _, ok := ff.State.(*encoding.StateAccepted); !ok {
 				return nil, fmt.Errorf("unexpected State %T", ff.State)
 			}
-			return mocks.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
+			return fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	conn := mocks.NewNetConn(responder)
+	conn := fake.NewNetConn(responder)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -544,7 +544,7 @@ func TestReceiveSuccessReceiverSettleModeSecondAcceptOnClosedLink(t *testing.T) 
 		case *frames.PerformFlow:
 			if *ff.NextIncomingID == deliveryID {
 				// this is the first flow frame, send our payload
-				return mocks.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
+				return fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
 			}
 			// ignore future flow frames as we have no response
 			return nil, nil
@@ -552,12 +552,12 @@ func TestReceiveSuccessReceiverSettleModeSecondAcceptOnClosedLink(t *testing.T) 
 			if _, ok := ff.State.(*encoding.StateAccepted); !ok {
 				return nil, fmt.Errorf("unexpected State %T", ff.State)
 			}
-			return mocks.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
+			return fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	conn := mocks.NewNetConn(responder)
+	conn := fake.NewNetConn(responder)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -607,7 +607,7 @@ func TestReceiveSuccessReceiverSettleModeSecondReject(t *testing.T) {
 		case *frames.PerformFlow:
 			if *ff.NextIncomingID == deliveryID {
 				// this is the first flow frame, send our payload
-				return mocks.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
+				return fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
 			}
 			// ignore future flow frames as we have no response
 			return nil, nil
@@ -615,12 +615,12 @@ func TestReceiveSuccessReceiverSettleModeSecondReject(t *testing.T) {
 			if _, ok := ff.State.(*encoding.StateRejected); !ok {
 				return nil, fmt.Errorf("unexpected State %T", ff.State)
 			}
-			return mocks.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateRejected{})
+			return fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateRejected{})
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	conn := mocks.NewNetConn(responder)
+	conn := fake.NewNetConn(responder)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -683,7 +683,7 @@ func TestReceiveSuccessReceiverSettleModeSecondRelease(t *testing.T) {
 		case *frames.PerformFlow:
 			if *ff.NextIncomingID == deliveryID {
 				// this is the first flow frame, send our payload
-				return mocks.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
+				return fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
 			}
 			// ignore future flow frames as we have no response
 			return nil, nil
@@ -691,12 +691,12 @@ func TestReceiveSuccessReceiverSettleModeSecondRelease(t *testing.T) {
 			if _, ok := ff.State.(*encoding.StateReleased); !ok {
 				return nil, fmt.Errorf("unexpected State %T", ff.State)
 			}
-			return mocks.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateReleased{})
+			return fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateReleased{})
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	conn := mocks.NewNetConn(responder)
+	conn := fake.NewNetConn(responder)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -759,7 +759,7 @@ func TestReceiveSuccessReceiverSettleModeSecondModify(t *testing.T) {
 		case *frames.PerformFlow:
 			if *ff.NextIncomingID == deliveryID {
 				// this is the first flow frame, send our payload
-				return mocks.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
+				return fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
 			}
 			// ignore future flow frames as we have no response
 			return nil, nil
@@ -772,12 +772,12 @@ func TestReceiveSuccessReceiverSettleModeSecondModify(t *testing.T) {
 			if v := mod.MessageAnnotations["some"]; v != "value" {
 				return nil, fmt.Errorf("unexpected annotation value %v", v)
 			}
-			return mocks.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateModified{})
+			return fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateModified{})
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	conn := mocks.NewNetConn(responder)
+	conn := fake.NewNetConn(responder)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -868,18 +868,18 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 			return b, err
 		}
 		switch ff := req.(type) {
-		case *frames.PerformFlow, *mocks.KeepAlive:
+		case *frames.PerformFlow, *fake.KeepAlive:
 			return nil, nil
 		case *frames.PerformDisposition:
 			if _, ok := ff.State.(*encoding.StateAccepted); !ok {
 				return nil, fmt.Errorf("unexpected State %T", ff.State)
 			}
-			return mocks.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
+			return fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	conn := mocks.NewNetConn(responder)
+	conn := fake.NewNetConn(responder)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -950,31 +950,31 @@ func TestReceiveInvalidMultiFrameMessage(t *testing.T) {
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {
-		case *mocks.AMQPProto:
+		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
-			return mocks.PerformOpen("container")
+			return fake.PerformOpen("container")
 		case *frames.PerformClose:
-			return mocks.PerformClose(nil)
+			return fake.PerformClose(nil)
 		case *frames.PerformBegin:
-			return mocks.PerformBegin(0)
+			return fake.PerformBegin(0)
 		case *frames.PerformEnd:
-			return mocks.PerformEnd(0, nil)
+			return fake.PerformEnd(0, nil)
 		case *frames.PerformAttach:
-			return mocks.ReceiverAttach(0, tt.Name, 0, ReceiverSettleModeSecond, tt.Source.Filter)
+			return fake.ReceiverAttach(0, tt.Name, 0, ReceiverSettleModeSecond, tt.Source.Filter)
 		case *frames.PerformDetach:
 			require.NotNil(t, tt.Error)
 			require.EqualValues(t, ErrCondNotAllowed, tt.Error.Condition)
-			return mocks.PerformDetach(0, 0, nil)
-		case *frames.PerformFlow, *mocks.KeepAlive:
+			return fake.PerformDetach(0, 0, nil)
+		case *frames.PerformFlow, *fake.KeepAlive:
 			return nil, nil
 		case *frames.PerformDisposition:
-			return mocks.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
+			return fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	conn := mocks.NewNetConn(responder)
+	conn := fake.NewNetConn(responder)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -1075,18 +1075,18 @@ func TestReceiveMultiFrameMessageAborted(t *testing.T) {
 			return b, err
 		}
 		switch ff := req.(type) {
-		case *frames.PerformFlow, *mocks.KeepAlive:
+		case *frames.PerformFlow, *fake.KeepAlive:
 			return nil, nil
 		case *frames.PerformDisposition:
 			if _, ok := ff.State.(*encoding.StateAccepted); !ok {
 				return nil, fmt.Errorf("unexpected State %T", ff.State)
 			}
-			return mocks.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
+			return fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	conn := mocks.NewNetConn(responder)
+	conn := fake.NewNetConn(responder)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -1119,7 +1119,7 @@ func TestReceiveMultiFrameMessageAborted(t *testing.T) {
 	}))
 	// we shouldn't have received any message at this point, now send a single-frame message
 	payload = []byte("single message")
-	b, err := mocks.PerformTransfer(0, linkHandle, deliveryID+1, payload)
+	b, err := fake.PerformTransfer(0, linkHandle, deliveryID+1, payload)
 	require.NoError(t, err)
 	conn.SendFrame(b)
 	require.NoError(t, <-errChan)
@@ -1141,7 +1141,7 @@ func TestReceiveMessageTooBig(t *testing.T) {
 			if *ff.NextIncomingID == deliveryID {
 				// this is the first flow frame, send our payload
 				bigPayload := make([]byte, 256)
-				return mocks.PerformTransfer(0, linkHandle, deliveryID, bigPayload)
+				return fake.PerformTransfer(0, linkHandle, deliveryID, bigPayload)
 			}
 			// ignore future flow frames as we have no response
 			return nil, nil
@@ -1149,7 +1149,7 @@ func TestReceiveMessageTooBig(t *testing.T) {
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	conn := mocks.NewNetConn(responder)
+	conn := fake.NewNetConn(responder)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -1187,7 +1187,7 @@ func TestReceiveSuccessAcceptFails(t *testing.T) {
 		case *frames.PerformFlow:
 			if *ff.NextIncomingID == deliveryID {
 				// this is the first flow frame, send our payload
-				return mocks.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
+				return fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
 			}
 			// ignore future flow frames as we have no response
 			return nil, nil
@@ -1195,7 +1195,7 @@ func TestReceiveSuccessAcceptFails(t *testing.T) {
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	conn := mocks.NewNetConn(responder)
+	conn := fake.NewNetConn(responder)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -1249,7 +1249,7 @@ func TestReceiverDispositionBatcherTimer(t *testing.T) {
 		case *frames.PerformFlow:
 			if *ff.NextIncomingID == deliveryID {
 				// this is the first flow frame, send our payload
-				return mocks.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
+				return fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
 			}
 			// ignore future flow frames as we have no response
 			return nil, nil
@@ -1257,12 +1257,12 @@ func TestReceiverDispositionBatcherTimer(t *testing.T) {
 			if _, ok := ff.State.(*encoding.StateAccepted); !ok {
 				return nil, fmt.Errorf("unexpected State %T", ff.State)
 			}
-			return mocks.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
+			return fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	conn := mocks.NewNetConn(responder)
+	conn := fake.NewNetConn(responder)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -1311,7 +1311,7 @@ func TestReceiverDispositionBatcherFull(t *testing.T) {
 			return b, err
 		}
 		switch ff := req.(type) {
-		case *frames.PerformFlow, *mocks.KeepAlive:
+		case *frames.PerformFlow, *fake.KeepAlive:
 			return nil, nil
 		case *frames.PerformDisposition:
 			if _, ok := ff.State.(*encoding.StateAccepted); !ok {
@@ -1325,12 +1325,12 @@ func TestReceiverDispositionBatcherFull(t *testing.T) {
 			if acceptCount == credit {
 				close(allAccepted)
 			}
-			return mocks.PerformDisposition(encoding.RoleSender, 0, ff.First, ff.Last, &encoding.StateAccepted{})
+			return fake.PerformDisposition(encoding.RoleSender, 0, ff.First, ff.Last, &encoding.StateAccepted{})
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	conn := mocks.NewNetConn(responder)
+	conn := fake.NewNetConn(responder)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -1351,7 +1351,7 @@ func TestReceiverDispositionBatcherFull(t *testing.T) {
 	wg := &sync.WaitGroup{}
 	wg.Add(credit)
 	for i := 0; i < credit; i++ {
-		b, err := mocks.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
+		b, err := fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
 		require.NoError(t, err)
 		conn.SendFrame(b)
 		deliveryID++
@@ -1390,7 +1390,7 @@ func TestReceiverDispositionBatcherRelease(t *testing.T) {
 			return b, err
 		}
 		switch ff := req.(type) {
-		case *frames.PerformFlow, *mocks.KeepAlive:
+		case *frames.PerformFlow, *fake.KeepAlive:
 			return nil, nil
 		case *frames.PerformDisposition:
 			if ff.Last == nil || *ff.Last == ff.First {
@@ -1401,12 +1401,12 @@ func TestReceiverDispositionBatcherRelease(t *testing.T) {
 			if acceptCount == credit {
 				close(allAccepted)
 			}
-			return mocks.PerformDisposition(encoding.RoleSender, 0, ff.First, ff.Last, &encoding.StateAccepted{})
+			return fake.PerformDisposition(encoding.RoleSender, 0, ff.First, ff.Last, &encoding.StateAccepted{})
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	conn := mocks.NewNetConn(responder)
+	conn := fake.NewNetConn(responder)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -1427,7 +1427,7 @@ func TestReceiverDispositionBatcherRelease(t *testing.T) {
 	wg := &sync.WaitGroup{}
 	wg.Add(credit)
 	for i := 0; i < credit; i++ {
-		b, err := mocks.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
+		b, err := fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
 		require.NoError(t, err)
 		conn.SendFrame(b)
 		deliveryID++
@@ -1459,7 +1459,7 @@ func TestReceiverDispositionBatcherRelease(t *testing.T) {
 }
 
 func TestReceiverCloseOnUnsettledWithPending(t *testing.T) {
-	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
+	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -1474,7 +1474,7 @@ func TestReceiverCloseOnUnsettledWithPending(t *testing.T) {
 	require.NoError(t, err)
 
 	// first message exhausts the link credit
-	b, err := mocks.PerformTransfer(0, 0, 1, []byte("message 1"))
+	b, err := fake.PerformTransfer(0, 0, 1, []byte("message 1"))
 	require.NoError(t, err)
 	conn.SendFrame(b)
 
@@ -1488,7 +1488,7 @@ func TestReceiverCloseOnUnsettledWithPending(t *testing.T) {
 }
 
 func TestReceiverConnReaderError(t *testing.T) {
-	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
+	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -1524,7 +1524,7 @@ func TestReceiverConnReaderError(t *testing.T) {
 }
 
 func TestReceiverConnWriterError(t *testing.T) {
-	conn := mocks.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
+	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()

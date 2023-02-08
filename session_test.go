@@ -491,7 +491,7 @@ func TestSessionUnexpectedFrame(t *testing.T) {
 	require.NoError(t, err)
 
 	// this frame is swallowed
-	b, err := mocks.EncodeFrame(mocks.FrameSASL, 0, &frames.SASLMechanisms{})
+	b, err := mocks.EncodeFrame(frames.TypeSASL, 0, &frames.SASLMechanisms{})
 	require.NoError(t, err)
 	netConn.SendFrame(b)
 
@@ -516,7 +516,7 @@ func TestSessionInvalidFlowFrame(t *testing.T) {
 	require.NoError(t, err)
 
 	// NextIncomingID cannot be nil once the session has been established
-	b, err := mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformFlow{})
+	b, err := mocks.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformFlow{})
 	require.NoError(t, err)
 	netConn.SendFrame(b)
 
@@ -577,7 +577,7 @@ func TestSessionFlowFrameWithEcho(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 
-	b, err := mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformFlow{
+	b, err := mocks.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformFlow{
 		NextIncomingID: &nextIncomingID,
 		IncomingWindow: 100,
 		OutgoingWindow: 100,
@@ -629,14 +629,14 @@ func TestSessionInvalidAttachDeadlock(t *testing.T) {
 
 	enqueueFrames = func(n string) {
 		// send an invalid attach response
-		b, err := mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformAttach{
+		b, err := mocks.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformAttach{
 			Name: "mismatched",
 			Role: encoding.RoleReceiver,
 		})
 		require.NoError(t, err)
 		netConn.SendFrame(b)
 		// now follow up with a detach frame
-		b, err = mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformDetach{
+		b, err = mocks.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformDetach{
 			Error: &encoding.Error{
 				Condition:   "boom",
 				Description: "failed",

@@ -209,7 +209,7 @@ func ProtoHeader(id ProtoID) ([]byte, error) {
 // This frame, and ProtoHeader, are needed when calling amqp.New() to create a client.
 func PerformOpen(containerID string) ([]byte, error) {
 	// send the default values for max channels and frame size
-	return EncodeFrame(FrameAMQP, 0, &frames.PerformOpen{
+	return EncodeFrame(frames.TypeAMQP, 0, &frames.PerformOpen{
 		ChannelMax:   65535,
 		ContainerID:  containerID,
 		IdleTimeout:  time.Minute,
@@ -220,7 +220,7 @@ func PerformOpen(containerID string) ([]byte, error) {
 // PerformBegin appends a PerformBegin frame with the specified remote channel ID.
 // This frame is needed when making a call to Client.NewSession().
 func PerformBegin(remoteChannel uint16) ([]byte, error) {
-	return EncodeFrame(FrameAMQP, remoteChannel, &frames.PerformBegin{
+	return EncodeFrame(frames.TypeAMQP, remoteChannel, &frames.PerformBegin{
 		RemoteChannel:  &remoteChannel,
 		NextOutgoingID: 1,
 		IncomingWindow: 5000,
@@ -232,7 +232,7 @@ func PerformBegin(remoteChannel uint16) ([]byte, error) {
 // SenderAttach encodes a PerformAttach frame with the specified values.
 // This frame is needed when making a call to Session.NewSender().
 func SenderAttach(remoteChannel uint16, linkName string, linkHandle uint32, mode encoding.SenderSettleMode) ([]byte, error) {
-	return EncodeFrame(FrameAMQP, remoteChannel, &frames.PerformAttach{
+	return EncodeFrame(frames.TypeAMQP, remoteChannel, &frames.PerformAttach{
 		Name:   linkName,
 		Handle: linkHandle,
 		Role:   encoding.RoleReceiver,
@@ -249,7 +249,7 @@ func SenderAttach(remoteChannel uint16, linkName string, linkHandle uint32, mode
 // ReceiverAttach appends a PerformAttach frame with the specified values.
 // This frame is needed when making a call to Session.NewReceiver().
 func ReceiverAttach(remoteChannel uint16, linkName string, linkHandle uint32, mode encoding.ReceiverSettleMode, filter encoding.Filter) ([]byte, error) {
-	return EncodeFrame(FrameAMQP, remoteChannel, &frames.PerformAttach{
+	return EncodeFrame(frames.TypeAMQP, remoteChannel, &frames.PerformAttach{
 		Name:   linkName,
 		Handle: linkHandle,
 		Role:   encoding.RoleSender,
@@ -274,7 +274,7 @@ func PerformTransfer(remoteChannel uint16, linkHandle, deliveryID uint32, payloa
 	if err != nil {
 		return nil, err
 	}
-	return EncodeFrame(FrameAMQP, remoteChannel, &frames.PerformTransfer{
+	return EncodeFrame(frames.TypeAMQP, remoteChannel, &frames.PerformTransfer{
 		Handle:        linkHandle,
 		DeliveryID:    &deliveryID,
 		DeliveryTag:   []byte("tag"),
@@ -286,7 +286,7 @@ func PerformTransfer(remoteChannel uint16, linkHandle, deliveryID uint32, payloa
 // PerformDisposition appends a PerformDisposition frame with the specified values.
 // The firstID MUST match the deliveryID value specified in PerformTransfer.
 func PerformDisposition(role encoding.Role, remoteChannel uint16, firstID uint32, lastID *uint32, state encoding.DeliveryState) ([]byte, error) {
-	return EncodeFrame(FrameAMQP, remoteChannel, &frames.PerformDisposition{
+	return EncodeFrame(frames.TypeAMQP, remoteChannel, &frames.PerformDisposition{
 		Role:    role,
 		First:   firstID,
 		Last:    lastID,
@@ -297,17 +297,17 @@ func PerformDisposition(role encoding.Role, remoteChannel uint16, firstID uint32
 
 // PerformDetach encodes a PerformDetach frame with an optional error.
 func PerformDetach(remoteChannel uint16, linkHandle uint32, e *encoding.Error) ([]byte, error) {
-	return EncodeFrame(FrameAMQP, remoteChannel, &frames.PerformDetach{Handle: linkHandle, Closed: true, Error: e})
+	return EncodeFrame(frames.TypeAMQP, remoteChannel, &frames.PerformDetach{Handle: linkHandle, Closed: true, Error: e})
 }
 
 // PerformEnd encodes a PerformEnd frame with an optional error.
 func PerformEnd(remoteChannel uint16, e *encoding.Error) ([]byte, error) {
-	return EncodeFrame(FrameAMQP, remoteChannel, &frames.PerformEnd{Error: e})
+	return EncodeFrame(frames.TypeAMQP, remoteChannel, &frames.PerformEnd{Error: e})
 }
 
 // PerformClose encodes a PerformClose frame with an optional error.
 func PerformClose(e *encoding.Error) ([]byte, error) {
-	return EncodeFrame(FrameAMQP, 0, &frames.PerformClose{Error: e})
+	return EncodeFrame(frames.TypeAMQP, 0, &frames.PerformClose{Error: e})
 }
 
 // AMQPProto is the frame type passed to FrameCallback() for the initial protocal handshake.
@@ -325,21 +325,13 @@ type frameHeader frames.Header
 func (f frameHeader) Marshal(wr *buffer.Buffer) error {
 	wr.AppendUint32(f.Size)
 	wr.AppendByte(f.DataOffset)
-	wr.AppendByte(f.FrameType)
+	wr.AppendByte(byte(f.FrameType))
 	wr.AppendUint16(f.Channel)
 	return nil
 }
 
-// FrameType indicates the type of frame (copied from sasl.go)
-type FrameType uint8
-
-const (
-	FrameAMQP FrameType = 0x0
-	FrameSASL FrameType = 0x1
-)
-
 // EncodeFrame encodes the specified frame to be sent over the wire.
-func EncodeFrame(t FrameType, remoteChannel uint16, f frames.FrameBody) ([]byte, error) {
+func EncodeFrame(t frames.Type, remoteChannel uint16, f frames.FrameBody) ([]byte, error) {
 	bodyBuf := buffer.New([]byte{})
 	if err := encoding.Marshal(bodyBuf, f); err != nil {
 		return nil, err
@@ -430,7 +422,7 @@ func encodeMultiFrameTransfer(remoteChannel uint16, linkHandle, deliveryID uint3
 		if edit != nil {
 			edit(chunk, fr)
 		}
-		b, err := EncodeFrame(FrameAMQP, remoteChannel, fr)
+		b, err := EncodeFrame(frames.TypeAMQP, remoteChannel, fr)
 		if err != nil {
 			return nil, err
 		}

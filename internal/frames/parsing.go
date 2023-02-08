@@ -134,8 +134,8 @@ func Write(buf *buffer.Buffer, fr Frame) error {
 	// write header
 	buf.Append([]byte{
 		0, 0, 0, 0, // size, overwrite later
-		2,       // doff, see frameHeader.DataOffset comment
-		fr.Type, // frame type
+		2,              // doff, see frameHeader.DataOffset comment
+		uint8(fr.Type), // frame type
 	})
 	buf.AppendUint16(fr.Channel) // channel
 

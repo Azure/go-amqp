@@ -258,14 +258,14 @@ func TestSenderAttachError(t *testing.T) {
 
 	enqueueFrames = func(n string) {
 		// send an invalid attach response
-		b, err := mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformAttach{
+		b, err := mocks.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformAttach{
 			Name: n,
 			Role: encoding.RoleReceiver,
 		})
 		require.NoError(t, err)
 		netConn.SendFrame(b)
 		// now follow up with a detach frame
-		b, err = mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformDetach{
+		b, err = mocks.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformDetach{
 			Error: &encoding.Error{
 				Condition:   errcon,
 				Description: errdesc,
@@ -616,7 +616,7 @@ func TestSenderSendMsgTooBig(t *testing.T) {
 			return mocks.PerformEnd(0, nil)
 		case *frames.PerformAttach:
 			mode := SenderSettleModeUnsettled
-			return mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformAttach{
+			return mocks.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformAttach{
 				Name:   tt.Name,
 				Handle: 0,
 				Role:   encoding.RoleReceiver,
@@ -713,7 +713,7 @@ func TestSenderSendMultiTransfer(t *testing.T) {
 		case *mocks.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
-			return mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformOpen{
+			return mocks.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformOpen{
 				ChannelMax:   65535,
 				ContainerID:  "container",
 				IdleTimeout:  time.Minute,
@@ -896,7 +896,7 @@ func TestSenderFlowFrameWithEcho(t *testing.T) {
 	require.NoError(t, err)
 
 	nextIncomingID := uint32(1)
-	b, err := mocks.EncodeFrame(mocks.FrameAMQP, 0, &frames.PerformFlow{
+	b, err := mocks.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformFlow{
 		Handle:         &sender.l.handle,
 		NextIncomingID: &nextIncomingID,
 		IncomingWindow: 100,

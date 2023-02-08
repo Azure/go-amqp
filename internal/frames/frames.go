@@ -10,10 +10,21 @@ import (
 	"github.com/Azure/go-amqp/internal/encoding"
 )
 
+// Type contains the values for a frame's type.
+type Type uint8
+
 const (
-	TypeAMQP = 0x0
-	TypeSASL = 0x1
+	TypeAMQP Type = 0x0
+	TypeSASL Type = 0x1
 )
+
+// String implements the fmt.Stringer interface for type Type.
+func (t Type) String() string {
+	if t == 0 {
+		return "AMQP"
+	}
+	return "SASL"
+}
 
 /*
 <type name="source" class="composite" source="list" provides="source">
@@ -339,12 +350,17 @@ func (t Target) String() string {
 
 // frame is the decoded representation of a frame
 type Frame struct {
-	Type    uint8     // AMQP/SASL
+	Type    Type      // AMQP/SASL
 	Channel uint16    // channel this frame is for
 	Body    FrameBody // body of the frame
 
 	// optional channel which will be closed after net transmit
 	Done chan encoding.DeliveryState
+}
+
+// String implements the fmt.Stringer interface for type Frame.
+func (f Frame) String() string {
+	return fmt.Sprintf("Frame{Type: %s, Channel: %d, Body: %s}", f.Type, f.Channel, f.Body)
 }
 
 // frameBody adds some type safety to frame encoding

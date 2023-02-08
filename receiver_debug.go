@@ -3,10 +3,17 @@
 
 package amqp
 
-func (r *Receiver) muxMsg() bool {
+import (
+	"github.com/Azure/go-amqp/internal/debug"
+	"github.com/Azure/go-amqp/internal/frames"
+)
+
+// muxMsg sends the current decoded message to the channel of incoming messages.
+// it returns false if a client-side close has been initiated.
+func (r *Receiver) muxMsg(fr *frames.PerformTransfer) bool {
 	select {
 	case r.messages <- r.msg:
-		// message received
+		debug.Log(2, "RX (Receiver): mux transfer: %s", fr)
 		// NOTE: writing to this should NEVER block.
 		// if it does, it means we have a flow control
 		// bug so our peer sent a message exceeding

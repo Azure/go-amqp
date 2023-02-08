@@ -19,6 +19,12 @@
 * Ensure that `Receiver.Receive()` drains prefetched messages when the link closed.
 * Fixed an issue that could cause closing a `Receiver` to hang under certain circumstances.
 
+### Other Changes
+
+* Debug logging has been cleaned up to reduce the number of redundant entries and consolidate the entry format.
+  * DEBUG_LEVEL 1 now captures all sent/received frames along with basic flow control information.
+  * Higher debug levels add entries when a frame transitions across mux boundaries and other diagnostics info.
+
 ## 0.18.1 (2023-01-17)
 
 ### Bugs Fixed

@@ -112,7 +112,6 @@ func (s *Session) begin(ctx context.Context) error {
 		OutgoingWindow: s.outgoingWindow,
 		HandleMax:      s.handleMax,
 	}
-	debug.Log(1, "TX (NewSession): %s", begin)
 
 	_ = s.txFrame(begin, nil)
 
@@ -143,7 +142,6 @@ func (s *Session) begin(ctx context.Context) error {
 	case fr = <-s.rx:
 		// received ack that session was created
 	}
-	debug.Log(1, "RX (NewSession): %s", fr.Body)
 
 	begin, ok := fr.Body.(*frames.PerformBegin)
 	if !ok {
@@ -277,7 +275,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 		txTransfer := s.txTransfer
 		// disable txTransfer if flow control windows have been exceeded
 		if remoteIncomingWindow == 0 || s.outgoingWindow == 0 {
-			debug.Log(1, "TX(Session): Disabling txTransfer - window exceeded. remoteIncomingWindow: %d outgoingWindow:%d",
+			debug.Log(1, "TX (Session): disabling txTransfer - window exceeded. remoteIncomingWindow: %d outgoingWindow: %d",
 				remoteIncomingWindow,
 				s.outgoingWindow)
 			txTransfer = nil
@@ -299,14 +297,12 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 		case err := <-closed:
 			clientClosed = true
 			fr := frames.PerformEnd{Error: err}
-			debug.Log(1, "TX(Session): %s", fr)
 			_ = s.txFrame(&fr, nil)
 			// TODO: per spec, after end has been sent, the session is no longer allowed to send frames
 
 		// incoming frame
 		case fr := <-s.rx:
-			debug.Log(1, "RX(Session): %s", fr.Body)
-
+			debug.Log(2, "RX (Session): %s", fr)
 			switch body := fr.Body.(type) {
 			// Disposition frames can reference transfers from more than one
 			// link. Send this frame to all of them.
@@ -324,7 +320,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 					handle, ok := handles[deliveryID]
 					if !ok {
-						debug.Log(2, "role %s: didn't find deliveryID %d in handles map", body.Role, deliveryID)
+						debug.Log(2, "RX (Session): role %s: didn't find deliveryID %d in handles map", body.Role, deliveryID)
 						continue
 					}
 					delete(handles, deliveryID)
@@ -380,7 +376,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				// initial-outgoing-id(endpoint) + incoming-window(flow) - next-outgoing-id(endpoint)"
 				remoteIncomingWindow = body.IncomingWindow - nextOutgoingID
 				remoteIncomingWindow += *body.NextIncomingID
-				debug.Log(3, "RX(Session) Flow - remoteOutgoingWindow: %d remoteIncomingWindow: %d nextOutgoingID: %d", remoteOutgoingWindow, remoteIncomingWindow, nextOutgoingID)
+				debug.Log(3, "RX (Session) flow - remoteOutgoingWindow: %d remoteIncomingWindow: %d nextOutgoingID: %d", remoteOutgoingWindow, remoteIncomingWindow, nextOutgoingID)
 
 				// Send to link if handle is set
 				if body.Handle != nil {
@@ -401,7 +397,6 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 						NextOutgoingID: nextOutgoingID,
 						OutgoingWindow: s.outgoingWindow,
 					}
-					debug.Log(1, "TX (session.mux): %s", resp)
 					_ = s.txFrame(resp, nil)
 				}
 
@@ -448,18 +443,20 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 				select {
 				case <-s.conn.done:
+					// conn terminated
 				case link.rx <- fr.Body:
+					debug.Log(2, "RX (Session): mux transfer to link: %s", fr)
 				}
 
 				// if this message is received unsettled and link rcv-settle-mode == second, add to handlesByRemoteDeliveryID
 				if !body.Settled && body.DeliveryID != nil && link.receiverSettleMode != nil && *link.receiverSettleMode == ReceiverSettleModeSecond {
-					debug.Log(1, "TX(Session): adding handle to handlesByRemoteDeliveryID. delivery ID: %d", *body.DeliveryID)
+					debug.Log(1, "RX (Session): adding handle to handlesByRemoteDeliveryID. delivery ID: %d", *body.DeliveryID)
 					handlesByRemoteDeliveryID[*body.DeliveryID] = body.Handle
 				}
 
 				// Update peer's outgoing window if half has been consumed.
 				if s.needFlowCount >= s.incomingWindow/2 {
-					debug.Log(3, "TX(Session %d) Flow s.needFlowCount(%d) >= s.incomingWindow(%d)/2\n", s.channel, s.needFlowCount, s.incomingWindow)
+					debug.Log(3, "RX (Session): channel %d: flow - s.needFlowCount(%d) >= s.incomingWindow(%d)/2\n", s.channel, s.needFlowCount, s.incomingWindow)
 					s.needFlowCount = 0
 					nID := nextIncomingID
 					flow := &frames.PerformFlow{
@@ -468,7 +465,6 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 						NextOutgoingID: nextOutgoingID,
 						OutgoingWindow: s.outgoingWindow,
 					}
-					debug.Log(1, "TX(Session): %s", flow)
 					_ = s.txFrame(flow, nil)
 				}
 
@@ -505,17 +501,16 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				}
 
 				fr := frames.PerformEnd{}
-				debug.Log(1, "TX(Session): %s", fr)
 				_ = s.txFrame(&fr, nil)
 				return
 
 			default:
 				// TODO: evaluate
-				debug.Log(1, "session mux: unexpected frame: %s\n", body)
+				debug.Log(1, "RX (Session): unexpected frame: %s\n", body)
 			}
 
 		case fr := <-txTransfer:
-
+			debug.Log(2, "TX (Session): %d, %s", s.channel, fr)
 			// record current delivery ID
 			var deliveryID uint32
 			if fr.DeliveryID == &needsDeliveryID {
@@ -546,7 +541,6 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				fr.Done = nil
 			}
 
-			debug.Log(2, "TX(Session) - txtransfer: %s", fr)
 			_ = s.txFrame(fr, fr.Done)
 
 			// "Upon sending a transfer, the sending endpoint will increment
@@ -559,6 +553,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 			}
 
 		case fr := <-s.tx:
+			debug.Log(2, "TX (Session): %d, %s", s.channel, fr)
 			switch fr := fr.(type) {
 			case *frames.PerformDisposition:
 				if fr.Settled && fr.Role == encoding.RoleSender {
@@ -590,12 +585,10 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				fr.IncomingWindow = s.incomingWindow
 				fr.NextOutgoingID = nextOutgoingID
 				fr.OutgoingWindow = s.outgoingWindow
-				debug.Log(1, "TX(Session) - tx: %s", fr)
 				_ = s.txFrame(fr, nil)
 			case *frames.PerformTransfer:
 				panic("transfer frames must use txTransfer")
 			default:
-				debug.Log(1, "TX(Session) - default: %s", fr)
 				_ = s.txFrame(fr, nil)
 			}
 		}
@@ -636,6 +629,7 @@ func (s *Session) deallocateHandle(l *link) {
 func (s *Session) muxFrameToLink(l *link, fr frames.FrameBody) {
 	select {
 	case l.rx <- fr:
+		debug.Log(2, "RX (Session): mux frame to link: %s, %s", l.key.name, fr)
 		// frame successfully sent to link
 	case <-l.done:
 		// link is closed

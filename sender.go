@@ -297,7 +297,7 @@ Loop:
 	for {
 		var outgoingTransfers chan frames.PerformTransfer
 		if s.l.availableCredit > 0 {
-			debug.Log(1, "sender: credit: %d, deliveryCount: %d", s.l.availableCredit, s.l.deliveryCount)
+			debug.Log(3, "TX (Sender): credit: %d, deliveryCount: %d", s.l.availableCredit, s.l.deliveryCount)
 			outgoingTransfers = s.transfers
 		}
 
@@ -320,12 +320,11 @@ Loop:
 
 		select {
 		case dr := <-outgoingDisp:
-			debug.Log(3, "TX (sender): %s", dr)
-
 			// Ensure the session mux is not blocked
 			for {
 				select {
 				case s.l.session.tx <- dr:
+					debug.Log(2, "TX (Sender): mux frame to Session: %d, %s", s.l.session.channel, dr)
 					continue Loop
 				case fr := <-s.l.rx:
 					if err := handleFrame(fr); err != nil {
@@ -346,18 +345,17 @@ Loop:
 
 		// send data
 		case tr := <-outgoingTransfers:
-			debug.Log(3, "TX (sender): %s", tr)
-
 			// Ensure the session mux is not blocked
 			for {
 				select {
 				case s.l.session.txTransfer <- &tr:
+					debug.Log(2, "TX (Sender): mux transfer to Session: %d, %s", s.l.session.channel, tr)
 					// decrement link-credit after entire message transferred
 					if !tr.More {
 						s.l.deliveryCount++
 						s.l.availableCredit--
 						// we are the sender and we keep track of the peer's link credit
-						debug.Log(3, "TX (sender): key:%s, decremented linkCredit: %d", s.l.key.name, s.l.availableCredit)
+						debug.Log(3, "TX (Sender): link: %s, available credit: %d", s.l.key.name, s.l.availableCredit)
 					}
 					continue Loop
 				case fr := <-s.l.rx:
@@ -385,10 +383,10 @@ Loop:
 // muxHandleFrame processes fr based on type.
 // depending on the peer's RSM, it might return a disposition frame for sending
 func (s *Sender) muxHandleFrame(fr frames.FrameBody) (*frames.PerformDisposition, error) {
+	debug.Log(2, "RX (Sender): %s", fr)
 	switch fr := fr.(type) {
 	// flow control frame
 	case *frames.PerformFlow:
-		debug.Log(3, "RX (sender): %s", fr)
 		linkCredit := *fr.LinkCredit - s.l.deliveryCount
 		if fr.DeliveryCount != nil {
 			// DeliveryCount can be nil if the receiver hasn't processed
@@ -414,11 +412,9 @@ func (s *Sender) muxHandleFrame(fr frames.FrameBody) (*frames.PerformDisposition
 			DeliveryCount: &deliveryCount,
 			LinkCredit:    &linkCredit, // max number of messages
 		}
-		debug.Log(1, "TX (sender): %s", resp)
 		_ = s.l.session.txFrame(resp, nil)
 
 	case *frames.PerformDisposition:
-		debug.Log(3, "RX (sender): %s", fr)
 		// If sending async and a message is rejected, cause a link error.
 		//
 		// This isn't ideal, but there isn't a clear better way to handle it.

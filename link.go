@@ -85,9 +85,6 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 	// link-specific configuration of the attach frame
 	beforeAttach(attach)
 
-	// send Attach frame
-	debug.Log(1, "TX (attachLink): %s", attach)
-
 	_ = l.session.txFrame(attach, nil)
 
 	// wait for response
@@ -107,7 +104,6 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 		return l.session.doneErr
 	case fr = <-l.rx:
 	}
-	debug.Log(3, "RX (attachLink): %s", fr)
 	resp, ok := fr.(*frames.PerformAttach)
 	if !ok {
 		return fmt.Errorf("unexpected attach response: %#v", fr)
@@ -149,7 +145,6 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 			Handle: l.handle,
 			Closed: true,
 		}
-		debug.Log(1, "TX (attachLink): %s", fr)
 		_ = l.session.txFrame(fr, nil)
 
 		if detach.Error == nil {
@@ -204,7 +199,6 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 	switch fr := fr.(type) {
 	// remote side is closing links
 	case *frames.PerformDetach:
-		debug.Log(1, "RX (muxHandleFrame): %s", fr)
 		// don't currently support link detach and reattach
 		if !fr.Closed {
 			return &LinkError{inner: fmt.Errorf("non-closing detach not supported: %+v", fr)}
@@ -220,7 +214,7 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 
 	default:
 		// TODO: evaluate
-		debug.Log(1, "muxHandleFrame: unexpected frame: %s\n", fr)
+		debug.Log(1, "RX (link): unexpected frame: %s", fr)
 	}
 
 	return nil

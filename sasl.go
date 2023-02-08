@@ -39,11 +39,12 @@ func SASLTypePlain(username, password string) SASLType {
 				InitialResponse: []byte("\x00" + username + "\x00" + password),
 				Hostname:        "",
 			}
-			debug.Log(1, "TX (ConnSASLPlain): %s", init)
-			err := c.writeFrame(frames.Frame{
+			fr := frames.Frame{
 				Type: frames.TypeSASL,
 				Body: init,
-			})
+			}
+			debug.Log(1, "TX (ConnSASLPlain): %s", fr)
+			err := c.writeFrame(fr)
 			if err != nil {
 				return nil, err
 			}
@@ -69,11 +70,12 @@ func SASLTypeAnonymous() SASLType {
 				Mechanism:       saslMechanismANONYMOUS,
 				InitialResponse: []byte("anonymous"),
 			}
-			debug.Log(1, "TX (ConnSASLAnonymous): %s", init)
-			err := c.writeFrame(frames.Frame{
+			fr := frames.Frame{
 				Type: frames.TypeSASL,
 				Body: init,
-			})
+			}
+			debug.Log(1, "TX (ConnSASLAnonymous): %s", fr)
+			err := c.writeFrame(fr)
 			if err != nil {
 				return nil, err
 			}
@@ -101,11 +103,12 @@ func SASLTypeExternal(resp string) SASLType {
 				Mechanism:       saslMechanismEXTERNAL,
 				InitialResponse: []byte(resp),
 			}
-			debug.Log(1, "TX (ConnSASLExternal): %s", init)
-			err := c.writeFrame(frames.Frame{
+			fr := frames.Frame{
 				Type: frames.TypeSASL,
 				Body: init,
-			})
+			}
+			debug.Log(1, "TX (ConnSASLExternal): %s", fr)
+			err := c.writeFrame(fr)
 			if err != nil {
 				return nil, err
 			}

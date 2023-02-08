@@ -577,10 +577,10 @@ func (r *Receiver) mux() {
 		// this ensures that any pending credit can be reclaimed if the number of unsettled messages
 		// remains greater than half the link's max credit.
 		if pendingCredit := r.maxCredit - (r.l.availableCredit + uint32(r.countUnsettled())); pendingCredit > 0 && pendingCredit >= r.l.availableCredit && r.autoSendFlow {
-			debug.Log(1, "RX (Receiver) (auto): source: %s, inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit: %d, settleMode: %s", r.l.source.Address, r.inFlight.len(), r.l.availableCredit, r.l.deliveryCount, len(r.messages), r.countUnsettled(), r.maxCredit, r.l.receiverSettleMode.String())
+			debug.Log(1, "RX (Receiver) (auto): source: \"%s\", inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit: %d, settleMode: %s", r.l.source.Address, r.inFlight.len(), r.l.availableCredit, r.l.deliveryCount, len(r.messages), r.countUnsettled(), r.maxCredit, r.l.receiverSettleMode.String())
 			r.l.doneErr = r.creditor.IssueCredit(pendingCredit, r)
 		} else if r.l.availableCredit == 0 {
-			debug.Log(1, "RX (Receiver) (pause): source: %s, inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit: %d, settleMode: %s", r.l.source.Address, r.inFlight.len(), r.l.availableCredit, r.l.deliveryCount, len(r.messages), r.countUnsettled(), r.maxCredit, r.l.receiverSettleMode.String())
+			debug.Log(1, "RX (Receiver) (pause): source: \"%s\", inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit: %d, settleMode: %s", r.l.source.Address, r.inFlight.len(), r.l.availableCredit, r.l.deliveryCount, len(r.messages), r.countUnsettled(), r.maxCredit, r.l.receiverSettleMode.String())
 		}
 
 		if r.l.doneErr != nil {
@@ -589,7 +589,7 @@ func (r *Receiver) mux() {
 
 		drain, credits := r.creditor.FlowBits(r.l.availableCredit)
 		if drain || credits > 0 {
-			debug.Log(1, "RX (Receiver) (flow): source: %s, inflight: %d, credit: %d, creditsToAdd: %d, drain: %v, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit: %d, settleMode: %s",
+			debug.Log(1, "RX (Receiver) (flow): source: \"%s\", inflight: %d, credit: %d, creditsToAdd: %d, drain: %v, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit: %d, settleMode: %s",
 				r.l.source.Address, r.inFlight.len(), r.l.availableCredit, credits, drain, r.l.deliveryCount, len(r.messages), r.countUnsettled(), r.maxCredit, r.l.receiverSettleMode.String())
 
 			// send a flow frame.

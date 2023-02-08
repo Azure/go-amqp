@@ -297,8 +297,10 @@ Loop:
 	for {
 		var outgoingTransfers chan frames.PerformTransfer
 		if s.l.availableCredit > 0 {
-			debug.Log(3, "TX (Sender): credit: %d, deliveryCount: %d", s.l.availableCredit, s.l.deliveryCount)
+			debug.Log(1, "TX (Sender) (enable): target: \"%s\", available credit: %d, deliveryCount: %d", s.l.target.Address, s.l.availableCredit, s.l.deliveryCount)
 			outgoingTransfers = s.transfers
+		} else {
+			debug.Log(1, "TX (Sender) (pause): target: \"%s\", available credit: %d, deliveryCount: %d", s.l.target.Address, s.l.availableCredit, s.l.deliveryCount)
 		}
 
 		if len(outgoingDisps) > 0 && len(outgoingDisp) == 0 {

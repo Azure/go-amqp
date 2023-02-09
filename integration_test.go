@@ -19,10 +19,11 @@ import (
 )
 
 var localBrokerAddr string
+var rng *rand.Rand
 
 func init() {
 	// rand used to generate queue names, non-determinism is fine for this use
-	rand.Seed(time.Now().UnixNano())
+	rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 	localBrokerAddr = os.Getenv("AMQP_BROKER_ADDR")
 }
 
@@ -109,7 +110,7 @@ func TestIntegrationRoundTrip(t *testing.T) {
 				}
 
 				// add a random suffix to the link name so the test broker always creates a new node
-				targetName := fmt.Sprintf("%s %d", tt.label, rand.Uint64())
+				targetName := fmt.Sprintf("%s %d", tt.label, rng.Uint64())
 
 				// Create a sender
 				ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -262,7 +263,7 @@ func TestIntegrationRoundTrip_Buffered(t *testing.T) {
 
 			// Create a sender
 			// add a random suffix to the link name so the test broker always creates a new node
-			targetName := fmt.Sprintf("%s %d", tt.label, rand.Uint64())
+			targetName := fmt.Sprintf("%s %d", tt.label, rng.Uint64())
 			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 			sender, err := session.NewSender(ctx, targetName, nil)
 			cancel()
@@ -375,7 +376,7 @@ func TestIntegrationReceiverModeSecond(t *testing.T) {
 				}
 
 				// add a random suffix to the link name so the test broker always creates a new node
-				targetName := fmt.Sprintf("%s %d", tt.label, rand.Uint64())
+				targetName := fmt.Sprintf("%s %d", tt.label, rng.Uint64())
 
 				// Create a sender
 				ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -531,7 +532,7 @@ func TestIntegrationSessionHandleMax(t *testing.T) {
 			// Create a sender
 			for i := 0; i < tt.links; i++ {
 				ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-				sender, err := session.NewSender(ctx, fmt.Sprintf("TestIntegrationSessionHandleMax %d", rand.Uint64()), nil)
+				sender, err := session.NewSender(ctx, fmt.Sprintf("TestIntegrationSessionHandleMax %d", rng.Uint64()), nil)
 				cancel()
 				switch {
 				case err == nil:

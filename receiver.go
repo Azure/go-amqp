@@ -77,12 +77,6 @@ func (r *Receiver) DrainCredit(ctx context.Context) error {
 		return errors.New("drain can only be used with receiver links using manual credit management")
 	}
 
-	// cause mux() to check our flow conditions.
-	select {
-	case r.receiverReady <- struct{}{}:
-	default:
-	}
-
 	return r.creditor.Drain(ctx, r)
 }
 

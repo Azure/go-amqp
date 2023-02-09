@@ -84,6 +84,12 @@ func (mc *creditor) Drain(ctx context.Context, r *Receiver) error {
 
 	mc.mu.Unlock()
 
+	// cause mux() to check our flow conditions.
+	select {
+	case r.receiverReady <- struct{}{}:
+	default:
+	}
+
 	// send drain, wait for responding flow frame
 	select {
 	case <-drained:

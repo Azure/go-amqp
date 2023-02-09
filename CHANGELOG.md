@@ -18,6 +18,7 @@
 * Fixed an issue that could cause `creditor.Drain()` to return the wrong error when a link is terminated.
 * Ensure that `Receiver.Receive()` drains prefetched messages when the link closed.
 * Fixed an issue that could cause closing a `Receiver` to hang under certain circumstances.
+* In `Receiver.Drain()`, wake up `Receiver.mux()` after the drain bit has been set.
 
 ### Other Changes
 

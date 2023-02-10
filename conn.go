@@ -510,7 +510,7 @@ func (c *Conn) connReader() {
 		}
 
 		select {
-		case session.rx <- fr:
+		case session.rx <- fr.Body:
 			// sent to session
 			debug.Log(2, "RX (connReader): mux frame to session: %s", fr)
 		case <-session.done:

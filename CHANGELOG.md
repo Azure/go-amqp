@@ -25,6 +25,7 @@
 * Debug logging has been cleaned up to reduce the number of redundant entries and consolidate the entry format.
   * DEBUG_LEVEL 1 now captures all sent/received frames along with basic flow control information.
   * Higher debug levels add entries when a frame transitions across mux boundaries and other diagnostics info.
+* Document default values for incoming and outgoing windows.
 
 ## 0.18.1 (2023-01-17)
 

@@ -23,10 +23,14 @@ const (
 type SessionOptions struct {
 	// IncomingWindow sets the maximum number of unacknowledged
 	// transfer frames the server can send.
+	//
+	// Default value: 5000
 	IncomingWindow uint32
 
 	// OutgoingWindow sets the maximum number of unacknowledged
 	// transfer frames the client can send.
+	//
+	// Default value: 5000
 	OutgoingWindow uint32
 
 	// MaxLinks sets the maximum number of links (Senders/Receivers)
@@ -44,7 +48,7 @@ type Session struct {
 	channel       uint16                       // session's local channel
 	remoteChannel uint16                       // session's remote channel, owned by conn.connReader
 	conn          *Conn                        // underlying conn
-	rx            chan frames.Frame            // frames destined for this session are sent on this chan by conn.connReader
+	rx            chan frames.FrameBody        // frames destined for this session are sent on this chan by conn.connReader
 	tx            chan frames.FrameBody        // non-transfer frames to be sent; session must track disposition
 	txTransfer    chan *frames.PerformTransfer // transfer frames to be sent; session must track disposition
 
@@ -73,7 +77,7 @@ func newSession(c *Conn, channel uint16, opts *SessionOptions) *Session {
 	s := &Session{
 		conn:           c,
 		channel:        channel,
-		rx:             make(chan frames.Frame),
+		rx:             make(chan frames.FrameBody),
 		tx:             make(chan frames.FrameBody),
 		txTransfer:     make(chan *frames.PerformTransfer),
 		incomingWindow: defaultWindow,
@@ -116,7 +120,7 @@ func (s *Session) begin(ctx context.Context) error {
 	_ = s.txFrame(begin, nil)
 
 	// wait for response
-	var fr frames.Frame
+	var fr frames.FrameBody
 	select {
 	case <-ctx.Done():
 		// begin was written to the network.  assume it was
@@ -143,7 +147,7 @@ func (s *Session) begin(ctx context.Context) error {
 		// received ack that session was created
 	}
 
-	begin, ok := fr.Body.(*frames.PerformBegin)
+	begin, ok := fr.(*frames.PerformBegin)
 	if !ok {
 		// this codepath is hard to hit (impossible?).  if the response isn't a PerformBegin and we've not
 		// yet seen the remote channel number, the default clause in conn.connReader will protect us from that.
@@ -152,7 +156,7 @@ func (s *Session) begin(ctx context.Context) error {
 		// deallocate session on error.  we can't call
 		// s.Close() as the session mux hasn't started yet.
 		s.conn.deleteSession(s)
-		return fmt.Errorf("unexpected begin response: %+v", fr.Body)
+		return fmt.Errorf("unexpected begin response: %+v", fr)
 	}
 
 	// start Session multiplexor
@@ -303,7 +307,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 		// incoming frame
 		case fr := <-s.rx:
 			debug.Log(2, "RX (Session): %s", fr)
-			switch body := fr.Body.(type) {
+			switch body := fr.(type) {
 			// Disposition frames can reference transfers from more than one
 			// link. Send this frame to all of them.
 			case *frames.PerformDisposition:
@@ -343,7 +347,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 						continue
 					}
 
-					s.muxFrameToLink(link, fr.Body)
+					s.muxFrameToLink(link, fr)
 				}
 				continue
 			case *frames.PerformFlow:
@@ -385,7 +389,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 						continue
 					}
 
-					s.muxFrameToLink(link, fr.Body)
+					s.muxFrameToLink(link, fr)
 					continue
 				}
 
@@ -421,7 +425,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				link.remoteHandle = body.Handle
 				links[link.remoteHandle] = link
 
-				s.muxFrameToLink(link, fr.Body)
+				s.muxFrameToLink(link, fr)
 
 			case *frames.PerformTransfer:
 				s.needFlowCount++
@@ -444,7 +448,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				select {
 				case <-s.conn.done:
 					// conn terminated
-				case link.rx <- fr.Body:
+				case link.rx <- fr:
 					debug.Log(2, "RX (Session): mux transfer to link: %s", fr)
 				}
 
@@ -474,7 +478,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 					// TODO: per section 2.8.17 I think this should return an error
 					continue
 				}
-				s.muxFrameToLink(link, fr.Body)
+				s.muxFrameToLink(link, fr)
 
 				// we received a detach frame and sent it to the link.
 				// this was either the response to a client-side initiated

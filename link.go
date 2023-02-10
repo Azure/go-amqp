@@ -53,6 +53,14 @@ type link struct {
 	// initialized at an arbitrary point by the sender."
 	deliveryCount uint32
 
+	// The current maximum number of messages that can be handled at the receiver endpoint of the link. Only the receiver endpoint
+	// can independently set this value. The sender endpoint sets this to the last known value seen from the receiver.
+	linkCredit uint32
+
+	// The number of messages awaiting credit at the link sender endpoint. Only the sender can independently
+	// set this value. The receiver sets this to the last known value seen from the sender.
+	availableCredit uint32
+
 	senderSettleMode   *SenderSettleMode
 	receiverSettleMode *ReceiverSettleMode
 	maxMessageSize     uint64

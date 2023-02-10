@@ -426,7 +426,8 @@ func TestReceiveSuccessReceiverSettleModeFirst(t *testing.T) {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	// link credit should be 0
-	if c := r.linkCredit; c != 0 {
+	require.NoError(t, waitForReceiver(r, true))
+	if c := r.l.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
@@ -439,7 +440,7 @@ func TestReceiveSuccessReceiverSettleModeFirst(t *testing.T) {
 	// wait for the link to unpause as credit should now be available
 	require.NoError(t, waitForReceiver(r, false))
 	// link credit should be 1
-	if c := r.linkCredit; c != 1 {
+	if c := r.l.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 	// subsequent dispositions should have no effect
@@ -500,7 +501,7 @@ func TestReceiveSuccessReceiverSettleModeSecondAccept(t *testing.T) {
 	// wait for the link to pause as we've consumed all available credit
 	require.NoError(t, waitForReceiver(r, true))
 	// link credit must be zero since we only started with 1
-	if c := r.linkCredit; c != 0 {
+	if c := r.l.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
@@ -521,7 +522,7 @@ func TestReceiveSuccessReceiverSettleModeSecondAccept(t *testing.T) {
 	// wait for the link to unpause as credit should now be available
 	require.NoError(t, waitForReceiver(r, false))
 	// link credit should be back to 1
-	if c := r.linkCredit; c != 1 {
+	if c := r.l.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 	// subsequent dispositions should have no effect
@@ -582,7 +583,7 @@ func TestReceiveSuccessReceiverSettleModeSecondAcceptOnClosedLink(t *testing.T) 
 	// wait for the link to pause as we've consumed all available credit
 	require.NoError(t, waitForReceiver(r, true))
 	// link credit must be zero since we only started with 1
-	if c := r.linkCredit; c != 0 {
+	if c := r.l.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 
@@ -645,7 +646,7 @@ func TestReceiveSuccessReceiverSettleModeSecondReject(t *testing.T) {
 	// wait for the link to pause as we've consumed all available credit
 	require.NoError(t, waitForReceiver(r, true))
 	// link credit must be zero since we only started with 1
-	if c := r.linkCredit; c != 0 {
+	if c := r.l.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
@@ -665,7 +666,7 @@ func TestReceiveSuccessReceiverSettleModeSecondReject(t *testing.T) {
 	// wait for the link to unpause as credit should now be available
 	require.NoError(t, waitForReceiver(r, false))
 	// link credit should be back to 1
-	if c := r.linkCredit; c != 1 {
+	if c := r.l.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 	require.NoError(t, client.Close())
@@ -721,7 +722,7 @@ func TestReceiveSuccessReceiverSettleModeSecondRelease(t *testing.T) {
 	// wait for the link to pause as we've consumed all available credit
 	require.NoError(t, waitForReceiver(r, true))
 	// link credit must be zero since we only started with 1
-	if c := r.linkCredit; c != 0 {
+	if c := r.l.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
@@ -741,7 +742,7 @@ func TestReceiveSuccessReceiverSettleModeSecondRelease(t *testing.T) {
 	// wait for the link to unpause as credit should now be available
 	require.NoError(t, waitForReceiver(r, false))
 	// link credit should be back to 1
-	if c := r.linkCredit; c != 1 {
+	if c := r.l.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 	require.NoError(t, client.Close())
@@ -802,7 +803,7 @@ func TestReceiveSuccessReceiverSettleModeSecondModify(t *testing.T) {
 	// wait for the link to pause as we've consumed all available credit
 	require.NoError(t, waitForReceiver(r, true))
 	// link credit must be zero since we only started with 1
-	if c := r.linkCredit; c != 0 {
+	if c := r.l.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
@@ -827,7 +828,7 @@ func TestReceiveSuccessReceiverSettleModeSecondModify(t *testing.T) {
 	// wait for the link to unpause as credit should now be available
 	require.NoError(t, waitForReceiver(r, false))
 	// link credit should be back to 1
-	if c := r.linkCredit; c != 1 {
+	if c := r.l.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 	require.NoError(t, client.Close())
@@ -918,7 +919,7 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 	// wait for the link to pause as we've consumed all available credit
 	require.NoError(t, waitForReceiver(r, true))
 	// link credit must be zero since we only started with 1
-	if c := r.linkCredit; c != 0 {
+	if c := r.l.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
@@ -939,7 +940,7 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 	// wait for the link to unpause as credit should now be available
 	require.NoError(t, waitForReceiver(r, false))
 	// link credit should be back to 1
-	if c := r.linkCredit; c != 1 {
+	if c := r.l.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 	require.NoError(t, client.Close())
@@ -1220,7 +1221,7 @@ func TestReceiveSuccessAcceptFails(t *testing.T) {
 	// wait for the link to pause as we've consumed all available credit
 	require.NoError(t, waitForReceiver(r, true))
 	// link credit must be zero since we only started with 1
-	if c := r.linkCredit; c != 0 {
+	if c := r.l.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 	// close client before accepting the message

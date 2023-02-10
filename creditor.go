@@ -109,8 +109,8 @@ func (mc *creditor) IssueCredit(credits uint32, r *Receiver) error {
 
 	if mc.drained != nil {
 		return errLinkDraining
-	} else if unsettled := uint32(r.countUnsettled()); credits+unsettled+r.linkCredit > r.maxCredit {
-		return fmt.Errorf("link credit exceeded: requested %d, available %d, max %d, %d unsettled messages", credits, r.linkCredit, r.maxCredit, unsettled)
+	} else if unsettled := uint32(r.countUnsettled()); credits+unsettled+r.l.linkCredit > r.maxCredit {
+		return fmt.Errorf("link credit exceeded: requested %d, available %d, max %d, %d unsettled messages", credits, r.l.linkCredit, r.maxCredit, unsettled)
 	}
 
 	mc.creditsToAdd += credits

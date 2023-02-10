@@ -28,10 +28,6 @@ type Sender struct {
 	mu              sync.Mutex // protects buf and nextDeliveryTag
 	buf             buffer.Buffer
 	nextDeliveryTag uint64
-
-	// The number of messages awaiting credit at the link sender endpoint. Only the sender can independently
-	// set this value. The receiver sets this to the last known value seen from the sender.
-	availableCredit uint32
 }
 
 // LinkName() is the name of the link used for this Sender.
@@ -300,11 +296,11 @@ func (s *Sender) mux() {
 Loop:
 	for {
 		var outgoingTransfers chan frames.PerformTransfer
-		if s.availableCredit > 0 {
-			debug.Log(1, "TX (Sender) (enable): target: %q, available credit: %d, deliveryCount: %d", s.l.target.Address, s.availableCredit, s.l.deliveryCount)
+		if s.l.availableCredit > 0 {
+			debug.Log(1, "TX (Sender) (enable): target: %q, available credit: %d, deliveryCount: %d", s.l.target.Address, s.l.availableCredit, s.l.deliveryCount)
 			outgoingTransfers = s.transfers
 		} else {
-			debug.Log(1, "TX (Sender) (pause): target: %q, available credit: %d, deliveryCount: %d", s.l.target.Address, s.availableCredit, s.l.deliveryCount)
+			debug.Log(1, "TX (Sender) (pause): target: %q, available credit: %d, deliveryCount: %d", s.l.target.Address, s.l.availableCredit, s.l.deliveryCount)
 		}
 
 		if len(outgoingDisps) > 0 && len(outgoingDisp) == 0 {
@@ -359,9 +355,9 @@ Loop:
 					// decrement link-credit after entire message transferred
 					if !tr.More {
 						s.l.deliveryCount++
-						s.availableCredit--
+						s.l.availableCredit--
 						// we are the sender and we keep track of the peer's link credit
-						debug.Log(3, "TX (Sender): link: %s, available credit: %d", s.l.key.name, s.availableCredit)
+						debug.Log(3, "TX (Sender): link: %s, available credit: %d", s.l.key.name, s.l.availableCredit)
 					}
 					continue Loop
 				case fr := <-s.l.rx:
@@ -401,7 +397,7 @@ func (s *Sender) muxHandleFrame(fr frames.FrameBody) (*frames.PerformDisposition
 			linkCredit += *fr.DeliveryCount
 		}
 		// TODO: clean up as part of flow control fixes
-		s.availableCredit = linkCredit
+		s.l.availableCredit = linkCredit
 
 		if !fr.Echo {
 			return nil, nil

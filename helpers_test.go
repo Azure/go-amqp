@@ -115,7 +115,7 @@ func waitForReceiver(r *Receiver, paused bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	for {
-		credit := atomic.LoadUint32(&r.linkCredit)
+		credit := atomic.LoadUint32(&r.l.linkCredit)
 		// waiting for the link to pause means its credit has been consumed
 		if (paused && credit == 0) || (!paused && credit > 0) {
 			return nil

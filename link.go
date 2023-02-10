@@ -53,11 +53,6 @@ type link struct {
 	// initialized at an arbitrary point by the sender."
 	deliveryCount uint32
 
-	// the currently available credit on the link.
-	// for senders, this is the peer's receiving credit.
-	// for receivers, this is our receiving credit.
-	availableCredit uint32
-
 	senderSettleMode   *SenderSettleMode
 	receiverSettleMode *ReceiverSettleMode
 	maxMessageSize     uint64

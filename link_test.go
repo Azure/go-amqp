@@ -25,11 +25,11 @@ func TestLinkFlowThatNeedsToReplenishCredits(t *testing.T) {
 		require.Error(t, err, "issueCredit can only be used with receiver links using manual credit management")
 
 		// and flow goes through the non-manual credit path
-		require.EqualValues(t, 0, l.l.availableCredit, "No link credits have been added")
+		require.EqualValues(t, 0, l.linkCredit, "No link credits have been added")
 
 		// we've consumed half of the maximum credit we're allowed to have - reflow!
 		l.maxCredit = 2
-		l.l.availableCredit = 1
+		l.linkCredit = 1
 		l.unsettledMessages = map[string]struct{}{}
 
 		select {
@@ -79,10 +79,10 @@ func TestLinkFlowWithZeroCredits(t *testing.T) {
 	require.Error(t, err, "issueCredit can only be used with receiver links using manual credit management")
 
 	// and flow goes through the non-manual credit path
-	require.EqualValues(t, 0, l.l.availableCredit, "No link credits have been added")
+	require.EqualValues(t, 0, l.linkCredit, "No link credits have been added")
 
 	l.maxCredit = 2
-	l.l.availableCredit = 0
+	l.linkCredit = 0
 	l.unsettledMessages = map[string]struct{}{
 		"hello":  {},
 		"hello2": {},
@@ -95,7 +95,7 @@ func TestLinkFlowWithZeroCredits(t *testing.T) {
 		t.Fatal("failed to wake up mux")
 	}
 
-	require.Zero(t, l.l.availableCredit)
+	require.Zero(t, l.linkCredit)
 }
 
 func TestLinkFlowDrain(t *testing.T) {
@@ -114,7 +114,7 @@ func TestLinkFlowDrain(t *testing.T) {
 func TestLinkFlowWithManualCreditor(t *testing.T) {
 	l := newTestLink(t)
 	l.autoSendFlow = false
-	l.l.availableCredit = 1
+	l.linkCredit = 1
 	l.maxCredit = 1000
 	go l.mux()
 	defer close(l.l.close)
@@ -136,7 +136,7 @@ func TestLinkFlowWithManualCreditor(t *testing.T) {
 func TestLinkFlowWithManualCreditorTooManyCredits(t *testing.T) {
 	l := newTestLink(t)
 	l.autoSendFlow = false
-	l.l.availableCredit = 1
+	l.linkCredit = 1
 	l.maxCredit = 100
 	go l.mux()
 	defer close(l.l.close)
@@ -184,7 +184,7 @@ func TestLinkFlowWithDrain(t *testing.T) {
 		close(errChan)
 	}(errChan)
 
-	l.l.availableCredit = 1
+	l.linkCredit = 1
 	require.NoError(t, l.DrainCredit(context.Background()))
 	require.NoError(t, <-errChan)
 }
@@ -192,7 +192,7 @@ func TestLinkFlowWithDrain(t *testing.T) {
 func TestLinkFlowWithManualCreditorAndNoFlowNeeded(t *testing.T) {
 	l := newTestLink(t)
 	l.autoSendFlow = false
-	l.l.availableCredit = 1
+	l.linkCredit = 1
 	go l.mux()
 	defer close(l.l.close)
 
@@ -215,18 +215,18 @@ func TestLinkFlowWithManualCreditorAndNoFlowNeeded(t *testing.T) {
 func TestMuxFlowHandlesDrainProperly(t *testing.T) {
 	l := newTestLink(t)
 	l.autoSendFlow = false
-	l.l.availableCredit = 101
+	l.linkCredit = 101
 	go l.mux()
 	defer close(l.l.close)
 
 	// simulate what our 'drain' call to muxFlow would look like
 	// when draining
 	require.NoError(t, l.muxFlow(0, true))
-	require.EqualValues(t, 101, l.l.availableCredit, "credits are untouched when draining")
+	require.EqualValues(t, 101, l.linkCredit, "credits are untouched when draining")
 
 	// when doing a non-drain flow we update the linkCredit to our new link credit total.
 	require.NoError(t, l.muxFlow(501, false))
-	require.EqualValues(t, 501, l.l.availableCredit, "credits are untouched when draining")
+	require.EqualValues(t, 501, l.linkCredit, "credits are untouched when draining")
 }
 
 func newTestLink(t *testing.T) *Receiver {
@@ -234,7 +234,7 @@ func newTestLink(t *testing.T) *Receiver {
 		l: link{
 			source: &frames.Source{},
 			// adding just enough so the debug() print will still work...
-			// debug(1, "FLOW Link Mux half: source: %s, inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s", l.source.Address, l.receiver.inFlight.len(), l.l.availableCredit, l.deliveryCount, len(l.messages), l.countUnsettled(), l.receiver.maxCredit, l.receiverSettleMode.String())
+			// debug(1, "FLOW Link Mux half: source: %s, inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s", l.source.Address, l.receiver.inFlight.len(), l.linkCredit, l.deliveryCount, len(l.messages), l.countUnsettled(), l.receiver.maxCredit, l.receiverSettleMode.String())
 			done: make(chan struct{}),
 			session: &Session{
 				tx:   make(chan frames.FrameBody, 100),

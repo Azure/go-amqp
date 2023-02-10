@@ -47,6 +47,10 @@ type Receiver struct {
 	maxCredit    uint32                  // maximum allowed inflight messages
 	inFlight     inFlight                // used to track message disposition when rcv-settle-mode == second
 	creditor     creditor                // manages credits via calls to IssueCredit/DrainCredit
+
+	// The current maximum number of messages that can be handled at the receiver endpoint of the link. Only the receiver endpoint
+	// can independently set this value. The sender endpoint sets this to the last known value seen from the receiver.
+	linkCredit uint32
 }
 
 // IssueCredit adds credits to be requested in the next flow request.
@@ -570,21 +574,21 @@ func (r *Receiver) mux() {
 		// NOTE: pendingCredit can be > 0 but not >= max/2, so use available credit as the threshold.
 		// this ensures that any pending credit can be reclaimed if the number of unsettled messages
 		// remains greater than half the link's max credit.
-		if pendingCredit := r.maxCredit - (r.l.availableCredit + uint32(r.countUnsettled())); pendingCredit > 0 && pendingCredit >= r.l.availableCredit && r.autoSendFlow {
-			debug.Log(1, "RX (Receiver) (auto): source: %q, inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit: %d, settleMode: %s", r.l.source.Address, r.inFlight.len(), r.l.availableCredit, r.l.deliveryCount, len(r.messages), r.countUnsettled(), r.maxCredit, r.l.receiverSettleMode.String())
+		if pendingCredit := r.maxCredit - (r.linkCredit + uint32(r.countUnsettled())); pendingCredit > 0 && pendingCredit >= r.linkCredit && r.autoSendFlow {
+			debug.Log(1, "RX (Receiver) (auto): source: %q, inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit: %d, settleMode: %s", r.l.source.Address, r.inFlight.len(), r.linkCredit, r.l.deliveryCount, len(r.messages), r.countUnsettled(), r.maxCredit, r.l.receiverSettleMode.String())
 			r.l.doneErr = r.creditor.IssueCredit(pendingCredit, r)
-		} else if r.l.availableCredit == 0 {
-			debug.Log(1, "RX (Receiver) (pause): source: %q, inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit: %d, settleMode: %s", r.l.source.Address, r.inFlight.len(), r.l.availableCredit, r.l.deliveryCount, len(r.messages), r.countUnsettled(), r.maxCredit, r.l.receiverSettleMode.String())
+		} else if r.linkCredit == 0 {
+			debug.Log(1, "RX (Receiver) (pause): source: %q, inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit: %d, settleMode: %s", r.l.source.Address, r.inFlight.len(), r.linkCredit, r.l.deliveryCount, len(r.messages), r.countUnsettled(), r.maxCredit, r.l.receiverSettleMode.String())
 		}
 
 		if r.l.doneErr != nil {
 			return
 		}
 
-		drain, credits := r.creditor.FlowBits(r.l.availableCredit)
+		drain, credits := r.creditor.FlowBits(r.linkCredit)
 		if drain || credits > 0 {
 			debug.Log(1, "RX (Receiver) (flow): source: %q, inflight: %d, credit: %d, creditsToAdd: %d, drain: %v, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit: %d, settleMode: %s",
-				r.l.source.Address, r.inFlight.len(), r.l.availableCredit, credits, drain, r.l.deliveryCount, len(r.messages), r.countUnsettled(), r.maxCredit, r.l.receiverSettleMode.String())
+				r.l.source.Address, r.inFlight.len(), r.linkCredit, credits, drain, r.l.deliveryCount, len(r.messages), r.countUnsettled(), r.maxCredit, r.l.receiverSettleMode.String())
 
 			// send a flow frame.
 			r.l.doneErr = r.muxFlow(credits, drain)
@@ -637,7 +641,7 @@ func (r *Receiver) muxFlow(linkCredit uint32, drain bool) error {
 	if !drain {
 		// if we're draining we don't want to touch our internal credit - we're not changing it so any issued credits
 		// are still valid until drain completes, at which point they will be naturally zeroed.
-		r.l.availableCredit = linkCredit
+		r.linkCredit = linkCredit
 	}
 
 	// Ensure the session mux is not blocked
@@ -673,7 +677,7 @@ func (r *Receiver) muxHandleFrame(fr frames.FrameBody) error {
 			// if the 'drain' flag has been set in the frame sent to the _receiver_ then
 			// we signal whomever is waiting (the service has seen and acknowledged our drain)
 			if fr.Drain && !r.autoSendFlow {
-				r.l.availableCredit = 0 // we have no active credits at this point.
+				r.linkCredit = 0 // we have no active credits at this point.
 				r.creditor.EndDrain()
 			}
 			return nil
@@ -681,7 +685,7 @@ func (r *Receiver) muxHandleFrame(fr frames.FrameBody) error {
 
 		var (
 			// copy because sent by pointer below; prevent race
-			linkCredit    = r.l.availableCredit
+			linkCredit    = r.linkCredit
 			deliveryCount = r.l.deliveryCount
 		)
 
@@ -835,8 +839,8 @@ func (r *Receiver) muxReceive(fr frames.PerformTransfer) error {
 
 	// decrement link-credit after entire message received
 	r.l.deliveryCount++
-	r.l.availableCredit--
-	debug.Log(3, "RX (Receiver) link %s - deliveryCount: %d, availableCredit: %d, len(messages): %d", r.l.key.name, r.l.deliveryCount, r.l.availableCredit, len(r.messages))
+	r.linkCredit--
+	debug.Log(3, "RX (Receiver) link %s - deliveryCount: %d, availableCredit: %d, len(messages): %d", r.l.key.name, r.l.deliveryCount, r.linkCredit, len(r.messages))
 	return nil
 }
 

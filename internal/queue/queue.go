@@ -1,65 +1,89 @@
 package queue
 
+import (
+	"container/ring"
+)
+
 // Queue[T] is a segmented FIFO queue of Ts.
 type Queue[T any] struct {
-	next  *Queue[T]
-	items []*T
-	head  int
-	tail  int
+	head *ring.Ring
+	tail *ring.Ring
+	size int
 }
 
 // New creates a new instance of Queue[T].
 //   - size is the size of each Queue segment
 func New[T any](size int) *Queue[T] {
+	r := &ring.Ring{
+		Value: &segment[T]{
+			items: make([]*T, size),
+		},
+	}
 	return &Queue[T]{
-		items: make([]*T, size),
+		head: r,
+		tail: r,
 	}
 }
 
 // Enqueue adds the specified item to the end of the queue.
 // If the current segment is full, a new segment is created.
 func (q *Queue[T]) Enqueue(item T) {
-	cur := q
 	for {
-		// always enqueue to the last segment
-		if cur.next != nil {
-			cur = cur.next
-			continue
-		}
+		r := q.tail
+		seg := r.Value.(*segment[T])
 
-		if cur.tail < len(cur.items) {
-			cur.items[cur.tail] = &item
-			cur.tail++
+		if seg.tail < len(seg.items) {
+			seg.items[seg.tail] = &item
+			seg.tail++
+			q.size++
 			return
 		}
 
-		// no free segment, allocate and enqueue
-		break
-	}
+		// segment is full, can we advance?
+		if next := r.Next(); next != q.head {
+			q.tail = next
+			continue
+		}
 
-	cur.next = &Queue[T]{
-		items: make([]*T, len(cur.items)),
+		// no, add a new ring
+		r.Link(&ring.Ring{
+			Value: &segment[T]{
+				items: make([]*T, len(seg.items)),
+			},
+		})
+
+		q.tail = r.Next()
 	}
-	cur.next.Enqueue(item)
 }
 
 // Dequeue removes and returns the item from the front of the queue.
 func (q *Queue[T]) Dequeue() *T {
-	if q.head == q.tail {
-		if q.next != nil {
-			// try next segment
-			return q.next.Dequeue()
-		}
+	r := q.head
+	seg := r.Value.(*segment[T])
 
-		// empty
+	if seg.tail == 0 {
+		// queue is empty
 		return nil
 	}
 
-	item := q.items[q.head]
-	q.head++
-	if q.head == q.tail {
+	// remove first item
+	item := seg.items[seg.head]
+	seg.items[seg.head] = nil
+	seg.head++
+	q.size--
+
+	if seg.head == seg.tail {
 		// segment is now empty, reset indices
-		q.head, q.tail = 0, 0
+		seg.head, seg.tail = 0, 0
+
+		// if we're not at the last ring, advance head to the next one
+		if next := r.Next(); next != q.head {
+			q.head = next
+		} else {
+			// this is the last segment in the ring and it's empty, so the
+			// entire queue is empty. reset head and tail to this segment.
+			q.head, q.tail = r, r
+		}
 	}
 
 	return item
@@ -67,9 +91,11 @@ func (q *Queue[T]) Dequeue() *T {
 
 // Len returns the total count of enqueued items.
 func (q *Queue[T]) Len() int {
-	var size int
-	for cur := q; cur != nil; cur = cur.next {
-		size += cur.tail - cur.head
-	}
-	return size
+	return q.size
+}
+
+type segment[T any] struct {
+	items []*T
+	head  int
+	tail  int
 }

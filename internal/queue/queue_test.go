@@ -9,43 +9,61 @@ import (
 func TestQueueBasic(t *testing.T) {
 	q := New[string](5)
 	require.NotNil(t, q)
+	require.Zero(t, q.Len())
+	require.EqualValues(t, q.head, q.tail)
 
 	v := q.Dequeue()
 	require.Nil(t, v)
-	require.Zero(t, q.head)
-	require.Zero(t, q.tail)
+	require.Zero(t, q.Len())
+	require.EqualValues(t, q.head, q.tail)
 
 	const one = "one"
 	q.Enqueue(one)
-	require.EqualValues(t, 1, q.tail)
 	require.EqualValues(t, 1, q.Len())
-	v = q.Dequeue()
-	require.NotNil(t, v)
-	require.Zero(t, q.Len())
-	require.Zero(t, q.tail)
-	require.EqualValues(t, one, *v)
+	require.EqualValues(t, q.head, q.tail)
+	seg, ok := q.head.Value.(*segment[string])
+	require.True(t, ok)
+	require.EqualValues(t, 0, seg.head)
+	require.EqualValues(t, 1, seg.tail)
 
 	v = q.Dequeue()
-	require.Empty(t, v)
+	require.NotNil(t, v)
+	require.EqualValues(t, one, *v)
+	require.Zero(t, q.Len())
+	require.EqualValues(t, q.head, q.tail)
+	seg, ok = q.head.Value.(*segment[string])
+	require.True(t, ok)
+	require.EqualValues(t, 0, seg.head)
+	require.EqualValues(t, 0, seg.tail)
+
+	v = q.Dequeue()
 	require.Nil(t, v)
 
 	const two = "two"
 	q.Enqueue(one)
 	q.Enqueue(two)
 	require.EqualValues(t, 2, q.Len())
-	require.EqualValues(t, 2, q.tail)
+	require.EqualValues(t, q.head, q.tail)
+	seg, ok = q.head.Value.(*segment[string])
+	require.True(t, ok)
+	require.EqualValues(t, 0, seg.head)
+	require.EqualValues(t, 2, seg.tail)
 
 	v = q.Dequeue()
 	require.NotNil(t, v)
-	require.EqualValues(t, 1, q.head)
-	require.EqualValues(t, 2, q.tail)
 	require.EqualValues(t, one, *v)
+	seg, ok = q.head.Value.(*segment[string])
+	require.True(t, ok)
+	require.EqualValues(t, 1, seg.head)
+	require.EqualValues(t, 2, seg.tail)
 
 	v = q.Dequeue()
 	require.NotNil(t, v)
-	require.Zero(t, q.head)
-	require.Zero(t, q.tail)
 	require.EqualValues(t, two, *v)
+	seg, ok = q.head.Value.(*segment[string])
+	require.True(t, ok)
+	require.EqualValues(t, 0, seg.head)
+	require.EqualValues(t, 0, seg.tail)
 }
 
 func TestQueueNewSeg(t *testing.T) {
@@ -53,20 +71,39 @@ func TestQueueNewSeg(t *testing.T) {
 	q := New[int](size)
 	require.NotNil(t, q)
 
+	// fill up first segment
 	for i := 0; i < size; i++ {
 		q.Enqueue(i + 1)
 	}
 
-	// fill up first segment, verify there's no new segment
-	require.Zero(t, q.head)
-	require.Equal(t, size, q.tail)
-	require.Nil(t, q.next)
+	// verify there's no new segment
 	require.EqualValues(t, size, q.Len())
+	require.EqualValues(t, q.head, q.tail)
+	seg, ok := q.head.Value.(*segment[int])
+	require.True(t, ok)
+	require.EqualValues(t, 0, seg.head)
+	require.EqualValues(t, size, seg.tail)
 
 	// with first segment full, a new one is created
 	q.Enqueue(6)
-	require.NotNil(t, q.next)
-	require.EqualValues(t, 6, q.Len())
+	require.EqualValues(t, size+1, q.Len())
+	require.NotEqualValues(t, q.head, q.tail)
+
+	// first segment undisturbed
+	seg, ok = q.head.Value.(*segment[int])
+	require.True(t, ok)
+	require.EqualValues(t, 0, seg.head)
+	require.EqualValues(t, size, seg.tail)
+
+	// second segment contains one item
+	seg, ok = q.tail.Value.(*segment[int])
+	require.True(t, ok)
+	require.EqualValues(t, 0, seg.head)
+	require.EqualValues(t, 1, seg.tail)
+
+	// new segment properly linked
+	require.EqualValues(t, q.tail, q.head.Next())
+	require.EqualValues(t, q.head, q.tail.Next())
 
 	// dequeue the first three items
 	for i := 0; i < 3; i++ {
@@ -74,15 +111,29 @@ func TestQueueNewSeg(t *testing.T) {
 		require.NotNil(t, val)
 		require.EqualValues(t, i+1, *val)
 	}
-	// should be two items left
-	require.EqualValues(t, size-2, q.head)
 	require.EqualValues(t, 3, q.Len())
 
-	// enqueue another item, first segment is undisturbed
-	q.Enqueue(7)
 	// should be two items left
-	require.EqualValues(t, size-2, q.head)
+	seg, ok = q.head.Value.(*segment[int])
+	require.True(t, ok)
+	require.EqualValues(t, size-2, seg.head)
+	require.EqualValues(t, size, seg.tail)
+
+	// enqueue another item
+	q.Enqueue(7)
 	require.EqualValues(t, 4, q.Len())
+
+	// first segment is undisturbed (still two items)
+	seg, ok = q.head.Value.(*segment[int])
+	require.True(t, ok)
+	require.EqualValues(t, size-2, seg.head)
+	require.EqualValues(t, size, seg.tail)
+
+	// now there are two items in the second segment
+	seg, ok = q.tail.Value.(*segment[int])
+	require.True(t, ok)
+	require.EqualValues(t, 0, seg.head)
+	require.EqualValues(t, 2, seg.tail)
 
 	// now dequeue remaining items in first segment
 	for i := 0; i < 2; i++ {
@@ -90,37 +141,57 @@ func TestQueueNewSeg(t *testing.T) {
 		require.NotNil(t, val)
 		require.EqualValues(t, i+4, *val)
 	}
-
-	// first segement is now empty
-	require.Zero(t, q.head)
-	require.Zero(t, q.tail)
 	require.EqualValues(t, 2, q.Len())
 
-	// enqueueing another value should not touch first segment
-	q.Enqueue(8)
-	require.Zero(t, q.head)
-	require.Zero(t, q.tail)
-	require.EqualValues(t, 3, q.Len())
+	// first segement is now empty and q.head has advanced
+	require.EqualValues(t, q.head, q.tail)
+	seg, ok = q.tail.Prev().Value.(*segment[int])
+	require.True(t, ok)
+	require.EqualValues(t, 0, seg.head)
+	require.EqualValues(t, 0, seg.tail)
 
-	// dequeue items from second segment
+	// enqueueing another value
+	q.Enqueue(8)
+	require.EqualValues(t, 3, q.Len())
+	require.EqualValues(t, q.head, q.tail)
+	seg, ok = q.head.Value.(*segment[int])
+	require.True(t, ok)
+	require.EqualValues(t, 0, seg.head)
+	require.EqualValues(t, 3, seg.tail)
+
+	// should not touch first (empty) segment
+	seg, ok = q.head.Prev().Value.(*segment[int])
+	require.True(t, ok)
+	require.EqualValues(t, 0, seg.head)
+	require.EqualValues(t, 0, seg.tail)
+
+	// dequeue items from second segment (one left)
 	for i := 0; i < 2; i++ {
 		val := q.Dequeue()
 		require.NotNil(t, val)
 		require.EqualValues(t, 6+i, *val)
 	}
-	require.EqualValues(t, 2, q.next.head)
-	require.EqualValues(t, 3, q.next.tail)
 	require.EqualValues(t, 1, q.Len())
+
+	seg, ok = q.head.Value.(*segment[int])
+	require.True(t, ok)
+	require.EqualValues(t, 2, seg.head)
+	require.EqualValues(t, 3, seg.tail)
 
 	// dequeue last item
 	val := q.Dequeue()
 	require.NotNil(t, val)
 	require.EqualValues(t, 8, *val)
+	require.Zero(t, q.Len())
+	require.EqualValues(t, q.head, q.tail)
 
 	// both segments are empty
-	require.Zero(t, q.head)
-	require.Zero(t, q.tail)
-	require.Zero(t, q.next.head)
-	require.Zero(t, q.next.tail)
-	require.Zero(t, q.Len())
+	seg, ok = q.head.Value.(*segment[int])
+	require.True(t, ok)
+	require.EqualValues(t, 0, seg.head)
+	require.EqualValues(t, 0, seg.tail)
+	seg, ok = q.head.Next().Value.(*segment[int])
+	require.True(t, ok)
+	require.EqualValues(t, 0, seg.head)
+	require.EqualValues(t, 0, seg.tail)
 }

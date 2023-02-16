@@ -1283,9 +1283,9 @@ func TestReceiverDispositionBatcherTimer(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
-		Batching:       true,
+		BatchSize:      2,
 		BatchMaxAge:    time.Second,
-		MaxCredit:      2,
+		Credit:         2,
 		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 	})
 	cancel()
@@ -1351,9 +1351,9 @@ func TestReceiverDispositionBatcherFull(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
-		Batching:       true,
+		BatchSize:      credit,
 		BatchMaxAge:    time.Second,
-		MaxCredit:      credit,
+		Credit:         credit,
 		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 	})
 	cancel()
@@ -1427,9 +1427,9 @@ func TestReceiverDispositionBatcherRelease(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
-		Batching:       true,
+		BatchSize:      credit,
 		BatchMaxAge:    time.Second,
-		MaxCredit:      credit,
+		Credit:         credit,
 		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 	})
 	cancel()

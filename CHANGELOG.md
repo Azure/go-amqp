@@ -7,9 +7,11 @@
 * `Dial()` and `NewConn()` now require a `context.Context` as their first parameter.
   * As a result, the `ConnOptions.Timeout` field has been removed.
 * Methods `Sender.Send()` and `Receiver.Receive()` now take their respective options-type as the final argument.
-* The `Credit` field in `ReceiverOptions` has been renamed to `MaxCredit` to better reflect its purpose.
+* The `ManualCredits` field in `ReceiverOptions` has been consolidated into field `Credit`.
 * Renamed fields in the `ReceiverOptions` for configuring options on the source.
 * Renamed `DetachError` to `LinkError` as "detach" has a specific meaning which doesn't equate to the returned link errors.
+* The `Batching` field in `ReceiverOptions` has been renamed to `BatchSize` and its type changed to `uint32`.
+* Received messages must now be acknowledged regardless of the sender settlement mode.
 
 ### Bugs Fixed
 

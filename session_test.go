@@ -235,12 +235,12 @@ func TestSessionNewReceiverBatchingOneCredit(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	recv, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
-		Batching: true,
+		BatchSize: 5,
 	})
 	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, recv)
-	require.Equal(t, false, recv.batching, "expected batching disabled with one link credit")
+	require.EqualValues(t, 0, recv.batchSize, "expected batching disabled with one link credit")
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	err = session.Close(ctx)
 	cancel()
@@ -282,13 +282,13 @@ func TestSessionNewReceiverBatchingEnabled(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	recv, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
-		Batching:  true,
-		MaxCredit: 10,
+		BatchSize: 10,
+		Credit:    10,
 	})
 	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, recv)
-	require.Equal(t, true, recv.batching, "expected batching enabled with multiple link credits")
+	require.EqualValues(t, 10, recv.batchSize, "expected batching enabled with multiple link credits")
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	err = session.Close(ctx)
 	cancel()
@@ -328,8 +328,8 @@ func TestSessionNewReceiverMismatchedLinkName(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	recv, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
-		Batching:  true,
-		MaxCredit: 10,
+		BatchSize: 10,
+		Credit:    10,
 	})
 	cancel()
 	require.Error(t, err)

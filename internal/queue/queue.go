@@ -79,10 +79,6 @@ func (q *Queue[T]) Dequeue() *T {
 		// if we're not at the last ring, advance head to the next one
 		if q.head != q.tail {
 			q.head = r.Next()
-		} else {
-			// this is the last segment in the ring and it's empty, so the
-			// entire queue is empty. reset head and tail to this segment.
-			q.head, q.tail = r, r
 		}
 	}
 

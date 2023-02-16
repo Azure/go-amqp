@@ -224,8 +224,8 @@ func TestManyItemsStableRingCount(t *testing.T) {
 				require.EqualValues(t, (i/segSize)+1, q.head.Len())
 			}
 		}
-		require.Equal(t, items, q.Len())
-		require.Equal(t, factor, q.head.Len())
+		require.EqualValues(t, items, q.Len())
+		require.EqualValues(t, factor, q.head.Len())
 
 		for i := 0; i < items; i++ {
 			v := q.Dequeue()
@@ -233,8 +233,87 @@ func TestManyItemsStableRingCount(t *testing.T) {
 			require.EqualValues(t, i, *v)
 		}
 		require.Zero(t, q.Len())
-		require.Equal(t, factor, q.head.Len())
+		require.EqualValues(t, factor, q.head.Len())
 
 		require.Same(t, q.head, q.tail)
 	}
+}
+
+func TestChasingRingGrowth(t *testing.T) {
+	const (
+		items   = 5000
+		factor  = 10
+		segSize = items / factor
+	)
+
+	q := New[int](segSize)
+
+	// create two segments
+	for i := 0; i < segSize*2; i++ {
+		q.Enqueue(i)
+	}
+	require.EqualValues(t, 2, q.head.Len())
+	require.NotSame(t, q.head, q.tail)
+
+	// drain first
+	for i := 0; i < segSize; i++ {
+		v := q.Dequeue()
+		require.NotNil(t, v)
+	}
+	require.EqualValues(t, 2, q.head.Len())
+	require.Same(t, q.head, q.tail)
+
+	// old head is reused now
+	for i := 0; i < segSize; i++ {
+		q.Enqueue(i)
+	}
+	require.EqualValues(t, 2, q.head.Len())
+
+	for i := 0; i < segSize; i++ {
+		v := q.Dequeue()
+		require.NotNil(t, v)
+	}
+	require.EqualValues(t, 2, q.head.Len())
+
+	for i := 0; i < segSize; i++ {
+		v := q.Dequeue()
+		require.NotNil(t, v)
+	}
+	require.EqualValues(t, 2, q.head.Len())
+	require.Zero(t, q.Len())
+	require.Same(t, q.head, q.tail)
+
+	// two segments now, add a third
+	for i := 0; i < segSize*3; i++ {
+		q.Enqueue(i)
+	}
+	require.EqualValues(t, 3, q.head.Len())
+	require.NotSame(t, q.head, q.tail)
+
+	// drain first two
+	for i := 0; i < segSize*2; i++ {
+		v := q.Dequeue()
+		require.NotNil(t, v)
+	}
+	require.EqualValues(t, 3, q.head.Len())
+	require.Same(t, q.head, q.tail)
+
+	// fill up one
+	for i := 0; i < segSize; i++ {
+		q.Enqueue(i)
+	}
+	require.EqualValues(t, 3, q.head.Len())
+	require.NotSame(t, q.head, q.tail)
+	require.EqualValues(t, segSize*2, q.Len())
+
+	// drain all
+	for {
+		v := q.Dequeue()
+		if v == nil {
+			break
+		}
+	}
+	require.EqualValues(t, 3, q.head.Len())
+	require.Same(t, q.head, q.tail)
+	require.Zero(t, q.Len())
 }

@@ -1059,3 +1059,39 @@ func TestNewSenderContextCancelled(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 	require.Nil(t, snd)
 }
+
+func TestSenderUnexpectedFrame(t *testing.T) {
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
+	require.NoError(t, err)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx, "target", nil)
+	cancel()
+	require.NoError(t, err)
+	require.NotNil(t, snd)
+
+	// senders don't receive transfer frames
+	fr, err := fake.PerformTransfer(0, 0, 1, []byte("boom"))
+	require.NoError(t, err)
+	netConn.SendFrame(fr)
+
+	// sender should now be dead
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	err = snd.Send(ctx, NewMessage([]byte("hello")), nil)
+	cancel()
+
+	var linkErr *LinkError
+	require.ErrorAs(t, err, &linkErr)
+	require.NotNil(t, linkErr.inner)
+	require.ErrorContains(t, err, "unexpected frame *frames.PerformTransfer")
+	require.NoError(t, client.Close())
+}

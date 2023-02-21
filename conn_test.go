@@ -776,7 +776,6 @@ func TestClientNewSessionInvalidInitialResponse(t *testing.T) {
 }
 
 func TestClientNewSessionInvalidSecondResponseSameChannel(t *testing.T) {
-	t.Skip("test hangs due to session mux eating unexpected frames")
 	firstChan := true
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
@@ -784,6 +783,8 @@ func TestClientNewSessionInvalidSecondResponseSameChannel(t *testing.T) {
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return fake.PerformOpen("container")
+		case *frames.PerformClose:
+			return fake.PerformClose(nil)
 		case *frames.PerformBegin:
 			if firstChan {
 				firstChan = false
@@ -809,12 +810,13 @@ func TestClientNewSessionInvalidSecondResponseSameChannel(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, session)
-	// second session fails
+	// second session fails - times out as the ack is never received
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	session, err = client.NewSession(ctx, nil)
 	cancel()
 	require.Error(t, err)
 	require.Nil(t, session)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.NoError(t, client.Close())
 }
 

@@ -35,6 +35,7 @@
 * Refactored handling of incoming frames to eliminate potential deadlocks due to "mux pumping".
 * Disallow sending of frames once the end performative has been sent.
 * Clean up client-side state when a `context.Context` expires or is cancelled and document the potential side-effects.
+* Unexpected frames will now terminate a `Session`, `Receiver`, or `Sender` as required.
 
 ## 0.18.1 (2023-01-17)
 

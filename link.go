@@ -248,11 +248,9 @@ func (l *link) muxHandleFrame(fr frames.FrameBody, clientClosed bool) error {
 		return &LinkError{RemoteErr: fr.Error}
 
 	default:
-		// TODO: evaluate
 		debug.Log(1, "RX (link): unexpected frame: %s", fr)
+		return &LinkError{inner: fmt.Errorf("internal error: unexpected frame %T", fr)}
 	}
-
-	return nil
 }
 
 // Close closes the Sender and AMQP link.

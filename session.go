@@ -164,7 +164,9 @@ func (s *Session) begin(ctx context.Context) error {
 func (s *Session) Close(ctx context.Context) error {
 	var ctxErr error
 	s.closeOnce.Do(func() {
-		close(s.close)
+		// we can't simply close(s.close) as that can race with
+		// the mux receiving an invalid frame during shutdown
+		s.close <- nil
 		select {
 		case <-s.done:
 			// mux has exited
@@ -298,6 +300,15 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 			// swap out channel so it no longer triggers
 			closed = nil
 		}
+
+		// notes on client-side closing session
+		// when session is closed, we must keep the mux running until the ack'ing end performative
+		// has been received. during this window, the session is allowed to receive frames but cannot
+		// send them.
+		// client-side close happens either by user calling Session.Close() or due to mux initiated
+		// close due to a violation of some invariant (see sending &Error{} to s.close). in the case
+		// that both code paths have been triggered, we must be careful to preserve the error that
+		// triggered the mux initiated close so it can be surfaced to the caller.
 
 		select {
 		// conn has completed, exit
@@ -520,8 +531,6 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 					return
 				}
 
-				// TODO: per spec, when end is received, we're no longer allowed to receive frames
-
 				// peer detached us with an error, save it and send the ack
 				if body.Error != nil {
 					s.doneErr = body.Error
@@ -529,11 +538,16 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 				fr := frames.PerformEnd{}
 				_ = s.txFrame(&fr, nil)
+
+				// per spec, when end is received, we're no longer allowed to receive frames
 				return
 
 			default:
-				// TODO: evaluate
 				debug.Log(1, "RX (Session): unexpected frame: %s\n", body)
+				closeWithError(&Error{
+					Condition:   ErrCondInternalError,
+					Description: "received unexpected frame",
+				}, fmt.Errorf("internal error: unexpected frame %T", body))
 			}
 
 		case fr := <-txTransfer:

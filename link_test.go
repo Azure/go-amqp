@@ -245,13 +245,11 @@ func newTestLink(t *testing.T) *Receiver {
 			close: make(chan struct{}),
 		},
 		autoSendFlow:  true,
-		messagesE:     make(chan *queue.Queue[Message], 1),
-		messagesP:     make(chan *queue.Queue[Message], 1),
 		inFlight:      inFlight{},
 		receiverReady: make(chan struct{}, 1),
 	}
 
-	l.messagesE <- queue.New[Message](100)
+	l.messagesQ = queue.NewHolder(queue.New[Message](100))
 
 	return l
 }

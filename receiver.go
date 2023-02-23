@@ -33,17 +33,8 @@ type Receiver struct {
 	l link
 
 	// message receiving
-	receiverReady chan struct{} // receiver sends on this when mux is paused to indicate it can handle more messages
-
-	// these channels work in tandem to provide exclusive access to the underlying *queue.Queue[Message].
-	// each channel is created with a buffer size of one.
-	// messagesP behaves like a mutex when there's one or more messages in the queue.
-	// messagesE is like a semaphore when the queue is empty.
-	// the *queue.Queue[Message] is only ever in one channel. which channel depends on if it contains any items.
-	// the initial state is for messagesE to contain an empty queue.
-	// see the comments elsewhere for descriptions on how enqueue, dequeue, and len operations work.
-	messagesP chan *queue.Queue[Message] // contains a populated *queue.Queue[Message]
-	messagesE chan *queue.Queue[Message] // contains an empty *queue.Queue[Message]
+	receiverReady chan struct{}          // receiver sends on this when mux is paused to indicate it can handle more messages
+	messagesQ     *queue.Holder[Message] // used to send completed messages to receiver
 
 	unsettledMessages     map[string]struct{} // used to keep track of messages being handled downstream
 	unsettledMessagesLock sync.RWMutex        // lock to protect concurrent access to unsettledMessages
@@ -108,25 +99,15 @@ func (r *Receiver) Prefetched() *Message {
 
 	// non-blocking receive to ensure buffered messages are
 	// delivered regardless of whether the link has been closed.
-	select {
-	case q := <-r.messagesE:
-		// the queue is empty so put it back
-		r.messagesE <- q
-		return nil
-	case q := <-r.messagesP:
-		// when messagesP is signaled, we're guaranteed there's at least one item in the queue
-		msg := q.Dequeue()
-		debug.Assert(msg != nil)
+	q := r.messagesQ.Acquire()
+	defer r.messagesQ.Release(q)
+
+	msg := q.Dequeue()
+	if msg != nil {
 		debug.Log(3, "RX (Receiver): prefetched delivery ID %d", msg.deliveryID)
 		msg.rcvr = r
-		// dequeue: after the item has been dequeued, send the queue to the proper channel
-		if q.Len() == 0 {
-			r.messagesE <- q
-		} else {
-			r.messagesP <- q
-		}
-		return msg
 	}
+	return msg
 }
 
 // ReceiveOptions contains any optional values for the Receiver.Receive method.
@@ -147,18 +128,12 @@ func (r *Receiver) Receive(ctx context.Context, opts *ReceiveOptions) (*Message,
 
 	// wait for the next message
 	select {
-	case q := <-r.messagesP:
-		// when messagesP is signaled, we're guaranteed there's at least one item in the queue
+	case q := <-r.messagesQ.Wait():
 		msg := q.Dequeue()
 		debug.Assert(msg != nil)
 		debug.Log(3, "RX (Receiver): received delivery ID %d", msg.deliveryID)
 		msg.rcvr = r
-		// dequeue: after the item has been dequeued, send the queue to the proper channel
-		if q.Len() == 0 {
-			r.messagesE <- q
-		} else {
-			r.messagesP <- q
-		}
+		r.messagesQ.Release(q)
 		return msg, nil
 	case <-r.l.done:
 		// if the link receives messages and is then closed between the above call to r.Prefetched()
@@ -455,15 +430,12 @@ func newReceiver(source string, session *Session, opts *ReceiverOptions) (*Recei
 		},
 		autoSendFlow:  true,
 		receiverReady: make(chan struct{}, 1),
-		messagesE:     make(chan *queue.Queue[Message], 1),
-		messagesP:     make(chan *queue.Queue[Message], 1),
 		batching:      defaultLinkBatching,
 		batchMaxAge:   defaultLinkBatchMaxAge,
 		maxCredit:     defaultLinkCredit,
 	}
 
-	// messagesE MUST always be the starting channel that's populated with an empty queue.
-	r.messagesE <- queue.New[Message](int(session.incomingWindow))
+	r.messagesQ = queue.NewHolder(queue.New[Message](int(session.incomingWindow)))
 
 	if opts == nil {
 		return r, nil
@@ -598,18 +570,7 @@ func (r *Receiver) mux() {
 	}()
 
 	for {
-		// len: fetch the queue to obtain its length
-		msgLen := 0
-		select {
-		case q := <-r.messagesE:
-			// q is guaranteed to be empty in this case
-			// the queue is empty so put it back
-			r.messagesE <- q
-		case q := <-r.messagesP:
-			msgLen = q.Len()
-			// the queue is populated so put it back
-			r.messagesP <- q
-		}
+		msgLen := r.messagesQ.Len()
 
 		// max - (linkCredit + countUnsettled) == pending credit (i.e. credit we can reclaim)
 		// once we have pending credit equal to or greater than our available credit, reclaim it.
@@ -873,20 +834,10 @@ func (r *Receiver) muxReceive(fr frames.PerformTransfer) error {
 		debug.Log(3, "RX (Receiver): add unsettled delivery ID %d", r.msg.deliveryID)
 	}
 
-	// enqueue: the queue will be in only one of the channels, it doesn't matter which one
-	var q *queue.Queue[Message]
-	select {
-	case q = <-r.messagesE:
-		// empty queue
-	case q = <-r.messagesP:
-		// populated queue
-	}
-
+	q := r.messagesQ.Acquire()
 	q.Enqueue(r.msg)
 	msgLen := q.Len()
-
-	// now that the queue has at least one item, it MUST be placed into the messagesP channel
-	r.messagesP <- q
+	r.messagesQ.Release(q)
 
 	// reset progress
 	r.msgBuf.Reset()

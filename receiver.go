@@ -463,8 +463,7 @@ func newReceiver(source string, session *Session, opts *ReceiverOptions) (*Recei
 	}
 
 	// messagesE MUST always be the starting channel that's populated with an empty queue.
-	// the queue's segment size is made relative to the session's incoming window.
-	r.messagesE <- queue.New[Message](int(session.incomingWindow) / 10)
+	r.messagesE <- queue.New[Message](int(session.incomingWindow))
 
 	if opts == nil {
 		return r, nil

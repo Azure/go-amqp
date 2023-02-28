@@ -10,6 +10,7 @@ import (
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/fake"
 	"github.com/Azure/go-amqp/internal/frames"
+	"github.com/Azure/go-amqp/internal/queue"
 	"github.com/stretchr/testify/require"
 )
 
@@ -248,6 +249,8 @@ func newTestLink(t *testing.T) *Receiver {
 		receiverReady: make(chan struct{}, 1),
 	}
 
+	l.messagesQ = queue.NewHolder(queue.New[Message](100))
+
 	return l
 }
 
@@ -421,7 +424,7 @@ func TestNewReceivingLink(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			got, err := newReceiver(sourceAddr, nil, &tt.opts)
+			got, err := newReceiver(sourceAddr, &Session{}, &tt.opts)
 			require.NoError(t, err)
 			require.NotNil(t, got)
 			tt.validate(t, got)

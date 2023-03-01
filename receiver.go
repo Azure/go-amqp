@@ -579,34 +579,24 @@ func (r *Receiver) mux() {
 		})
 	}()
 
-	var (
-		// counter that accumulates the settled delivery count.
-		// once the threshold has been reached, the counter is
-		// reset and a flow frame is sent.
-		settlementCount uint32
-
-		// contains the number of settlements that trigger a flow frame.
-		settlementThreshold uint32
-	)
+	// counter that accumulates the settled delivery count.
+	// once the threshold has been reached, the counter is
+	// reset and a flow frame is sent.
+	var settlementCount uint32
 
 	if r.autoSendFlow {
-		settlementThreshold = r.l.linkCredit
-		if settlementThreshold > 1 {
-			if settlementThreshold%2 == 0 {
-				// for even number of credits, use half the credit count
-				settlementThreshold = settlementThreshold / 2
-			} else {
-				// for odd number of credits, this gets us a smidge over half
-				settlementThreshold = (settlementThreshold * 2) / 3
-			}
-		}
 		r.l.doneErr = r.muxFlow(r.l.linkCredit, false)
 	}
 
 	for {
 		msgLen := r.messagesQ.Len()
 
-		if r.autoSendFlow && settlementCount >= settlementThreshold {
+		// once we have pending credit equal to or greater than our available credit, reclaim it.
+		// we do this instead of settlementCount > 0 to prevent flow frames from being too chatty.
+		// NOTE: we compare the settlementCount against the current link credit instead of some
+		// fixed threshold to ensure credit is reclaimed in cases where the number of unsettled
+		// messages remains high for whatever reason.
+		if r.autoSendFlow && settlementCount > 0 && settlementCount >= r.l.linkCredit {
 			debug.Log(1, "RX (Receiver) (auto): source: %q, inflight: %d, linkCredit: %d, deliveryCount: %d, messages: %d, unsettled: %d, settlementCount: %d, settleMode: %s", r.l.source.Address, r.inFlight.len(), r.l.linkCredit, r.l.deliveryCount, msgLen, r.countUnsettled(), settlementCount, r.l.receiverSettleMode.String())
 			r.l.doneErr = r.creditor.IssueCredit(settlementCount)
 			settlementCount = 0

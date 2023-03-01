@@ -1049,7 +1049,7 @@ func TestReceivingLotsOfSettledMessages(t *testing.T) {
 	require.EqualValues(t, linkCredit, receivedCount)
 
 	for _, msg := range unsettledMsgs {
-		receiver.AcceptMessage(context.Background(), msg)
+		require.NoError(t, receiver.AcceptMessage(context.Background(), msg))
 	}
 
 	// should have more credit now

@@ -132,15 +132,19 @@ func BenchmarkReceiverReceiveRSMFirst(b *testing.B) {
 	})
 	cancel()
 	require.NoError(b, err)
+
+	transfers := make([][]byte, b.N)
+	for i := 0; i < b.N; i++ {
+		fr, err := fake.PerformTransfer(0, 0, uint32(i), []byte{})
+		require.NoError(b, err)
+		transfers[i] = fr
+	}
+
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		fr, err := fake.PerformTransfer(0, 0, uint32(i), []byte{})
-		require.NoError(b, err)
-		conn.SendFrame(fr)
-		b.StartTimer()
+		conn.SendFrame(transfers[i])
 
 		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 		_, err = rcvr.Receive(ctx, nil)
@@ -179,15 +183,19 @@ func BenchmarkReceiverReceiveRSMSecond(b *testing.B) {
 	})
 	cancel()
 	require.NoError(b, err)
+
+	transfers := make([][]byte, b.N)
+	for i := 0; i < b.N; i++ {
+		fr, err := fake.PerformTransfer(0, 0, uint32(i), []byte{})
+		require.NoError(b, err)
+		transfers[i] = fr
+	}
+
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		fr, err := fake.PerformTransfer(0, 0, uint32(i), []byte{})
-		require.NoError(b, err)
-		conn.SendFrame(fr)
-		b.StartTimer()
+		conn.SendFrame(transfers[i])
 
 		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 		_, err = rcvr.Receive(ctx, nil)

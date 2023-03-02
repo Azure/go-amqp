@@ -30,7 +30,7 @@ func TestLinkFlowThatNeedsToReplenishCredits(t *testing.T) {
 		l.l.linkCredit = 1
 		l.unsettledMessages = map[string]struct{}{}
 
-		require.NoError(t, l.onSettlement(1))
+		l.onSettlement(1)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	Loop:
@@ -223,10 +223,9 @@ func newTestLink(t *testing.T) *Receiver {
 			rx:    make(chan frames.FrameBody, 100),
 			close: make(chan struct{}),
 		},
-		autoSendFlow:    true,
-		inFlight:        inFlight{},
-		settlementCount: make(chan uint32),
-		receiverReady:   make(chan struct{}, 1),
+		autoSendFlow:  true,
+		inFlight:      inFlight{},
+		receiverReady: make(chan struct{}, 1),
 	}
 
 	l.messagesQ = queue.NewHolder(queue.New[Message](100))

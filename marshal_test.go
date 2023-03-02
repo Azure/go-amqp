@@ -148,6 +148,9 @@ func BenchmarkMarshal(b *testing.B) {
 
 func BenchmarkUnmarshal(b *testing.B) {
 	for _, type_ := range allTypes {
+		if type_ == nil {
+			continue
+		}
 		b.Run(fmt.Sprintf("%T", type_), func(b *testing.B) {
 			var buf buffer.Buffer
 			err := encoding.Marshal(&buf, type_)

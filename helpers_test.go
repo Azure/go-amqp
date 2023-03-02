@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sync/atomic"
-	"testing"
 	"time"
 
 	"github.com/Azure/go-amqp/internal/encoding"
@@ -13,14 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func sendInitialFlowFrame(t *testing.T, netConn *fake.NetConn, handle uint32, credit uint32) {
+func sendInitialFlowFrame(t require.TestingT, netConn *fake.NetConn, handle uint32, credit uint32) {
 	nextIncoming := uint32(0)
 	count := uint32(0)
 	available := uint32(0)
 	b, err := fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformFlow{
 		NextIncomingID: &nextIncoming,
-		IncomingWindow: 1000,
-		OutgoingWindow: 1000,
+		IncomingWindow: 1000000,
+		OutgoingWindow: 1000000,
 		NextOutgoingID: nextIncoming + 1,
 		Handle:         &handle,
 		DeliveryCount:  &count,

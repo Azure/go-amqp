@@ -13,7 +13,6 @@ import (
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/frames"
 	"github.com/Azure/go-amqp/internal/queue"
-	"github.com/Azure/go-amqp/internal/shared"
 )
 
 // Default link options
@@ -434,16 +433,12 @@ func (r *Receiver) countUnsettled() int {
 }
 
 func newReceiver(source string, session *Session, opts *ReceiverOptions) (*Receiver, error) {
+	l := newLink(session, encoding.RoleReceiver)
+	l.source = &frames.Source{Address: source}
+	l.target = new(frames.Target)
+	l.linkCredit = defaultLinkCredit
 	r := &Receiver{
-		l: link{
-			key:        linkKey{shared.RandString(40), encoding.RoleReceiver},
-			session:    session,
-			close:      make(chan struct{}),
-			done:       make(chan struct{}),
-			source:     &frames.Source{Address: source},
-			target:     new(frames.Target),
-			linkCredit: defaultLinkCredit,
-		},
+		l:             l,
 		autoSendFlow:  true,
 		receiverReady: make(chan struct{}, 1),
 		batchSize:     defaultLinkBatchSize,
@@ -536,8 +531,6 @@ func newReceiver(source string, session *Session, opts *ReceiverOptions) (*Recei
 // attach sends the Attach performative to establish the link with its parent session.
 // this is automatically called by the new*Link constructors.
 func (r *Receiver) attach(ctx context.Context) error {
-	r.l.rx = make(chan frames.FrameBody)
-
 	if err := r.l.attach(ctx, func(pa *frames.PerformAttach) {
 		pa.Role = encoding.RoleReceiver
 		if pa.Source == nil {
@@ -630,8 +623,11 @@ func (r *Receiver) mux() {
 		}
 
 		select {
-		// received frame
-		case fr := <-r.l.rx:
+		case q := <-r.l.rxQ.Wait():
+			// populated queue
+			fr := *q.Dequeue()
+			r.l.rxQ.Release(q)
+
 			r.l.doneErr = r.muxHandleFrame(fr)
 			if r.l.doneErr != nil {
 				return
@@ -674,22 +670,14 @@ func (r *Receiver) muxFlow(linkCredit uint32, drain bool) error {
 		r.l.linkCredit = linkCredit
 	}
 
-	// Ensure the session mux is not blocked
-	for {
-		select {
-		case r.l.session.tx <- fr:
-			debug.Log(2, "TX (Receiver): %s", fr)
-			return nil
-		case fr := <-r.l.rx:
-			err := r.muxHandleFrame(fr)
-			if err != nil {
-				return err
-			}
-		case <-r.l.close:
-			return &LinkError{}
-		case <-r.l.session.done:
-			return r.l.session.doneErr
-		}
+	select {
+	case r.l.session.tx <- fr:
+		debug.Log(2, "TX (Receiver): %s", fr)
+		return nil
+	case <-r.l.close:
+		return &LinkError{}
+	case <-r.l.session.done:
+		return r.l.session.doneErr
 	}
 }
 
@@ -720,13 +708,21 @@ func (r *Receiver) muxHandleFrame(fr frames.FrameBody) error {
 		)
 
 		// send flow
-		// TODO: missing Available and session info
+		// TODO: missing Available
 		resp := &frames.PerformFlow{
 			Handle:        &r.l.handle,
 			DeliveryCount: &deliveryCount,
 			LinkCredit:    &linkCredit, // max number of messages
 		}
-		_ = r.l.session.txFrame(resp, nil)
+
+		select {
+		case r.l.session.tx <- resp:
+			debug.Log(2, "TX (Sender): %s", resp)
+		case <-r.l.close:
+			return &LinkError{}
+		case <-r.l.session.done:
+			return r.l.session.doneErr
+		}
 
 	case *frames.PerformDisposition:
 		// Unblock receivers waiting for message disposition

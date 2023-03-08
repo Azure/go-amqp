@@ -10,6 +10,8 @@ import (
 	"github.com/Azure/go-amqp/internal/debug"
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/frames"
+	"github.com/Azure/go-amqp/internal/queue"
+	"github.com/Azure/go-amqp/internal/shared"
 )
 
 // linkKey uniquely identifies a link on a connection by name and direction.
@@ -27,15 +29,17 @@ type linkKey struct {
 
 // link contains the common state and methods for sending and receiving links
 type link struct {
-	key          linkKey               // Name and direction
-	handle       uint32                // our handle
-	remoteHandle uint32                // remote's handle
-	dynamicAddr  bool                  // request a dynamic link address from the server
-	rx           chan frames.FrameBody // sessions sends frames for this link on this channel
+	key          linkKey // Name and direction
+	handle       uint32  // our handle
+	remoteHandle uint32  // remote's handle
+	dynamicAddr  bool    // request a dynamic link address from the server
+
+	// frames destined for this link are added to this queue by Session.muxFrameToLink
+	rxQ *queue.Holder[frames.FrameBody]
 
 	// used for gracefully closing link
 	close     chan struct{} // signals a link's mux to shut down; DO NOT use this to check if a link has terminated, use done instead
-	closeOnce sync.Once     // closeOnce protects close from being closed multiple times
+	closeOnce *sync.Once    // closeOnce protects close from being closed multiple times
 
 	done    chan struct{} // closed when the link has terminated (mux exited); DO NOT wait on this from within a link's mux() as it will never trigger!
 	doneErr error         // contains the error state returned from Close(); DO NOT TOUCH outside of link.go until done has been closed!
@@ -67,6 +71,49 @@ type link struct {
 	detachReceived     bool // set to true when the peer initiates link detach/close
 }
 
+func newLink(s *Session, r encoding.Role) link {
+	l := link{
+		key:       linkKey{shared.RandString(40), r},
+		session:   s,
+		close:     make(chan struct{}),
+		closeOnce: &sync.Once{},
+		done:      make(chan struct{}),
+	}
+
+	// set the segment size relative to respective window
+	var segmentSize int
+	if r == encoding.RoleReceiver {
+		segmentSize = int(s.incomingWindow)
+	} else {
+		segmentSize = int(s.outgoingWindow)
+	}
+
+	l.rxQ = queue.NewHolder(queue.New[frames.FrameBody](int(segmentSize)))
+	return l
+}
+
+// waitForFrame waits for an incoming frame to be queued.
+// it returns the next frame from the queue, or an error.
+// the error is either from the context or session.doneErr.
+// not meant for consumption outside of link.go.
+func (l *link) waitForFrame(ctx context.Context) (frames.FrameBody, error) {
+	var q *queue.Queue[frames.FrameBody]
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-l.session.done:
+		// session has terminated, no need to deallocate in this case
+		return nil, l.session.doneErr
+	case q = <-l.rxQ.Wait():
+		// frame received
+	}
+
+	fr := q.Dequeue()
+	l.rxQ.Release(q)
+
+	return *fr, nil
+}
+
 // attach sends the Attach performative to establish the link with its parent session.
 // this is automatically called by the new*Link constructors.
 func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAttach), afterAttach func(*frames.PerformAttach)) error {
@@ -91,9 +138,8 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 	_ = l.session.txFrame(attach, nil)
 
 	// wait for response
-	var fr frames.FrameBody
-	select {
-	case <-ctx.Done():
+	fr, err := l.waitForFrame(ctx)
+	if isContextErr(err) {
 		// attach was written to the network. assume it was received
 		// and that the ctx was too short to wait for the ack.
 		go func() {
@@ -102,13 +148,13 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 			l.muxClose(ctx, nil, nil, nil)
 		}()
 		return ctx.Err()
-	case <-l.session.done:
-		// session has terminated, no need to deallocate in this case
-		return l.session.doneErr
-	case fr = <-l.rx:
+	} else if err != nil {
+		return err
 	}
+
 	resp, ok := fr.(*frames.PerformAttach)
 	if !ok {
+		// TODO: seems like more cleanup is in order
 		return fmt.Errorf("unexpected attach response: %#v", fr)
 	}
 
@@ -123,8 +169,8 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 	// http://docs.oasis-open.org/amqp/core/v1.0/csprd01/amqp-core-transport-v1.0-csprd01.html#doc-idp386144
 	if resp.Source == nil && resp.Target == nil {
 		// wait for detach
-		select {
-		case <-ctx.Done():
+		fr, err := l.waitForFrame(ctx)
+		if isContextErr(err) {
 			// if we don't send an ack then we're in violation of the protocol
 			go func() {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -132,10 +178,8 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 				l.muxClose(ctx, nil, nil, nil)
 			}()
 			return ctx.Err()
-		case <-l.session.done:
-			return l.session.doneErr
-		case fr = <-l.rx:
-			l.session.deallocateHandle(l)
+		} else if err != nil {
+			return err
 		}
 
 		detach, ok := fr.(*frames.PerformDetach)
@@ -284,63 +328,45 @@ func (l *link) muxClose(ctx context.Context, err *Error, deferred func(), onRXTr
 		Error:  err,
 	}
 
-Loop:
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case l.session.tx <- fr:
-			// after sending the detach frame, break the read loop
-			break Loop
-		case fr := <-l.rx:
-			// read from link to avoid blocking session.mux
-			switch fr := fr.(type) {
-			case *frames.PerformDetach:
-				if fr.Closed {
-					l.detachReceived = true
-				}
-			case *frames.PerformTransfer:
-				if onRXTransfer != nil {
-					onRXTransfer(*fr)
-				}
-			}
-		case <-l.session.done:
-			if l.doneErr == nil {
-				l.doneErr = l.session.doneErr
-			}
-			return
+	select {
+	case <-ctx.Done():
+		return
+	case l.session.tx <- fr:
+		// frame sent to our session mux
+	case <-l.session.done:
+		if l.doneErr == nil {
+			l.doneErr = l.session.doneErr
 		}
+		return
 	}
 
-	// don't wait for remote to detach when already received
+	// if the peer initiated the close then we just sent the ack so we're done
 	if l.detachReceived {
 		return
 	}
 
+	// wait for the ack
 	for {
-		select {
-		case <-ctx.Done():
+		fr, err := l.waitForFrame(ctx)
+		if isContextErr(err) {
+			// TODO: expired context
 			return
-
-		// read from link until detach with Close == true is received
-		case fr := <-l.rx:
-			switch fr := fr.(type) {
-			case *frames.PerformDetach:
-				if fr.Closed {
-					return
-				}
-			case *frames.PerformTransfer:
-				if onRXTransfer != nil {
-					onRXTransfer(*fr)
-				}
-			}
-
-		// connection has ended
-		case <-l.session.done:
+		} else if err != nil {
 			if l.doneErr == nil {
-				l.doneErr = l.session.doneErr
+				l.doneErr = err
 			}
 			return
+		}
+
+		switch fr := fr.(type) {
+		case *frames.PerformDetach:
+			if fr.Closed {
+				return
+			}
+		case *frames.PerformTransfer:
+			if onRXTransfer != nil {
+				onRXTransfer(*fr)
+			}
 		}
 	}
 }

@@ -22,18 +22,6 @@ const (
 
 // SessionOptions contains the optional settings for configuring an AMQP session.
 type SessionOptions struct {
-	// IncomingWindow sets the maximum number of unacknowledged
-	// transfer frames the server can send.
-	//
-	// Default value: 5000
-	IncomingWindow uint32
-
-	// OutgoingWindow sets the maximum number of unacknowledged
-	// transfer frames the client can send.
-	//
-	// Default value: 5000
-	OutgoingWindow uint32
-
 	// MaxLinks sets the maximum number of links (Senders/Receivers)
 	// allowed on the session.
 	//
@@ -92,17 +80,11 @@ func newSession(c *Conn, channel uint16, opts *SessionOptions) *Session {
 	}
 
 	if opts != nil {
-		if opts.IncomingWindow != 0 {
-			s.incomingWindow = opts.IncomingWindow
-		}
 		if opts.MaxLinks != 0 {
 			// MaxLinks is the number of total links.
 			// handleMax is the max handle ID which starts
 			// at zero.  so we decrement by one
 			s.handleMax = opts.MaxLinks - 1
-		}
-		if opts.OutgoingWindow != 0 {
-			s.outgoingWindow = opts.OutgoingWindow
 		}
 	}
 

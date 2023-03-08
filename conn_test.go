@@ -557,28 +557,6 @@ func TestSessionOptions(t *testing.T) {
 		verify func(t *testing.T, s *Session)
 	}{
 		{
-			label: "SessionIncomingWindow",
-			opt: SessionOptions{
-				IncomingWindow: 5000,
-			},
-			verify: func(t *testing.T, s *Session) {
-				if s.incomingWindow != 5000 {
-					t.Errorf("unexpected incoming window %d", s.incomingWindow)
-				}
-			},
-		},
-		{
-			label: "SessionOutgoingWindow",
-			opt: SessionOptions{
-				OutgoingWindow: 6000,
-			},
-			verify: func(t *testing.T, s *Session) {
-				if s.outgoingWindow != 6000 {
-					t.Errorf("unexpected outgoing window %d", s.outgoingWindow)
-				}
-			},
-		},
-		{
 			label: "SessionMaxLinks",
 			opt: SessionOptions{
 				MaxLinks: 4096,
@@ -601,8 +579,6 @@ func TestSessionOptions(t *testing.T) {
 
 func TestClientNewSession(t *testing.T) {
 	const channelNum = 0
-	const incomingWindow = 5000
-	const outgoingWindow = 6000
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {
 		case *fake.AMQPProto:
@@ -612,12 +588,6 @@ func TestClientNewSession(t *testing.T) {
 		case *frames.PerformBegin:
 			if tt.RemoteChannel != nil {
 				return nil, errors.New("expected nil remote channel")
-			}
-			if tt.IncomingWindow != incomingWindow {
-				return nil, fmt.Errorf("unexpected incoming window %d", tt.IncomingWindow)
-			}
-			if tt.OutgoingWindow != outgoingWindow {
-				return nil, fmt.Errorf("unexpected incoming window %d", tt.OutgoingWindow)
 			}
 			return fake.PerformBegin(channelNum)
 		case *frames.PerformClose:
@@ -633,10 +603,7 @@ func TestClientNewSession(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx, &SessionOptions{
-		IncomingWindow: incomingWindow,
-		OutgoingWindow: outgoingWindow,
-	})
+	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, session)

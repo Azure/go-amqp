@@ -703,14 +703,13 @@ func (r *Receiver) muxHandleFrame(fr frames.FrameBody) error {
 
 	// flow control frame
 	case *frames.PerformFlow:
-		// if the 'drain' flag has been set in the frame sent to the _receiver_ then
-		// we signal whomever is waiting (the service has seen and acknowledged our drain)
-		if fr.Drain && !r.autoSendFlow {
-			r.l.linkCredit = 0 // we have no active credits at this point.
-			r.creditor.EndDrain()
-		}
-
 		if !fr.Echo {
+			// if the 'drain' flag has been set in the frame sent to the _receiver_ then
+			// we signal whomever is waiting (the service has seen and acknowledged our drain)
+			if fr.Drain && !r.autoSendFlow {
+				r.l.linkCredit = 0 // we have no active credits at this point.
+				r.creditor.EndDrain()
+			}
 			return nil
 		}
 

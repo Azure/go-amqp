@@ -594,8 +594,8 @@ func (r *Receiver) mux() {
 		// counter that accumulates the settled delivery count.
 		// once the threshold has been reached, the counter is
 		// reset and a flow frame is sent.
-		settlementCount := r.settlementCount
-		if settlementCount >= r.l.linkCredit {
+		previousSettlementCount := r.settlementCount
+		if previousSettlementCount >= r.l.linkCredit {
 			r.settlementCount = 0
 		}
 		r.settlementCountMu.Unlock()
@@ -605,11 +605,11 @@ func (r *Receiver) mux() {
 		// NOTE: we compare the settlementCount against the current link credit instead of some
 		// fixed threshold to ensure credit is reclaimed in cases where the number of unsettled
 		// messages remains high for whatever reason.
-		if r.autoSendFlow && settlementCount > 0 && settlementCount >= r.l.linkCredit {
-			debug.Log(1, "RX (Receiver) (auto): source: %q, inflight: %d, linkCredit: %d, deliveryCount: %d, messages: %d, unsettled: %d, settlementCount: %d, settleMode: %s", r.l.source.Address, r.inFlight.len(), r.l.linkCredit, r.l.deliveryCount, msgLen, r.countUnsettled(), settlementCount, r.l.receiverSettleMode.String())
-			r.l.doneErr = r.creditor.IssueCredit(settlementCount)
+		if r.autoSendFlow && previousSettlementCount > 0 && previousSettlementCount >= r.l.linkCredit {
+			debug.Log(1, "RX (Receiver) (auto): source: %q, inflight: %d, linkCredit: %d, deliveryCount: %d, messages: %d, unsettled: %d, settlementCount: %d, settleMode: %s", r.l.source.Address, r.inFlight.len(), r.l.linkCredit, r.l.deliveryCount, msgLen, r.countUnsettled(), previousSettlementCount, r.l.receiverSettleMode.String())
+			r.l.doneErr = r.creditor.IssueCredit(previousSettlementCount)
 		} else if r.l.linkCredit == 0 {
-			debug.Log(1, "RX (Receiver) (pause): source: %q, inflight: %d, linkCredit: %d, deliveryCount: %d, messages: %d, unsettled: %d, settlementCount: %d, settleMode: %s", r.l.source.Address, r.inFlight.len(), r.l.linkCredit, r.l.deliveryCount, msgLen, r.countUnsettled(), settlementCount, r.l.receiverSettleMode.String())
+			debug.Log(1, "RX (Receiver) (pause): source: %q, inflight: %d, linkCredit: %d, deliveryCount: %d, messages: %d, unsettled: %d, settlementCount: %d, settleMode: %s", r.l.source.Address, r.inFlight.len(), r.l.linkCredit, r.l.deliveryCount, msgLen, r.countUnsettled(), previousSettlementCount, r.l.receiverSettleMode.String())
 		}
 
 		if r.l.doneErr != nil {
@@ -619,7 +619,7 @@ func (r *Receiver) mux() {
 		drain, credits := r.creditor.FlowBits(r.l.linkCredit)
 		if drain || credits > 0 {
 			debug.Log(1, "RX (Receiver) (flow): source: %q, inflight: %d, linkCredit: %d, creditsToAdd: %d, drain: %v, deliveryCount: %d, messages: %d, unsettled: %d, settlementCount: %d, settleMode: %s",
-				r.l.source.Address, r.inFlight.len(), r.l.linkCredit, credits, drain, r.l.deliveryCount, msgLen, r.countUnsettled(), settlementCount, r.l.receiverSettleMode.String())
+				r.l.source.Address, r.inFlight.len(), r.l.linkCredit, credits, drain, r.l.deliveryCount, msgLen, r.countUnsettled(), previousSettlementCount, r.l.receiverSettleMode.String())
 
 			// send a flow frame.
 			r.l.doneErr = r.muxFlow(credits, drain)

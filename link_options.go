@@ -86,14 +86,14 @@ type SenderOptions struct {
 }
 
 type ReceiverOptions struct {
-	// LinkBatching toggles batching of message disposition.
+	// BatchSize toggles batching of message disposition.
 	//
 	// When enabled, accepting a message does not send the disposition
-	// to the server until the batch is equal to link credit or the
+	// to the server until the batch is equal to BatchSize or the
 	// batch max age expires.
 	//
-	// Default: false.
-	Batching bool
+	// Default: 0.
+	BatchSize uint32
 
 	// BatchMaxAge sets the maximum time between the start
 	// of a disposition batch and sending the batch to the server.
@@ -106,11 +106,20 @@ type ReceiverOptions struct {
 	// Capabilities is the list of extension capabilities the receiver supports.
 	Capabilities []string
 
-	// MaxCredit specifies the maximum number of unacknowledged messages
-	// the sender can transmit.
+	// Credit specifies the maximum number of unacknowledged messages
+	// the sender can transmit.  Once this limit is reached, no more messages
+	// will arrive until messages are acknowledged and settled.
+	//
+	// As messages are settled, any available credit will automatically be issued.
+	//
+	// Setting this to -1 requires manual management of link credit.
+	// Credits can be added with IssueCredit(), and links can also be
+	// drained with DrainCredit().
+	// This should only be enabled when complete control of the link's
+	// flow control is required.
 	//
 	// Default: 1.
-	MaxCredit uint32
+	Credit int32
 
 	// Durability indicates what state of the receiver will be retained durably.
 	//
@@ -138,13 +147,6 @@ type ReceiverOptions struct {
 	// Filters contains the desired filters for this receiver.
 	// If the peer cannot fulfill the filters the link will be detached.
 	Filters []LinkFilter
-
-	// ManualCredits enables manual credit management for this link.
-	// Credits can be added with IssueCredit(), and links can also be
-	// drained with DrainCredit().
-	// This should only be enabled when complete control of the link's
-	// flow control is required.
-	ManualCredits bool
 
 	// MaxMessageSize sets the maximum message size that can
 	// be received on the link.

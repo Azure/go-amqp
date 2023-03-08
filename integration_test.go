@@ -157,7 +157,7 @@ func TestIntegrationRoundTrip(t *testing.T) {
 					// Create a receiver
 					ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 					receiver, err := session.NewReceiver(ctx, targetName, &amqp.ReceiverOptions{
-						MaxCredit: 10,
+						Credit: 10,
 					})
 					cancel()
 					if err != nil {
@@ -284,7 +284,7 @@ func TestIntegrationRoundTrip_Buffered(t *testing.T) {
 			// Create a receiver
 			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 			receiver, err := session.NewReceiver(ctx, targetName, &amqp.ReceiverOptions{
-				MaxCredit:                 uint32(len(tt.data)),
+				Credit:                    int32(len(tt.data)),
 				RequestedSenderSettleMode: amqp.SenderSettleModeSettled.Ptr(),
 			})
 			cancel()
@@ -902,7 +902,7 @@ func TestReceiverModeFirst(t *testing.T) {
 
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	recv, err := session.NewReceiver(ctx, "TestReceiverModeFirst", &amqp.ReceiverOptions{
-		MaxCredit: linkCredit,
+		Credit: linkCredit,
 	})
 	cancel()
 	require.NoError(t, err)
@@ -984,6 +984,92 @@ func TestSenderExactlyOnce(t *testing.T) {
 	require.Equal(t, "hello!", string(msg.GetData()))
 	client.Close()
 	checkLeaks()
+}
+
+func TestReceivingLotsOfSettledMessages(t *testing.T) {
+	if localBrokerAddr == "" {
+		t.Skip()
+	}
+
+	// Create client
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := amqp.Dial(ctx, localBrokerAddr, nil)
+	cancel()
+	require.NoError(t, err)
+
+	// Open a session
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+
+	// Create a sender
+	// add a random suffix to the link name so the test broker always creates a new node
+	targetName := fmt.Sprintf("TestReceivingLotsOfSettledMessages %d", rng.Uint64())
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	sender, err := session.NewSender(ctx, targetName, nil)
+	cancel()
+	require.NoError(t, err)
+
+	const linkCredit = 10
+
+	// send more messages than the receiver's link credit
+	const msgCount = linkCredit * 2
+	for i := 0; i < msgCount; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		err = sender.Send(ctx, amqp.NewMessage([]byte(fmt.Sprintf("TestReceivingLotsOfSettledMessages %d", i))), nil)
+		cancel()
+		require.NoError(t, err)
+	}
+	testClose(t, sender.Close)
+
+	// Create a receiver
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	receiver, err := session.NewReceiver(ctx, targetName, &amqp.ReceiverOptions{
+		Credit:                    linkCredit,
+		RequestedSenderSettleMode: amqp.SenderSettleModeSettled.Ptr(),
+	})
+	cancel()
+	require.NoError(t, err)
+
+	unsettledMsgs := []*amqp.Message{}
+	var receivedCount int
+	for i := 0; i < msgCount; i++ {
+		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+		msg, err := receiver.Receive(ctx, nil)
+		cancel()
+		if errors.Is(err, context.DeadlineExceeded) {
+			break
+		}
+		receivedCount++
+		unsettledMsgs = append(unsettledMsgs, msg)
+	}
+
+	// shouldn't receive more than linkCredit
+	require.EqualValues(t, linkCredit, receivedCount)
+
+	for _, msg := range unsettledMsgs {
+		require.NoError(t, receiver.AcceptMessage(context.Background(), msg))
+	}
+
+	// should have more credit now
+	for i := 0; i < linkCredit; i++ {
+		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+		msg, err := receiver.Receive(ctx, nil)
+		cancel()
+		if errors.Is(err, context.DeadlineExceeded) {
+			break
+		}
+		receivedCount++
+		unsettledMsgs = append(unsettledMsgs, msg)
+	}
+
+	// now we received all the messages
+	require.EqualValues(t, msgCount, receivedCount)
+
+	testClose(t, receiver.Close)
+
+	client.Close()
 }
 
 func repeatStrings(count int, strs ...string) []string {

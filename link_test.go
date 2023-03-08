@@ -16,25 +16,17 @@ import (
 func TestLinkFlowThatNeedsToReplenishCredits(t *testing.T) {
 	for times := 0; times < 100; times++ {
 		l := newTestLink(t)
+		l.l.linkCredit = 2
 		go l.mux()
 
 		err := l.IssueCredit(1)
 		require.Error(t, err, "issueCredit can only be used with receiver links using manual credit management")
 
-		// and flow goes through the non-manual credit path
-		require.EqualValues(t, 0, l.l.linkCredit, "No link credits have been added")
-
 		// we've consumed half of the maximum credit we're allowed to have - reflow!
-		l.maxCredit = 2
 		l.l.linkCredit = 1
 		l.unsettledMessages = map[string]struct{}{}
 
-		select {
-		case l.receiverReady <- struct{}{}:
-			// woke up mux
-		default:
-			t.Fatal("failed to wake up mux")
-		}
+		l.onSettlement(1)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	Loop:
@@ -75,7 +67,6 @@ func TestLinkFlowWithZeroCredits(t *testing.T) {
 	// and flow goes through the non-manual credit path
 	require.EqualValues(t, 0, l.l.linkCredit, "No link credits have been added")
 
-	l.maxCredit = 2
 	l.l.linkCredit = 0
 	l.unsettledMessages = map[string]struct{}{
 		"hello":  {},
@@ -96,7 +87,6 @@ func TestLinkFlowWithManualCreditor(t *testing.T) {
 	l := newTestLink(t)
 	l.autoSendFlow = false
 	l.l.linkCredit = 1
-	l.maxCredit = 1000
 	go l.mux()
 	defer close(l.l.close)
 
@@ -112,17 +102,6 @@ func TestLinkFlowWithManualCreditor(t *testing.T) {
 	default:
 		require.Fail(t, fmt.Sprintf("Unexpected frame was transferred: %+v", txFrame))
 	}
-}
-
-func TestLinkFlowWithManualCreditorTooManyCredits(t *testing.T) {
-	l := newTestLink(t)
-	l.autoSendFlow = false
-	l.l.linkCredit = 1
-	l.maxCredit = 100
-	go l.mux()
-	defer close(l.l.close)
-
-	require.Error(t, l.IssueCredit(100))
 }
 
 func TestLinkFlowWithManualCreditorAndNoFlowNeeded(t *testing.T) {

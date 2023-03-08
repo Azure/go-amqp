@@ -3,7 +3,6 @@ package amqp
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 )
 
@@ -103,14 +102,12 @@ func (mc *creditor) Drain(ctx context.Context, r *Receiver) error {
 
 // IssueCredit queues up additional credits to be requested at the next
 // call of FlowBits()
-func (mc *creditor) IssueCredit(credits uint32, r *Receiver) error {
+func (mc *creditor) IssueCredit(credits uint32) error {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
 
 	if mc.drained != nil {
 		return errLinkDraining
-	} else if unsettled := uint32(r.countUnsettled()); credits+unsettled+r.l.linkCredit > r.maxCredit {
-		return fmt.Errorf("link credit exceeded: requested %d, available %d, max %d, %d unsettled messages", credits, r.l.linkCredit, r.maxCredit, unsettled)
 	}
 
 	mc.creditsToAdd += credits

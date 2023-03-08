@@ -13,8 +13,7 @@ import (
 
 func TestCreditorIssueCredits(t *testing.T) {
 	r := newTestLink(t)
-	r.maxCredit = 100
-	require.NoError(t, r.creditor.IssueCredit(3, r))
+	require.NoError(t, r.creditor.IssueCredit(3))
 
 	drain, credits := r.creditor.FlowBits(1)
 	require.False(t, drain)
@@ -31,8 +30,7 @@ func TestCreditorDrain(t *testing.T) {
 	defer cancel()
 
 	r := newTestLink(t)
-	r.maxCredit = 100
-	require.NoError(t, r.creditor.IssueCredit(3, r))
+	require.NoError(t, r.creditor.IssueCredit(3))
 
 	// only one drain allowed at a time.
 	drainRoutines := sync.WaitGroup{}
@@ -80,8 +78,7 @@ func TestCreditorIssueCreditsWhileDrainingFails(t *testing.T) {
 	defer cancel()
 
 	r := newTestLink(t)
-	r.maxCredit = 100
-	require.NoError(t, r.creditor.IssueCredit(3, r))
+	require.NoError(t, r.creditor.IssueCredit(3))
 
 	// only one drain allowed at a time.
 	drainRoutines := sync.WaitGroup{}
@@ -99,7 +96,7 @@ func TestCreditorIssueCreditsWhileDrainingFails(t *testing.T) {
 	time.Sleep(time.Second * 2)
 
 	// drain is still active, so...
-	require.Error(t, r.creditor.IssueCredit(1, r), errLinkDraining.Error())
+	require.Error(t, r.creditor.IssueCredit(1), errLinkDraining.Error())
 
 	r.creditor.EndDrain()
 	wg.Wait()

@@ -986,6 +986,107 @@ func TestSenderExactlyOnce(t *testing.T) {
 	checkLeaks()
 }
 
+func TestReceivingDrainMessages(t *testing.T) {
+	if localBrokerAddr == "" {
+		t.Skip()
+	}
+
+	// Create client
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := amqp.Dial(ctx, localBrokerAddr, nil)
+	cancel()
+	require.NoError(t, err)
+
+	// Open a session
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+
+	// Create a sender
+	// add a random suffix to the link name so the test broker always creates a new node
+	targetName := fmt.Sprintf("TestReceivingDrainMessages %d", rng.Uint64())
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	sender, err := session.NewSender(ctx, targetName, nil)
+	cancel()
+	require.NoError(t, err)
+
+	// send fewer messages than the receiver's link credit
+	const msgCount = 5
+	for i := 0; i < msgCount; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		err = sender.Send(ctx, amqp.NewMessage([]byte(fmt.Sprintf("TestReceivingDrainMessages %d", i))), nil)
+		cancel()
+		require.NoError(t, err)
+	}
+
+	// Create a receiver
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	receiver, err := session.NewReceiver(ctx, targetName, &amqp.ReceiverOptions{
+		ManualCredits:             true,
+		MaxCredit:                 10,
+		RequestedSenderSettleMode: amqp.SenderSettleModeUnsettled.Ptr(),
+	})
+	cancel()
+	require.NoError(t, err)
+
+	// no credit yet, should time out
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	msg, err := receiver.Receive(ctx, nil)
+	cancel()
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Nil(t, msg)
+
+	// issue more credit than the number of messages
+	require.NoError(t, receiver.IssueCredit(msgCount*2))
+
+	unsettledMsgs := []*amqp.Message{}
+	var receivedCount int
+	for i := 0; i < msgCount; i++ {
+		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+		msg, err := receiver.Receive(ctx, nil)
+		cancel()
+		if errors.Is(err, context.DeadlineExceeded) {
+			break
+		}
+		receivedCount++
+		unsettledMsgs = append(unsettledMsgs, msg)
+	}
+
+	// shouldn't receive more than msgCount
+	require.EqualValues(t, msgCount, receivedCount)
+
+	// settle received messages
+	for _, msg := range unsettledMsgs {
+		require.NoError(t, receiver.AcceptMessage(context.Background(), msg))
+	}
+
+	// drain remaining link credit
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	require.NoError(t, receiver.DrainCredit(ctx))
+	cancel()
+
+	// now send more messages
+	for i := 0; i < msgCount; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		err = sender.Send(ctx, amqp.NewMessage([]byte(fmt.Sprintf("TestReceivingDrainMessages %d", i))), nil)
+		cancel()
+		require.NoError(t, err)
+	}
+
+	// no credit as it was drained, should time out
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	msg, err = receiver.Receive(ctx, nil)
+	cancel()
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Nil(t, msg)
+
+	testClose(t, receiver.Close)
+	testClose(t, sender.Close)
+
+	require.NoError(t, client.Close())
+}
+
 func repeatStrings(count int, strs ...string) []string {
 	var out []string
 	for i := 0; i < count; i += len(strs) {

@@ -144,10 +144,6 @@ func (m *Message) MarshalBinary() ([]byte, error) {
 	return buf.Detach(), err
 }
 
-func (m *Message) shouldSendDisposition() bool {
-	return !m.settled
-}
-
 func (m *Message) Marshal(wr *buffer.Buffer) error {
 	if m.Header != nil {
 		err := m.Header.Marshal(wr)

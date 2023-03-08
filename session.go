@@ -209,15 +209,16 @@ func (s *Session) NewReceiver(ctx context.Context, source string, opts *Receiver
 		return nil, err
 	}
 
-	// batching is just extra overhead when maxCredits == 1
-	if r.maxCredit == 1 {
-		r.batching = false
+	// batching is just extra overhead when linkCredit == 1
+	// TODO: probably extra overhead for some small values of linkCredit?
+	if r.autoSendFlow && r.l.linkCredit == 1 {
+		r.batchSize = 0
 	}
 
 	// create dispositions channel and start dispositionBatcher if batching enabled
-	if r.batching {
+	if r.batchSize > 0 {
 		// buffer dispositions chan to prevent disposition sends from blocking
-		r.dispositions = make(chan messageDisposition, r.maxCredit)
+		r.dispositions = make(chan messageDisposition, r.batchSize)
 		go r.dispositionBatcher()
 	}
 

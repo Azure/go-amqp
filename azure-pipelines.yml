@@ -64,7 +64,7 @@ jobs:
 
       - script: |
           git clone https://github.com/Azure/azure-amqp $(Pipeline.Workspace)/azure-amqp
-          git checkout v2.6.0
+          git checkout v2.6.1
           pushd $(Pipeline.Workspace)/azure-amqp/test/TestAmqpBroker
           dotnet restore
           dotnet build

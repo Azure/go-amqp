@@ -88,7 +88,7 @@ func newLink(s *Session, r encoding.Role) link {
 		segmentSize = int(s.outgoingWindow)
 	}
 
-	l.rxQ = queue.NewHolder(queue.New[frames.FrameBody](int(segmentSize)))
+	l.rxQ = queue.NewHolder(queue.New[frames.FrameBody](segmentSize))
 	return l
 }
 
@@ -97,21 +97,18 @@ func newLink(s *Session, r encoding.Role) link {
 // the error is either from the context or session.doneErr.
 // not meant for consumption outside of link.go.
 func (l *link) waitForFrame(ctx context.Context) (frames.FrameBody, error) {
-	var q *queue.Queue[frames.FrameBody]
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-l.session.done:
 		// session has terminated, no need to deallocate in this case
 		return nil, l.session.doneErr
-	case q = <-l.rxQ.Wait():
+	case q := <-l.rxQ.Wait():
 		// frame received
+		fr := q.Dequeue()
+		l.rxQ.Release(q)
+		return *fr, nil
 	}
-
-	fr := q.Dequeue()
-	l.rxQ.Release(q)
-
-	return *fr, nil
 }
 
 // attach sends the Attach performative to establish the link with its parent session.
@@ -330,6 +327,7 @@ func (l *link) muxClose(ctx context.Context, err *Error, deferred func(), onRXTr
 
 	select {
 	case <-ctx.Done():
+		// TODO: expired context
 		return
 	case l.session.tx <- fr:
 		// frame sent to our session mux

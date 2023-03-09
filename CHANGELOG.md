@@ -10,6 +10,7 @@
 * The `Credit` field in `ReceiverOptions` has been renamed to `MaxCredit` to better reflect its purpose.
 * Renamed fields in the `ReceiverOptions` for configuring options on the source.
 * Renamed `DetachError` to `LinkError` as "detach" has a specific meaning which doesn't equate to the returned link errors.
+* The `Receiver.DrainCredit()` API has been removed.
 
 ### Bugs Fixed
 

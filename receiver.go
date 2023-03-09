@@ -70,16 +70,6 @@ func (r *Receiver) IssueCredit(credit uint32) error {
 	return nil
 }
 
-// DrainCredit sets the drain flag on the next flow frame and
-// waits for the drain to be acknowledged.
-func (r *Receiver) DrainCredit(ctx context.Context) error {
-	if r.autoSendFlow {
-		return errors.New("drain can only be used with receiver links using manual credit management")
-	}
-
-	return r.creditor.Drain(ctx, r)
-}
-
 // Prefetched returns the next message that is stored in the Receiver's
 // prefetch cache. It does NOT wait for the remote sender to send messages
 // and returns immediately if the prefetch cache is empty. To receive from the

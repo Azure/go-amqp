@@ -698,7 +698,6 @@ func (r *Receiver) muxHandleFrame(fr frames.FrameBody) error {
 		)
 
 		// send flow
-		// TODO: missing Available
 		resp := &frames.PerformFlow{
 			Handle:        &r.l.handle,
 			DeliveryCount: &deliveryCount,

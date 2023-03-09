@@ -155,7 +155,7 @@ func newTestLink(t *testing.T) *Receiver {
 				tx:   make(chan frames.FrameBody, 100),
 				done: make(chan struct{}),
 			},
-			rx:    make(chan frames.FrameBody, 100),
+			rxQ:   queue.NewHolder(queue.New[frames.FrameBody](100)),
 			close: make(chan struct{}),
 		},
 		autoSendFlow:  true,
@@ -232,7 +232,7 @@ func TestNewSendingLink(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			got, err := newSender(targetAddr, nil, &tt.opts)
+			got, err := newSender(targetAddr, &Session{}, &tt.opts)
 			require.NoError(t, err)
 			require.NotNil(t, got)
 			tt.validate(t, got)

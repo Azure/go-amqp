@@ -862,6 +862,7 @@ func TestSenderFlowFrameWithEcho(t *testing.T) {
 		}
 		switch tt := req.(type) {
 		case *frames.PerformFlow:
+			require.False(t, tt.Echo)
 			defer func() { close(echo) }()
 			// here we receive the echo.  verify state
 			if id := *tt.Handle; id != 0 {

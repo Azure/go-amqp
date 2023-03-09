@@ -11,7 +11,6 @@ import (
 	"github.com/Azure/go-amqp/internal/debug"
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/frames"
-	"github.com/Azure/go-amqp/internal/shared"
 )
 
 // Sender sends messages on a single AMQP link.
@@ -181,15 +180,11 @@ func (s *Sender) Close(ctx context.Context) error {
 
 // newSendingLink creates a new sending link and attaches it to the session
 func newSender(target string, session *Session, opts *SenderOptions) (*Sender, error) {
+	l := newLink(session, encoding.RoleSender)
+	l.target = &frames.Target{Address: target}
+	l.source = new(frames.Source)
 	s := &Sender{
-		l: link{
-			key:     linkKey{shared.RandString(40), encoding.RoleSender},
-			session: session,
-			close:   make(chan struct{}),
-			done:    make(chan struct{}),
-			target:  &frames.Target{Address: target},
-			source:  new(frames.Source),
-		},
+		l:                       l,
 		closeOnDispositionError: true,
 	}
 
@@ -257,8 +252,6 @@ func newSender(target string, session *Session, opts *SenderOptions) (*Sender, e
 }
 
 func (s *Sender) attach(ctx context.Context) error {
-	s.l.rx = make(chan frames.FrameBody, 1)
-
 	if err := s.l.attach(ctx, func(pa *frames.PerformAttach) {
 		pa.Role = encoding.RoleSender
 		if pa.Target == nil {
@@ -288,11 +281,6 @@ func (s *Sender) attach(ctx context.Context) error {
 func (s *Sender) mux() {
 	defer s.l.muxClose(context.Background(), nil, nil, nil)
 
-	// used to track and send disposition frames.
-	// frames are sent in FIFO order.
-	outgoingDisp := make(chan *frames.PerformDisposition, 1)
-	outgoingDisps := []*frames.PerformDisposition{}
-
 Loop:
 	for {
 		var outgoingTransfers chan frames.PerformTransfer
@@ -303,72 +291,34 @@ Loop:
 			debug.Log(1, "TX (Sender) (pause): target: %q, available credit: %d, deliveryCount: %d", s.l.target.Address, s.l.availableCredit, s.l.deliveryCount)
 		}
 
-		if len(outgoingDisps) > 0 && len(outgoingDisp) == 0 {
-			// queue up the next outgoing frame and remove it from the slice
-			outgoingDisp <- outgoingDisps[0]
-			outgoingDisps = outgoingDisps[1:]
-		}
-
-		handleFrame := func(fr frames.FrameBody) error {
-			var disp *frames.PerformDisposition
-			disp, s.l.doneErr = s.muxHandleFrame(fr)
-			if s.l.doneErr != nil {
-				return s.l.doneErr
-			} else if disp != nil {
-				outgoingDisps = append(outgoingDisps, disp)
-			}
-			return nil
-		}
-
 		select {
-		case dr := <-outgoingDisp:
-			// Ensure the session mux is not blocked
-			for {
-				select {
-				case s.l.session.tx <- dr:
-					debug.Log(2, "TX (Sender): mux frame to Session: %d, %s", s.l.session.channel, dr)
-					continue Loop
-				case fr := <-s.l.rx:
-					if err := handleFrame(fr); err != nil {
-						return
-					}
-				case <-s.l.close:
-					continue Loop
-				case <-s.l.session.done:
-					continue Loop
-				}
-			}
-
 		// received frame
-		case fr := <-s.l.rx:
-			if err := handleFrame(fr); err != nil {
+		case q := <-s.l.rxQ.Wait():
+			// populated queue
+			fr := *q.Dequeue()
+			s.l.rxQ.Release(q)
+			s.l.doneErr = s.muxHandleFrame(fr)
+			if s.l.doneErr != nil {
 				return
 			}
 
 		// send data
 		case tr := <-outgoingTransfers:
-			// Ensure the session mux is not blocked
-			for {
-				select {
-				case s.l.session.txTransfer <- &tr:
-					debug.Log(2, "TX (Sender): mux transfer to Session: %d, %s", s.l.session.channel, tr)
-					// decrement link-credit after entire message transferred
-					if !tr.More {
-						s.l.deliveryCount++
-						s.l.availableCredit--
-						// we are the sender and we keep track of the peer's link credit
-						debug.Log(3, "TX (Sender): link: %s, available credit: %d", s.l.key.name, s.l.availableCredit)
-					}
-					continue Loop
-				case fr := <-s.l.rx:
-					if err := handleFrame(fr); err != nil {
-						return
-					}
-				case <-s.l.close:
-					continue Loop
-				case <-s.l.session.done:
-					continue Loop
+			select {
+			case s.l.session.txTransfer <- &tr:
+				debug.Log(2, "TX (Sender): mux transfer to Session: %d, %s", s.l.session.channel, tr)
+				// decrement link-credit after entire message transferred
+				if !tr.More {
+					s.l.deliveryCount++
+					s.l.availableCredit--
+					// we are the sender and we keep track of the peer's link credit
+					debug.Log(3, "TX (Sender): link: %s, available credit: %d", s.l.key.name, s.l.availableCredit)
 				}
+				continue Loop
+			case <-s.l.close:
+				continue Loop
+			case <-s.l.session.done:
+				continue Loop
 			}
 
 		case <-s.l.close:
@@ -384,7 +334,7 @@ Loop:
 
 // muxHandleFrame processes fr based on type.
 // depending on the peer's RSM, it might return a disposition frame for sending
-func (s *Sender) muxHandleFrame(fr frames.FrameBody) (*frames.PerformDisposition, error) {
+func (s *Sender) muxHandleFrame(fr frames.FrameBody) error {
 	debug.Log(2, "RX (Sender): %s", fr)
 	switch fr := fr.(type) {
 	// flow control frame
@@ -400,7 +350,7 @@ func (s *Sender) muxHandleFrame(fr frames.FrameBody) (*frames.PerformDisposition
 		s.l.availableCredit = linkCredit
 
 		if !fr.Echo {
-			return nil, nil
+			return nil
 		}
 
 		var (
@@ -409,41 +359,60 @@ func (s *Sender) muxHandleFrame(fr frames.FrameBody) (*frames.PerformDisposition
 		)
 
 		// send flow
-		// TODO: missing Available and session info
+		// TODO: missing Available
 		resp := &frames.PerformFlow{
 			Handle:        &s.l.handle,
 			DeliveryCount: &deliveryCount,
 			LinkCredit:    &linkCredit, // max number of messages
 		}
-		_ = s.l.session.txFrame(resp, nil)
+
+		select {
+		case s.l.session.tx <- resp:
+			debug.Log(2, "TX (Sender): %s", resp)
+		case <-s.l.close:
+			return &LinkError{}
+		case <-s.l.session.done:
+			return s.l.session.doneErr
+		}
 
 	case *frames.PerformDisposition:
 		// If sending async and a message is rejected, cause a link error.
 		//
 		// This isn't ideal, but there isn't a clear better way to handle it.
 		if fr, ok := fr.State.(*encoding.StateRejected); ok && s.detachOnRejectDisp() {
-			return nil, &LinkError{RemoteErr: fr.Error}
+			return &LinkError{RemoteErr: fr.Error}
 		}
 
 		if fr.Settled {
-			return nil, nil
+			return nil
 		}
 
 		// peer is in mode second, so we must send confirmation of disposition.
 		// NOTE: the ack must be sent through the session so it can close out
 		// the in-flight disposition.
-		return &frames.PerformDisposition{
+		dr := &frames.PerformDisposition{
 			Role:    encoding.RoleSender,
 			First:   fr.First,
 			Last:    fr.Last,
 			Settled: true,
-		}, nil
+		}
+
+		select {
+		case s.l.session.tx <- dr:
+			debug.Log(2, "TX (Sender): mux frame to Session: %d, %s", s.l.session.channel, dr)
+		case <-s.l.close:
+			return &LinkError{}
+		case <-s.l.session.done:
+			return s.l.session.doneErr
+		}
+
+		return nil
 
 	default:
-		return nil, s.l.muxHandleFrame(fr)
+		return s.l.muxHandleFrame(fr)
 	}
 
-	return nil, nil
+	return nil
 }
 
 func (s *Sender) detachOnRejectDisp() bool {

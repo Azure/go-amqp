@@ -1,6 +1,9 @@
 package amqp
 
 import (
+	"context"
+	"errors"
+
 	"github.com/Azure/go-amqp/internal/encoding"
 )
 
@@ -101,4 +104,8 @@ func (e *SessionError) Error() string {
 		return e.RemoteErr.Error()
 	}
 	return e.inner.Error()
+}
+
+func isContextErr(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }

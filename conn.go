@@ -509,16 +509,10 @@ func (c *Conn) connReader() {
 			}
 		}
 
-		select {
-		case session.rx <- fr.Body:
-			// sent to session
-			debug.Log(2, "RX (connReader): mux frame to session: %s", fr)
-		case <-session.done:
-			// the session has terminated (or at least its mux has)
-			// we should only hit this if a session's mux abnormally terminated
-		case <-c.rxtxExit:
-			return
-		}
+		q := session.rxQ.Acquire()
+		q.Enqueue(fr.Body)
+		session.rxQ.Release(q)
+		debug.Log(2, "RX (connReader): mux frame to session: %s", fr)
 	}
 }
 

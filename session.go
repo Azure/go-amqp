@@ -12,6 +12,7 @@ import (
 	"github.com/Azure/go-amqp/internal/debug"
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/frames"
+	"github.com/Azure/go-amqp/internal/queue"
 )
 
 // Default session options
@@ -48,9 +49,11 @@ type Session struct {
 	channel       uint16                       // session's local channel
 	remoteChannel uint16                       // session's remote channel, owned by conn.connReader
 	conn          *Conn                        // underlying conn
-	rx            chan frames.FrameBody        // frames destined for this session are sent on this chan by conn.connReader
 	tx            chan frames.FrameBody        // non-transfer frames to be sent; session must track disposition
 	txTransfer    chan *frames.PerformTransfer // transfer frames to be sent; session must track disposition
+
+	// frames destined for this session are added to this queue by conn.connReader
+	rxQ *queue.Holder[frames.FrameBody]
 
 	// flow control
 	incomingWindow uint32
@@ -77,7 +80,6 @@ func newSession(c *Conn, channel uint16, opts *SessionOptions) *Session {
 	s := &Session{
 		conn:           c,
 		channel:        channel,
-		rx:             make(chan frames.FrameBody),
 		tx:             make(chan frames.FrameBody),
 		txTransfer:     make(chan *frames.PerformTransfer),
 		incomingWindow: defaultWindow,
@@ -103,9 +105,34 @@ func newSession(c *Conn, channel uint16, opts *SessionOptions) *Session {
 			s.outgoingWindow = opts.OutgoingWindow
 		}
 	}
+
 	// create handle map after options have been applied
 	s.handles = bitmap.New(s.handleMax)
+
+	s.rxQ = queue.NewHolder(queue.New[frames.FrameBody](int(s.incomingWindow)))
+
 	return s
+}
+
+// waitForFrame waits for an incoming frame to be queued.
+// it returns the next frame from the queue, or an error.
+// the error is either from the context or conn.doneErr.
+// not meant for consumption outside of session.go.
+func (s *Session) waitForFrame(ctx context.Context) (frames.FrameBody, error) {
+	var q *queue.Queue[frames.FrameBody]
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-s.conn.done:
+		return nil, s.conn.doneErr
+	case q = <-s.rxQ.Wait():
+		// populated queue
+	}
+
+	fr := q.Dequeue()
+	s.rxQ.Release(q)
+
+	return *fr, nil
 }
 
 func (s *Session) begin(ctx context.Context) error {
@@ -120,31 +147,36 @@ func (s *Session) begin(ctx context.Context) error {
 	_ = s.txFrame(begin, nil)
 
 	// wait for response
-	var fr frames.FrameBody
-	select {
-	case <-ctx.Done():
+	fr, err := s.waitForFrame(ctx)
+	if isContextErr(err) {
 		// begin was written to the network.  assume it was
 		// received and that the ctx was too short to wait for
 		// the ack.
 		go func() {
 			_ = s.txFrame(&frames.PerformEnd{}, nil)
-			select {
-			case <-s.conn.done:
-				// conn has terminated, no need to delete the session
-			case <-time.After(5 * time.Second):
-				// don't delete the session in this case. this is to avoid recylcing
-				// a channel number for a session that might not have terminated
-				debug.Log(3, "session.begin clean-up timed out waiting for PerformEnd ack")
-			case <-s.rx:
-				// received ack that session was closed, safe to delete session
-				s.conn.deleteSession(s)
+
+			// wait for the ack
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			for {
+				if fr, err := s.waitForFrame(ctx); isContextErr(err) {
+					// don't delete the session in this case. this is to avoid recylcing
+					// a channel number for a session that might not have terminated
+					debug.Log(3, "session.begin clean-up timed out waiting for PerformEnd ack")
+					return
+				} else if err != nil {
+					return
+				} else if _, ok := fr.(*frames.PerformEnd); ok {
+					// received ack that session was closed, safe to delete session
+					s.conn.deleteSession(s)
+					return
+				}
 			}
 		}()
 		return ctx.Err()
-	case <-s.conn.done:
-		return s.conn.doneErr
-	case fr = <-s.rx:
-		// received ack that session was created
+	} else if err != nil {
+		return err
 	}
 
 	begin, ok := fr.(*frames.PerformBegin)
@@ -306,8 +338,11 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 			// TODO: per spec, after end has been sent, the session is no longer allowed to send frames
 
 		// incoming frame
-		case fr := <-s.rx:
+		case q := <-s.rxQ.Wait():
+			fr := *q.Dequeue()
+			s.rxQ.Release(q)
 			debug.Log(2, "RX (Session): %s", fr)
+
 			switch body := fr.(type) {
 			// Disposition frames can reference transfers from more than one
 			// link. Send this frame to all of them.
@@ -446,12 +481,8 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 					continue
 				}
 
-				select {
-				case <-s.conn.done:
-					// conn terminated
-				case link.rx <- fr:
-					debug.Log(2, "RX (Session): mux transfer to link: %s", fr)
-				}
+				s.muxFrameToLink(link, fr)
+				debug.Log(2, "RX (Session): mux transfer to link: %s", fr)
 
 				// if this message is received unsettled and link rcv-settle-mode == second, add to handlesByRemoteDeliveryID
 				if !body.Settled && body.DeliveryID != nil && link.receiverSettleMode != nil && *link.receiverSettleMode == ReceiverSettleModeSecond {
@@ -628,20 +659,13 @@ func (s *Session) deallocateHandle(l *link) {
 
 	delete(s.linksByKey, l.key)
 	s.handles.Remove(l.handle)
-	close(l.rx)
 }
 
 func (s *Session) muxFrameToLink(l *link, fr frames.FrameBody) {
-	select {
-	case l.rx <- fr:
-		debug.Log(2, "RX (Session): mux frame to link: %s, %s", l.key.name, fr)
-		// frame successfully sent to link
-	case <-l.done:
-		// link is closed
-		// this should be impossible to hit as the link has been removed from the session once done is closed
-	case <-s.conn.done:
-		// conn is closed
-	}
+	q := l.rxQ.Acquire()
+	q.Enqueue(fr)
+	l.rxQ.Release(q)
+	debug.Log(2, "RX (Session): mux frame to link: %s, %s", l.key.name, fr)
 }
 
 // the address of this var is a sentinel value indicating

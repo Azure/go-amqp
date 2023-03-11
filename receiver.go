@@ -79,11 +79,9 @@ func (r *Receiver) IssueCredit(credit uint32) error {
 // and returns immediately if the prefetch cache is empty. To receive from the
 // prefetch and wait for messages from the remote Sender use `Receive`.
 //
-// Once a message is received, you *must* take an action on the message by calling
+// Once a message is received, and if the sender is configured in any mode other
+// than SenderSettleModeSettled, you *must* take an action on the message by calling
 // one of the following: AcceptMessage, RejectMessage, ReleaseMessage, ModifyMessage.
-//
-// For senders configured with SenderSettleModeSettled, the message disposition has
-// no effect other than reclaiming the link's credit when auto-flow is enabled.
 func (r *Receiver) Prefetched() *Message {
 	select {
 	case r.receiverReady <- struct{}{}:
@@ -93,13 +91,20 @@ func (r *Receiver) Prefetched() *Message {
 	// non-blocking receive to ensure buffered messages are
 	// delivered regardless of whether the link has been closed.
 	q := r.messagesQ.Acquire()
-	defer r.messagesQ.Release(q)
-
 	msg := q.Dequeue()
-	if msg != nil {
-		debug.Log(3, "RX (Receiver): prefetched delivery ID %d", msg.deliveryID)
-		msg.rcvr = r
+	r.messagesQ.Release(q)
+
+	if msg == nil {
+		return nil
 	}
+
+	debug.Log(3, "RX (Receiver): prefetched delivery ID %d", msg.deliveryID)
+	msg.rcvr = r
+
+	if msg.settled {
+		r.onSettlement(1)
+	}
+
 	return msg
 }
 
@@ -111,11 +116,9 @@ type ReceiveOptions struct {
 // Receive returns the next message from the sender.
 // Blocks until a message is received, ctx completes, or an error occurs.
 //
-// Once a message is received, you *must* take an action on the message by calling
+// Once a message is received, and if the sender is configured in any mode other
+// than SenderSettleModeSettled, you *must* take an action on the message by calling
 // one of the following: AcceptMessage, RejectMessage, ReleaseMessage, ModifyMessage.
-//
-// For senders configured with SenderSettleModeSettled, the message disposition has
-// no effect other than reclaiming the link's credit when auto-flow is enabled.
 func (r *Receiver) Receive(ctx context.Context, opts *ReceiveOptions) (*Message, error) {
 	if msg := r.Prefetched(); msg != nil {
 		return msg, nil
@@ -129,6 +132,9 @@ func (r *Receiver) Receive(ctx context.Context, opts *ReceiveOptions) (*Message,
 		debug.Log(3, "RX (Receiver): received delivery ID %d", msg.deliveryID)
 		msg.rcvr = r
 		r.messagesQ.Release(q)
+		if msg.settled {
+			r.onSettlement(1)
+		}
 		return msg, nil
 	case <-r.l.done:
 		// if the link receives messages and is then closed between the above call to r.Prefetched()
@@ -340,7 +346,6 @@ func (r *Receiver) sendDisposition(first uint32, last *uint32, state encoding.De
 
 func (r *Receiver) messageDisposition(ctx context.Context, msg *Message, state encoding.DeliveryState) error {
 	if msg.settled {
-		r.onSettlement(1)
 		return nil
 	}
 
@@ -601,7 +606,7 @@ func (r *Receiver) mux() {
 
 		drain, credits := r.creditor.FlowBits(r.l.linkCredit)
 		if drain || credits > 0 {
-			debug.Log(1, "RX (Receiver) (flow): source: %q, inflight: %d, linkCredit: %d, creditsToAdd: %d, drain: %v, deliveryCount: %d, messages: %d, unsettled: %d, settlementCount: %d, settleMode: %s",
+			debug.Log(1, "RX (Receiver) (flow): source: %q, inflight: %d, curLinkCredit: %d, newLinkCredit: %d, drain: %v, deliveryCount: %d, messages: %d, unsettled: %d, settlementCount: %d, settleMode: %s",
 				r.l.source.Address, r.inFlight.len(), r.l.linkCredit, credits, drain, r.l.deliveryCount, msgLen, r.countUnsettled(), previousSettlementCount, r.l.receiverSettleMode.String())
 
 			// send a flow frame.

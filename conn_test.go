@@ -386,15 +386,20 @@ func TestKeepAlives(t *testing.T) {
 }
 
 func TestKeepAlivesIdleTimeout(t *testing.T) {
+	start := make(chan struct{})
+	done := make(chan struct{})
+
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
+			close(start)
 			return fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformOpen{ContainerID: "container", IdleTimeout: time.Minute})
 		case *fake.KeepAlive:
 			return nil, nil
 		case *frames.PerformClose:
+			close(done)
 			return fake.PerformClose(nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
@@ -408,11 +413,9 @@ func TestKeepAlivesIdleTimeout(t *testing.T) {
 		IdleTimeout: idleTimeout,
 	})
 	require.NoError(t, err)
-	require.NoError(t, conn.start(time.Time{}))
 
-	done := make(chan struct{})
-	defer close(done)
 	go func() {
+		<-start
 		for {
 			select {
 			case <-time.After(idleTimeout / 2):
@@ -422,6 +425,8 @@ func TestKeepAlivesIdleTimeout(t *testing.T) {
 			}
 		}
 	}()
+
+	require.NoError(t, conn.start(time.Time{}))
 
 	time.Sleep(2 * idleTimeout)
 	require.NoError(t, conn.Close())

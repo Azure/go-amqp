@@ -372,11 +372,15 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 					// This is a protocol error:
 					//       "[...] MUST be set if the peer has received
 					//        the begin frame for the session"
-					s.close <- &Error{
+					select {
+					case s.close <- &Error{
 						Condition:   ErrCondNotAllowed,
 						Description: "next-incoming-id not set after session established",
+					}:
+						s.doneErr = errors.New("protocol error: received flow without next-incoming-id after session established")
+					default:
+						// close error already pending
 					}
-					s.doneErr = errors.New("protocol error: received flow without next-incoming-id after session established")
 					continue
 				}
 
@@ -431,11 +435,15 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				link, linkOk := s.linksByKey[linkKey{name: body.Name, role: !body.Role}]
 				s.linksMu.RUnlock()
 				if !linkOk {
-					s.close <- &Error{
+					select {
+					case s.close <- &Error{
 						Condition:   ErrCondNotAllowed,
 						Description: "received mismatched attach frame",
+					}:
+						s.doneErr = fmt.Errorf("protocol error: received mismatched attach frame %+v", body)
+					default:
+						// close error already pending
 					}
-					s.doneErr = fmt.Errorf("protocol error: received mismatched attach frame %+v", body)
 					continue
 				}
 
@@ -458,11 +466,15 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				}
 				link, ok := links[body.Handle]
 				if !ok {
-					s.close <- &Error{
+					select {
+					case s.close <- &Error{
 						Condition:   ErrCondUnattachedHandle,
 						Description: "received transfer frame referencing a handle that's not in use",
+					}:
+						s.doneErr = fmt.Errorf("received transfer frame with unknown link handle %d", body.Handle)
+					default:
+						// close error already pending
 					}
-					s.doneErr = fmt.Errorf("received transfer frame with unknown link handle %d", body.Handle)
 					continue
 				}
 
@@ -492,11 +504,15 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 			case *frames.PerformDetach:
 				link, ok := links[body.Handle]
 				if !ok {
-					s.close <- &Error{
+					select {
+					case s.close <- &Error{
 						Condition:   ErrCondUnattachedHandle,
 						Description: "received detach frame referencing a handle that's not in use",
+					}:
+						s.doneErr = fmt.Errorf("received detach frame with unknown link handle %d", body.Handle)
+					default:
+						// close error already pending
 					}
-					s.doneErr = fmt.Errorf("received detach frame with unknown link handle %d", body.Handle)
 					continue
 				}
 				s.muxFrameToLink(link, fr)

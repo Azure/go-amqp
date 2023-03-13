@@ -12,7 +12,6 @@
 * Renamed `DetachError` to `LinkError` as "detach" has a specific meaning which doesn't equate to the returned link errors.
 * The `Receiver.DrainCredit()` API has been removed.
 * The `Batching` field in `ReceiverOptions` has been renamed to `BatchSize` and its type changed to `uint32`.
-* Received messages must now be acknowledged regardless of the sender settlement mode.
 * The `IncomingWindow` and `OutgoingWindow` fields in `SessionOptions` have been removed.
 
 ### Bugs Fixed

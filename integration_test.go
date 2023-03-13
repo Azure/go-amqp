@@ -1032,7 +1032,6 @@ func TestReceivingLotsOfSettledMessages(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 
-	unsettledMsgs := []*amqp.Message{}
 	var receivedCount int
 	for i := 0; i < msgCount; i++ {
 		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -1041,27 +1040,8 @@ func TestReceivingLotsOfSettledMessages(t *testing.T) {
 		if errors.Is(err, context.DeadlineExceeded) {
 			break
 		}
+		require.EqualValues(t, fmt.Sprintf("TestReceivingLotsOfSettledMessages %d", i), string(msg.GetData()))
 		receivedCount++
-		unsettledMsgs = append(unsettledMsgs, msg)
-	}
-
-	// shouldn't receive more than linkCredit
-	require.EqualValues(t, linkCredit, receivedCount)
-
-	for _, msg := range unsettledMsgs {
-		require.NoError(t, receiver.AcceptMessage(context.Background(), msg))
-	}
-
-	// should have more credit now
-	for i := 0; i < linkCredit; i++ {
-		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-		msg, err := receiver.Receive(ctx, nil)
-		cancel()
-		if errors.Is(err, context.DeadlineExceeded) {
-			break
-		}
-		receivedCount++
-		unsettledMsgs = append(unsettledMsgs, msg)
 	}
 
 	// now we received all the messages

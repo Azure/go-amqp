@@ -458,7 +458,11 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				}
 				link, ok := links[body.Handle]
 				if !ok {
-					// TODO: per section 2.8.17 I think this should return an error
+					s.close <- &Error{
+						Condition:   ErrCondUnattachedHandle,
+						Description: "received transfer frame referencing a handle that's not in use",
+					}
+					s.doneErr = fmt.Errorf("received transfer frame with unknown link handle %d", body.Handle)
 					continue
 				}
 
@@ -488,7 +492,11 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 			case *frames.PerformDetach:
 				link, ok := links[body.Handle]
 				if !ok {
-					// TODO: per section 2.8.17 I think this should return an error
+					s.close <- &Error{
+						Condition:   ErrCondUnattachedHandle,
+						Description: "received detach frame referencing a handle that's not in use",
+					}
+					s.doneErr = fmt.Errorf("received detach frame with unknown link handle %d", body.Handle)
 					continue
 				}
 				s.muxFrameToLink(link, fr)

@@ -686,3 +686,55 @@ func TestNewSessionContextCancelled(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 	require.Nil(t, session)
 }
+
+func TestSessionReceiveTransferNoHandle(t *testing.T) {
+	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, conn, nil)
+	cancel()
+	require.NoError(t, err)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+
+	// send transfer when there's no link
+	b, err := fake.PerformTransfer(0, 0, 1, []byte("message 1"))
+	require.NoError(t, err)
+	conn.SendFrame(b)
+
+	// wait for the messages to "arrive"
+	time.Sleep(time.Second)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	var sessionErr *SessionError
+	require.ErrorAs(t, session.Close(ctx), &sessionErr)
+	require.Contains(t, sessionErr.Error(), "transfer frame with unknown link handle")
+	cancel()
+}
+
+func TestSessionReceiveDetachrNoHandle(t *testing.T) {
+	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, conn, nil)
+	cancel()
+	require.NoError(t, err)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+
+	// send transfer when there's no link
+	b, err := fake.PerformDetach(0, 0, nil)
+	require.NoError(t, err)
+	conn.SendFrame(b)
+
+	// wait for the messages to "arrive"
+	time.Sleep(time.Second)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	var sessionErr *SessionError
+	require.ErrorAs(t, session.Close(ctx), &sessionErr)
+	require.Contains(t, sessionErr.Error(), "detach frame with unknown link handle")
+	cancel()
+}

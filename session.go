@@ -146,7 +146,11 @@ func (s *Session) begin(ctx context.Context) error {
 		// either swallow the frame or blow up in some other way, both causing this call to hang.
 		// deallocate session on error.  we can't call
 		// s.Close() as the session mux hasn't started yet.
-		return fmt.Errorf("unexpected begin response: %+v", fr)
+		s.conn.deleteSession(s)
+		if err := s.conn.Close(); err != nil {
+			return err
+		}
+		return &ConnError{inner: fmt.Errorf("unexpected begin response: %#v", fr)}
 	}
 
 	// start Session multiplexor

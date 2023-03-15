@@ -139,8 +139,10 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 
 	resp, ok := fr.(*frames.PerformAttach)
 	if !ok {
-		// TODO: seems like more cleanup is in order
-		return fmt.Errorf("unexpected attach response: %#v", fr)
+		if err := l.session.conn.Close(); err != nil {
+			return err
+		}
+		return &ConnError{inner: fmt.Errorf("unexpected attach response: %#v", fr)}
 	}
 
 	// If the remote encounters an error during the attach it returns an Attach
@@ -162,7 +164,10 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 
 		detach, ok := fr.(*frames.PerformDetach)
 		if !ok {
-			return fmt.Errorf("unexpected frame while waiting for detach: %#v", fr)
+			if err := l.session.conn.Close(); err != nil {
+				return err
+			}
+			return &ConnError{inner: fmt.Errorf("unexpected frame while waiting for detach: %#v", fr)}
 		}
 
 		// send return detach

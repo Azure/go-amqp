@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 	"sync"
-	"time"
 
 	"github.com/Azure/go-amqp/internal/bitmap"
 	"github.com/Azure/go-amqp/internal/debug"
@@ -56,8 +55,9 @@ type Session struct {
 	handles    *bitmap.Bitmap    // allocated handles
 
 	// used for gracefully closing session
-	close     chan *Error
-	closeOnce sync.Once
+	close      chan *Error
+	forceClose chan struct{}
+	closeOnce  sync.Once
 
 	// part of internal public surface area
 	done    chan struct{} // closed when the session has terminated (mux exited); DO NOT wait on this from within Session.mux() as it will never trigger!
@@ -76,6 +76,7 @@ func newSession(c *Conn, channel uint16, opts *SessionOptions) *Session {
 		linksMu:        sync.RWMutex{},
 		linksByKey:     make(map[linkKey]*link),
 		close:          make(chan *Error, 1), // buffered so we can queue up an error from the mux
+		forceClose:     make(chan struct{}),
 		done:           make(chan struct{}),
 	}
 
@@ -130,34 +131,10 @@ func (s *Session) begin(ctx context.Context) error {
 
 	// wait for response
 	fr, err := s.waitForFrame(ctx)
-	if isContextErr(err) {
-		// begin was written to the network.  assume it was
-		// received and that the ctx was too short to wait for
-		// the ack.
-		go func() {
-			_ = s.txFrame(&frames.PerformEnd{}, nil)
-
-			// wait for the ack
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-
-			for {
-				if fr, err := s.waitForFrame(ctx); isContextErr(err) {
-					// don't delete the session in this case. this is to avoid recylcing
-					// a channel number for a session that might not have terminated
-					debug.Log(3, "session.begin clean-up timed out waiting for PerformEnd ack")
-					return
-				} else if err != nil {
-					return
-				} else if _, ok := fr.(*frames.PerformEnd); ok {
-					// received ack that session was closed, safe to delete session
-					s.conn.deleteSession(s)
-					return
-				}
-			}
-		}()
-		return ctx.Err()
-	} else if err != nil {
+	if err != nil {
+		// if we exit before receiving the ack, our caller will clean up the channel.
+		// however, it does mean that the peer will now have assigned an outgoing
+		// channel ID that's not in use.
 		return err
 	}
 
@@ -169,7 +146,6 @@ func (s *Session) begin(ctx context.Context) error {
 		// either swallow the frame or blow up in some other way, both causing this call to hang.
 		// deallocate session on error.  we can't call
 		// s.Close() as the session mux hasn't started yet.
-		s.conn.deleteSession(s)
 		return fmt.Errorf("unexpected begin response: %+v", fr)
 	}
 
@@ -179,10 +155,12 @@ func (s *Session) begin(ctx context.Context) error {
 	return nil
 }
 
-// Close gracefully closes the session.
+// Close closes the session.
+//   - ctx controls waiting for the peer to acknowledge the session is closed
 //
-// If ctx expires while waiting for servers response, ctx.Err() will be returned.
-// The session will continue to wait for the response until the Client is closed.
+// If the context's deadline expires or is cancelled before the operation
+// completes, the application can be left in an unknown state, potentially
+// resulting in connection errors.
 func (s *Session) Close(ctx context.Context) error {
 	s.closeOnce.Do(func() { close(s.close) })
 
@@ -190,6 +168,7 @@ func (s *Session) Close(ctx context.Context) error {
 	case <-s.done:
 		// mux has exited
 	case <-ctx.Done():
+		close(s.forceClose)
 		return ctx.Err()
 	}
 
@@ -213,7 +192,13 @@ func (s *Session) txFrame(p frames.FrameBody, done chan encoding.DeliveryState) 
 }
 
 // NewReceiver opens a new receiver link on the session.
-// opts: pass nil to accept the default values.
+//   - ctx controls waiting for the peer to create a sending terminus
+//   - source is the name of the peer's sending terminus
+//   - opts contains optional values, pass nil to accept the defaults
+//
+// If the context's deadline expires or is cancelled before the operation
+// completes, the application can be left in an unknown state, potentially
+// resulting in connection errors.
 func (s *Session) NewReceiver(ctx context.Context, source string, opts *ReceiverOptions) (*Receiver, error) {
 	r, err := newReceiver(source, s, opts)
 	if err != nil {
@@ -240,7 +225,13 @@ func (s *Session) NewReceiver(ctx context.Context, source string, opts *Receiver
 }
 
 // NewSender opens a new sender link on the session.
-// opts: pass nil to accept the default values.
+//   - ctx controls waiting for the peer to create a receiver terminus
+//   - target is the name of the peer's receiver terminus
+//   - opts contains optional values, pass nil to accept the defaults
+//
+// If the context's deadline expires or is cancelled before the operation
+// completes, the application can be left in an unknown state, potentially
+// resulting in connection errors.
 func (s *Session) NewSender(ctx context.Context, target string, opts *SenderOptions) (*Sender, error) {
 	l, err := newSender(target, s, opts)
 	if err != nil {
@@ -259,7 +250,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 		if s.doneErr == nil {
 			s.doneErr = &SessionError{}
 		} else if connErr := (&ConnError{}); !errors.As(s.doneErr, &connErr) {
-			// only wrap non-ConnectionError error types
+			// only wrap non-ConnError error types
 			var amqpErr *Error
 			if errors.As(s.doneErr, &amqpErr) {
 				s.doneErr = &SessionError{RemoteErr: amqpErr}
@@ -321,8 +312,13 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 			s.doneErr = s.conn.doneErr
 			return
 
-		// session is being closed by user
+		case <-s.forceClose:
+			// the call to s.Close() timed out waiting for the ack
+			s.doneErr = errors.New("the session was forcibly closed")
+			return
+
 		case err := <-closed:
+			// session is being closed by the client (Close() or protocol error)
 			clientClosed = true
 			fr := frames.PerformEnd{Error: err}
 			_ = s.txFrame(&fr, nil)

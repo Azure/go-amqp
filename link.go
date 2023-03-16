@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/Azure/go-amqp/internal/debug"
 	"github.com/Azure/go-amqp/internal/encoding"
@@ -38,8 +37,9 @@ type link struct {
 	rxQ *queue.Holder[frames.FrameBody]
 
 	// used for gracefully closing link
-	close     chan struct{} // signals a link's mux to shut down; DO NOT use this to check if a link has terminated, use done instead
-	closeOnce *sync.Once    // closeOnce protects close from being closed multiple times
+	close      chan *Error   // signals a link's mux to shut down; DO NOT use this to check if a link has terminated, use done instead
+	forceClose chan struct{} // used for forcibly terminate a link if Close() times out/is cancelled
+	closeOnce  *sync.Once    // closeOnce protects close from being closed multiple times
 
 	done    chan struct{} // closed when the link has terminated (mux exited); DO NOT wait on this from within a link's mux() as it will never trigger!
 	doneErr error         // contains the error state returned from Close(); DO NOT TOUCH outside of link.go until done has been closed!
@@ -64,16 +64,16 @@ type link struct {
 	senderSettleMode   *SenderSettleMode
 	receiverSettleMode *ReceiverSettleMode
 	maxMessageSize     uint64
-	detachReceived     bool // set to true when the peer initiates link detach/close
 }
 
 func newLink(s *Session, r encoding.Role) link {
 	l := link{
-		key:       linkKey{shared.RandString(40), r},
-		session:   s,
-		close:     make(chan struct{}),
-		closeOnce: &sync.Once{},
-		done:      make(chan struct{}),
+		key:        linkKey{shared.RandString(40), r},
+		session:    s,
+		close:      make(chan *Error, 1), // buffered so we can queue up an error from the mux
+		forceClose: make(chan struct{}),
+		closeOnce:  &sync.Once{},
+		done:       make(chan struct{}),
 	}
 
 	// set the segment size relative to respective window
@@ -132,16 +132,8 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 
 	// wait for response
 	fr, err := l.waitForFrame(ctx)
-	if isContextErr(err) {
-		// attach was written to the network. assume it was received
-		// and that the ctx was too short to wait for the ack.
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			l.muxClose(ctx, nil, nil, nil)
-		}()
-		return ctx.Err()
-	} else if err != nil {
+	if err != nil {
+		l.session.deallocateHandle(l)
 		return err
 	}
 
@@ -163,15 +155,8 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 	if resp.Source == nil && resp.Target == nil {
 		// wait for detach
 		fr, err := l.waitForFrame(ctx)
-		if isContextErr(err) {
-			// if we don't send an ack then we're in violation of the protocol
-			go func() {
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				l.muxClose(ctx, nil, nil, nil)
-			}()
-			return ctx.Err()
-		} else if err != nil {
+		if err != nil {
+			l.session.deallocateHandle(l)
 			return err
 		}
 
@@ -201,7 +186,12 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 	afterAttach(resp)
 
 	if err := l.setSettleModes(resp); err != nil {
-		l.muxClose(ctx, nil, nil, nil)
+		// close the link as there's a mismatch on requested/supported settlement modes
+		dr := &frames.PerformDetach{
+			Handle: l.handle,
+			Closed: true,
+		}
+		_ = l.session.txFrame(dr, nil)
 		return err
 	}
 
@@ -235,22 +225,27 @@ func (l *link) setSettleModes(resp *frames.PerformAttach) error {
 }
 
 // muxHandleFrame processes fr based on type.
-func (l *link) muxHandleFrame(fr frames.FrameBody) error {
+func (l *link) muxHandleFrame(fr frames.FrameBody, clientClosed bool) error {
 	switch fr := fr.(type) {
-	// remote side is closing links
 	case *frames.PerformDetach:
-		// don't currently support link detach and reattach
 		if !fr.Closed {
 			return &LinkError{inner: fmt.Errorf("non-closing detach not supported: %+v", fr)}
 		}
 
-		// set detach received and close link
-		l.detachReceived = true
+		// there are two possibilities:
+		// - this is the ack to a client-side Close()
+		// - the peer is closing the link so we must ack
 
-		if fr.Error != nil {
-			return &LinkError{RemoteErr: fr.Error}
+		if clientClosed {
+			return &LinkError{}
 		}
-		return &LinkError{}
+
+		dr := &frames.PerformDetach{
+			Handle: l.handle,
+			Closed: true,
+		}
+		_ = l.session.txFrame(dr, nil)
+		return &LinkError{RemoteErr: fr.Error}
 
 	default:
 		// TODO: evaluate
@@ -268,6 +263,7 @@ func (l *link) closeLink(ctx context.Context) error {
 	case <-l.done:
 		// mux exited
 	case <-ctx.Done():
+		close(l.forceClose)
 		return ctx.Err()
 	}
 
@@ -277,90 +273,4 @@ func (l *link) closeLink(ctx context.Context) error {
 		return nil
 	}
 	return l.doneErr
-}
-
-// muxClose closes the link
-//   - err is the error sent to the peer if we're closing the link with an error
-//   - deferred is executed during the final phase of shutdown (can be nil)
-//   - onRXTransfer handles incoming transfer frames during shutdown (can be nil)
-func (l *link) muxClose(ctx context.Context, err *Error, deferred func(), onRXTransfer func(frames.PerformTransfer)) {
-	defer func() {
-		// final cleanup and signaling
-
-		// if the context timed out or was cancelled we don't really know
-		// if the link has been properly terminated.  in this case, it might
-		// not be safe to reuse the handle as it might still be associated
-		// with an existing link.
-		if ctx.Err() == nil {
-			// deallocate handle
-			l.session.deallocateHandle(l)
-		}
-
-		if deferred != nil {
-			deferred()
-		}
-
-		// signal that the link mux has exited
-		close(l.done)
-	}()
-
-	// "A peer closes a link by sending the detach frame with the
-	// handle for the specified link, and the closed flag set to
-	// true. The partner will destroy the corresponding link
-	// endpoint, and reply with its own detach frame with the
-	// closed flag set to true.
-	//
-	// Note that one peer MAY send a closing detach while its
-	// partner is sending a non-closing detach. In this case,
-	// the partner MUST signal that it has closed the link by
-	// reattaching and then sending a closing detach."
-
-	fr := &frames.PerformDetach{
-		Handle: l.handle,
-		Closed: true,
-		Error:  err,
-	}
-
-	select {
-	case <-ctx.Done():
-		// TODO: expired context
-		return
-	case l.session.tx <- fr:
-		// frame sent to our session mux
-	case <-l.session.done:
-		if l.doneErr == nil {
-			l.doneErr = l.session.doneErr
-		}
-		return
-	}
-
-	// if the peer initiated the close then we just sent the ack so we're done
-	if l.detachReceived {
-		return
-	}
-
-	// wait for the ack
-	for {
-		fr, err := l.waitForFrame(ctx)
-		if isContextErr(err) {
-			// TODO: expired context
-			return
-		} else if err != nil {
-			if l.doneErr == nil {
-				l.doneErr = err
-			}
-			return
-		}
-
-		switch fr := fr.(type) {
-		case *frames.PerformDetach:
-			if fr.Closed {
-				return
-			}
-		case *frames.PerformTransfer:
-			if onRXTransfer != nil {
-				onRXTransfer(*fr)
-			}
-		}
-	}
 }

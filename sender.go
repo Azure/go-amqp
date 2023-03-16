@@ -46,11 +46,20 @@ type SendOptions struct {
 
 // Send sends a Message.
 //
-// Blocks until the message is sent, ctx completes, or an error occurs.
+// Blocks until the message is sent or an error occurs. If the peer is
+// configured for receiver settlement mode second, the call also blocks
+// until the peer confirms message settlement.
+//
+//   - ctx controls waiting for the message to be sent and possibly confirmed
+//   - msg is the message to send
+//   - opts contains optional values, pass nil to accept the defaults
+//
+// If the context's deadline expires or is cancelled before the operation
+// completes, the message is in an unknown state of transmission.
 //
 // Send is safe for concurrent use. Since only a single message can be
 // sent on a link at a time, this is most useful when settlement confirmation
-// has been requested (receiver settle mode is "Second"). In this case,
+// has been requested (receiver settle mode is second). In this case,
 // additional messages can be sent while the current goroutine is waiting
 // for the confirmation.
 func (s *Sender) Send(ctx context.Context, msg *Message, opts *SendOptions) error {
@@ -81,6 +90,7 @@ func (s *Sender) Send(ctx context.Context, msg *Message, opts *SendOptions) erro
 	case <-s.l.done:
 		return s.l.doneErr
 	case <-ctx.Done():
+		// TODO: if the message is not settled and we never received a disposition, how can we consider the message as sent?
 		return ctx.Err()
 	}
 }
@@ -150,6 +160,7 @@ func (s *Sender) send(ctx context.Context, msg *Message) (chan encoding.Delivery
 
 		select {
 		case s.transfers <- fr:
+			// frame was sent to our mux
 		case <-s.l.done:
 			return nil, s.l.doneErr
 		case <-ctx.Done():
@@ -174,6 +185,11 @@ func (s *Sender) Address() string {
 }
 
 // Close closes the Sender and AMQP link.
+//   - ctx controls waiting for the peer to acknowledge the close
+//
+// If the context's deadline expires or is cancelled before the operation
+// completes, the application can be left in an unknown state, potentially
+// resulting in connection errors.
 func (s *Sender) Close(ctx context.Context) error {
 	return s.l.closeLink(ctx)
 }
@@ -279,7 +295,12 @@ func (s *Sender) attach(ctx context.Context) error {
 }
 
 func (s *Sender) mux() {
-	defer s.l.muxClose(context.Background(), nil, nil, nil)
+	defer func() {
+		s.l.session.deallocateHandle(&s.l)
+		close(s.l.done)
+	}()
+
+	var clientClosed bool // indicates a client-side close
 
 Loop:
 	for {
@@ -291,13 +312,24 @@ Loop:
 			debug.Log(1, "TX (Sender) (pause): target: %q, link credit: %d, deliveryCount: %d", s.l.target.Address, s.l.linkCredit, s.l.deliveryCount)
 		}
 
+		closed := s.l.close
+		if clientClosed {
+			// swap out channel so it no longer triggers
+			closed = nil
+		}
+
 		select {
+		case <-s.l.forceClose:
+			// the call to s.Close() timed out waiting for the ack
+			s.l.doneErr = &LinkError{inner: errors.New("the sender was forcibly closed")}
+			return
+
 		// received frame
 		case q := <-s.l.rxQ.Wait():
 			// populated queue
 			fr := *q.Dequeue()
 			s.l.rxQ.Release(q)
-			s.l.doneErr = s.muxHandleFrame(fr)
+			s.l.doneErr = s.muxHandleFrame(fr, clientClosed)
 			if s.l.doneErr != nil {
 				return
 			}
@@ -321,9 +353,16 @@ Loop:
 				continue Loop
 			}
 
-		case <-s.l.close:
-			s.l.doneErr = &LinkError{}
-			return
+		case err := <-closed:
+			// sender is being closed by the client (Close() or protocol error)
+			clientClosed = true
+			fr := &frames.PerformDetach{
+				Handle: s.l.handle,
+				Closed: true,
+				Error:  err,
+			}
+			_ = s.l.session.txFrame(fr, nil)
+
 		case <-s.l.session.done:
 			// TODO: per spec, if the session has terminated, we're not allowed to send frames
 			s.l.doneErr = s.l.session.doneErr
@@ -334,7 +373,7 @@ Loop:
 
 // muxHandleFrame processes fr based on type.
 // depending on the peer's RSM, it might return a disposition frame for sending
-func (s *Sender) muxHandleFrame(fr frames.FrameBody) error {
+func (s *Sender) muxHandleFrame(fr frames.FrameBody, clientClosed bool) error {
 	debug.Log(2, "RX (Sender): %s", fr)
 	switch fr := fr.(type) {
 	// flow control frame
@@ -410,7 +449,7 @@ func (s *Sender) muxHandleFrame(fr frames.FrameBody) error {
 		return nil
 
 	default:
-		return s.l.muxHandleFrame(fr)
+		return s.l.muxHandleFrame(fr, clientClosed)
 	}
 
 	return nil

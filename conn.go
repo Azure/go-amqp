@@ -392,6 +392,13 @@ func (c *Conn) close() {
 	})
 }
 
+// NewSession starts a new session on the connection.
+//   - ctx controls waiting for the peer to acknowledge the session
+//   - opts contains optional values, pass nil to accept the defaults
+//
+// If the context's deadline expires or is cancelled before the operation
+// completes, the application can be left in an unknown state, potentially
+// resulting in connection errors.
 func (c *Conn) NewSession(ctx context.Context, opts *SessionOptions) (*Session, error) {
 	session, err := c.newSession(opts)
 	if err != nil {
@@ -399,6 +406,7 @@ func (c *Conn) NewSession(ctx context.Context, opts *SessionOptions) (*Session, 
 	}
 
 	if err := session.begin(ctx); err != nil {
+		c.deleteSession(session)
 		return nil, err
 	}
 
@@ -482,6 +490,8 @@ func (c *Conn) connReader() {
 			session, ok = c.sessionsByChannel[*body.RemoteChannel]
 			c.sessionsByChannelMu.RUnlock()
 			if !ok {
+				// this can happen if NewSession() exits due to the context expiring/cancelled
+				// before the begin ack is received.
 				err = fmt.Errorf("unexpected remote channel number %d", *body.RemoteChannel)
 				continue
 			}

@@ -141,7 +141,7 @@ func TestSessionCloseTimeout(t *testing.T) {
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	err = session.Close(ctx)
 	cancel()
-	require.Equal(t, context.DeadlineExceeded, err)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.NoError(t, client.Close())
 }
 
@@ -662,12 +662,12 @@ func TestNewSessionContextCancelled(t *testing.T) {
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return fake.PerformOpen("container")
+		case *frames.PerformClose:
+			return fake.PerformClose(nil)
 		case *frames.PerformBegin:
 			cancel()
 			// swallow frame to prevent non-determinism of cancellation
 			return nil, nil
-		case *frames.PerformEnd:
-			return fake.PerformEnd(0, nil)
 		case *fake.KeepAlive:
 			return nil, nil
 		default:

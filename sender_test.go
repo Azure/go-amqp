@@ -918,21 +918,19 @@ func TestSenderFlowFrameWithEcho(t *testing.T) {
 }
 
 func TestNewSenderTimedOut(t *testing.T) {
-	detachAck := make(chan struct{})
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return fake.PerformOpen("container")
+		case *frames.PerformClose:
+			return fake.PerformClose(nil)
 		case *frames.PerformBegin:
 			return fake.PerformBegin(0)
 		case *frames.PerformAttach:
 			// swallow the frame so attach never gets an ack
 			return nil, nil
-		case *frames.PerformDetach:
-			close(detachAck)
-			return fake.PerformEnd(0, nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -952,15 +950,6 @@ func TestNewSenderTimedOut(t *testing.T) {
 	cancel()
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.Nil(t, snd)
-
-	select {
-	case <-time.After(time.Second):
-		t.Fatal("didn't receive end ack")
-	case <-detachAck:
-		// expected
-	}
-
-	// cannot check handle count in this case as detach is asynchronous
 }
 
 func TestNewSenderWriteError(t *testing.T) {
@@ -1010,63 +999,17 @@ func TestNewSenderWriteError(t *testing.T) {
 	// cannot check handle count as this kills the connection
 }
 
-func TestNewSenderTimedOutAckTimedOut(t *testing.T) {
-	detachAck := make(chan struct{})
+func TestNewSenderContextCancelled(t *testing.T) {
+	senderCtx, senderCancel := context.WithCancel(context.Background())
+
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return fake.PerformOpen("container")
-		case *frames.PerformBegin:
-			return fake.PerformBegin(0)
-		case *frames.PerformAttach:
-			// swallow the frame so attach never gets an ack
-			return nil, nil
-		case *frames.PerformDetach:
-			close(detachAck)
-			// swallow the frame so the closing goroutine never gets an ack
-			return nil, nil
-		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
-		}
-	}
-	netConn := fake.NewNetConn(responder)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	client, err := NewConn(ctx, netConn, nil)
-	cancel()
-	require.NoError(t, err)
-	// fisrt session succeeds
-	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx, nil)
-	cancel()
-	require.NoError(t, err)
-	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := session.NewSender(ctx, "target", nil)
-	cancel()
-	require.ErrorIs(t, err, context.DeadlineExceeded)
-	require.Nil(t, snd)
-
-	select {
-	case <-time.After(time.Second):
-		t.Fatal("didn't receive end ack")
-	case <-detachAck:
-		// expected
-	}
-
-	// cannot check handle count in this case as detach is asynchronous
-}
-
-func TestNewSenderContextCancelled(t *testing.T) {
-	senderCtx, senderCancel := context.WithCancel(context.Background())
-
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		switch tt := req.(type) {
-		case *fake.AMQPProto:
-			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
-		case *frames.PerformOpen:
-			return fake.PerformOpen("container")
+		case *frames.PerformClose:
+			return fake.PerformClose(nil)
 		case *frames.PerformBegin:
 			return fake.PerformBegin(0)
 		case *frames.PerformEnd:
@@ -1074,7 +1017,7 @@ func TestNewSenderContextCancelled(t *testing.T) {
 		case *frames.PerformAttach:
 			// cancel the context to trigger early exit and clean-up
 			senderCancel()
-			return fake.SenderAttach(0, tt.Name, 0, SenderSettleModeUnsettled)
+			return nil, nil
 		case *frames.PerformDetach:
 			return fake.PerformDetach(0, 0, nil)
 		default:
@@ -1096,7 +1039,4 @@ func TestNewSenderContextCancelled(t *testing.T) {
 	snd, err := session.NewSender(senderCtx, "target", nil)
 	require.ErrorIs(t, err, context.Canceled)
 	require.Nil(t, snd)
-
-	// don't let the test exit before the attach frame has a chance to arrive
-	time.Sleep(time.Second)
 }

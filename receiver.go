@@ -40,7 +40,6 @@ type Receiver struct {
 	msgBuf                buffer.Buffer       // buffered bytes for current message
 	more                  bool                // if true, buf contains a partial message
 	msg                   Message             // current message being decoded
-	detachError           *Error              // error to send to peer on detach/close, set by closeWithError; NOT why link was terminated
 
 	settlementCount   uint32     // the count of settled messages
 	settlementCountMu sync.Mutex // must be held when accessing settlementCount
@@ -150,26 +149,44 @@ func (r *Receiver) Receive(ctx context.Context, opts *ReceiveOptions) (*Message,
 	}
 }
 
-// Accept notifies the server that the message has been
-// accepted and does not require redelivery.
+// Accept notifies the server that the message has been accepted and does not require redelivery.
+//   - ctx controls waiting for the peer to acknowledge the disposition
+//   - msg is the message to accept
+//
+// If the context's deadline expires or is cancelled before the operation
+// completes, the message's disposition is in an unknown state.
 func (r *Receiver) AcceptMessage(ctx context.Context, msg *Message) error {
 	return r.messageDisposition(ctx, msg, &encoding.StateAccepted{})
 }
 
 // Reject notifies the server that the message is invalid.
+//   - ctx controls waiting for the peer to acknowledge the disposition
+//   - msg is the message to reject
+//   - e is an optional rejection error
 //
-// Rejection error is optional.
+// If the context's deadline expires or is cancelled before the operation
+// completes, the message's disposition is in an unknown state.
 func (r *Receiver) RejectMessage(ctx context.Context, msg *Message, e *Error) error {
 	return r.messageDisposition(ctx, msg, &encoding.StateRejected{Error: e})
 }
 
-// Release releases the message back to the server. The message
-// may be redelivered to this or another consumer.
+// Release releases the message back to the server. The message may be redelivered to this or another consumer.
+//   - ctx controls waiting for the peer to acknowledge the disposition
+//   - msg is the message to release
+//
+// If the context's deadline expires or is cancelled before the operation
+// completes, the message's disposition is in an unknown state.
 func (r *Receiver) ReleaseMessage(ctx context.Context, msg *Message) error {
 	return r.messageDisposition(ctx, msg, &encoding.StateReleased{})
 }
 
 // Modify notifies the server that the message was not acted upon and should be modifed.
+//   - ctx controls waiting for the peer to acknowledge the disposition
+//   - msg is the message to modify
+//   - options contains the optional settings to modify
+//
+// If the context's deadline expires or is cancelled before the operation
+// completes, the message's disposition is in an unknown state.
 func (r *Receiver) ModifyMessage(ctx context.Context, msg *Message, options *ModifyMessageOptions) error {
 	if options == nil {
 		options = &ModifyMessageOptions{}
@@ -224,20 +241,23 @@ func (r *Receiver) LinkSourceFilterValue(name string) any {
 }
 
 // Close closes the Receiver and AMQP link.
+//   - ctx controls waiting for the peer to acknowledge the close
 //
-// If ctx expires while waiting for servers response, ctx.Err() will be returned.
-// The session will continue to wait for the response until the Session or Client
-// is closed.
+// If the context's deadline expires or is cancelled before the operation
+// completes, the application can be left in an unknown state, potentially
+// resulting in connection errors.
 func (r *Receiver) Close(ctx context.Context) error {
 	return r.l.closeLink(ctx)
 }
 
 // returns the error passed in
 func (r *Receiver) closeWithError(de *Error) error {
-	r.l.closeOnce.Do(func() {
-		r.detachError = de
-		close(r.l.close)
-	})
+	select {
+	case r.l.close <- de:
+		// close error queued
+	default:
+		// close error already pending
+	}
 	return &LinkError{inner: de}
 }
 
@@ -385,6 +405,7 @@ func (r *Receiver) messageDisposition(ctx context.Context, msg *Message, state e
 		msg.settled = true
 		return err
 	case <-ctx.Done():
+		// TODO: if we don't receive the confirmation, should the message be considered settled?
 		return ctx.Err()
 	}
 }
@@ -558,22 +579,23 @@ func (r *Receiver) attach(ctx context.Context) error {
 
 func (r *Receiver) mux() {
 	defer func() {
-		r.l.muxClose(context.Background(), r.detachError, func() {
-			// unblock any in flight message dispositions
-			r.inFlight.clear(r.l.doneErr)
+		// unblock any in flight message dispositions
+		r.inFlight.clear(r.l.doneErr)
 
-			if !r.autoSendFlow {
-				// unblock any pending drain requests
-				r.creditor.EndDrain()
-			}
-		}, func(fr frames.PerformTransfer) {
-			_ = r.muxReceive(fr)
-		})
+		if !r.autoSendFlow {
+			// unblock any pending drain requests
+			r.creditor.EndDrain()
+		}
+
+		r.l.session.deallocateHandle(&r.l)
+		close(r.l.done)
 	}()
 
 	if r.autoSendFlow {
 		r.l.doneErr = r.muxFlow(r.l.linkCredit, false)
 	}
+
+	var clientClosed bool // indicates a client-side close
 
 	for {
 		msgLen := r.messagesQ.Len()
@@ -617,21 +639,41 @@ func (r *Receiver) mux() {
 			return
 		}
 
+		closed := r.l.close
+		if clientClosed {
+			// swap out channel so it no longer triggers
+			closed = nil
+		}
+
 		select {
+		case <-r.l.forceClose:
+			// the call to r.Close() timed out waiting for the ack
+			r.l.doneErr = &LinkError{inner: errors.New("the receiver was forcibly closed")}
+			return
+
 		case q := <-r.l.rxQ.Wait():
 			// populated queue
 			fr := *q.Dequeue()
 			r.l.rxQ.Release(q)
 
-			r.l.doneErr = r.muxHandleFrame(fr)
+			r.l.doneErr = r.muxHandleFrame(fr, clientClosed)
 			if r.l.doneErr != nil {
 				return
 			}
+
 		case <-r.receiverReady:
 			continue
-		case <-r.l.close:
-			r.l.doneErr = &LinkError{}
-			return
+
+		case err := <-closed:
+			// receiver is being closed by the client (Close() or protocol error)
+			clientClosed = true
+			fr := &frames.PerformDetach{
+				Handle: r.l.handle,
+				Closed: true,
+				Error:  err,
+			}
+			_ = r.l.session.txFrame(fr, nil)
+
 		case <-r.l.session.done:
 			// TODO: per spec, if the session has terminated, we're not allowed to send frames
 			r.l.doneErr = r.l.session.doneErr
@@ -677,7 +719,7 @@ func (r *Receiver) muxFlow(linkCredit uint32, drain bool) error {
 }
 
 // muxHandleFrame processes fr based on type.
-func (r *Receiver) muxHandleFrame(fr frames.FrameBody) error {
+func (r *Receiver) muxHandleFrame(fr frames.FrameBody, clientClosed bool) error {
 	debug.Log(2, "RX (Receiver): %s", fr)
 	switch fr := fr.(type) {
 	// message frame
@@ -733,7 +775,7 @@ func (r *Receiver) muxHandleFrame(fr frames.FrameBody) error {
 		r.inFlight.remove(fr.First, fr.Last, dispositionError)
 
 	default:
-		return r.l.muxHandleFrame(fr)
+		return r.l.muxHandleFrame(fr, clientClosed)
 	}
 
 	return nil

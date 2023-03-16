@@ -68,6 +68,8 @@ func (mc *creditor) FlowBits(currentCredits uint32) (bool, uint32) {
 }
 
 // Drain initiates a drain and blocks until EndDrain is called.
+// If the context's deadline expires or is cancelled before the operation
+// completes, the drain might not have happened.
 func (mc *creditor) Drain(ctx context.Context, r *Receiver) error {
 	mc.mu.Lock()
 

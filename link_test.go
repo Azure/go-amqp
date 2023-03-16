@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Azure/go-amqp/internal/bitmap"
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/fake"
 	"github.com/Azure/go-amqp/internal/frames"
@@ -145,6 +146,15 @@ func TestMuxFlowHandlesDrainProperly(t *testing.T) {
 }
 
 func newTestLink(t *testing.T) *Receiver {
+	fakeConn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	conn, err := NewConn(ctx, fakeConn, nil)
+	require.NoError(t, err)
+	cancel()
+	// we don't need a functioning Conn for tests that use newTestLink, just a non-nil one that can be Close()'ed
+	// TODO: convert these tests to use a fake
+	err = conn.Close()
+	require.NoError(t, err)
 	l := &Receiver{
 		l: link{
 			source: &frames.Source{},
@@ -152,11 +162,13 @@ func newTestLink(t *testing.T) *Receiver {
 			// debug(1, "FLOW Link Mux half: source: %s, inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s", l.source.Address, l.receiver.inFlight.len(), l.l.linkCredit, l.deliveryCount, len(l.messages), l.countUnsettled(), l.receiver.maxCredit, l.receiverSettleMode.String())
 			done: make(chan struct{}),
 			session: &Session{
-				tx:   make(chan frames.FrameBody, 100),
-				done: make(chan struct{}),
+				tx:      make(chan frames.FrameBody, 100),
+				done:    make(chan struct{}),
+				conn:    conn,
+				handles: bitmap.New(32),
 			},
 			rxQ:   queue.NewHolder(queue.New[frames.FrameBody](100)),
-			close: make(chan struct{}),
+			close: make(chan *Error),
 		},
 		autoSendFlow:  true,
 		inFlight:      inFlight{},

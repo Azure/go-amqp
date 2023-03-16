@@ -67,6 +67,8 @@ func TestReceiverMethodsNoReceive(t *testing.T) {
 			return fake.ReceiverAttach(0, linkName, 0, ReceiverSettleModeFirst, nil)
 		case *frames.PerformFlow, *fake.KeepAlive:
 			return nil, nil
+		case *frames.PerformDetach:
+			return fake.PerformDetach(0, ff.Handle, nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}

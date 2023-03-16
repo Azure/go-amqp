@@ -361,6 +361,15 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 					link, ok := links[handle]
 					if !ok {
+						select {
+						case s.close <- &Error{
+							Condition:   ErrCondUnattachedHandle,
+							Description: "received disposition frame referencing a handle that's not in use",
+						}:
+							s.doneErr = fmt.Errorf("received disposition frame with unknown link handle %d", handle)
+						default:
+							// close error already pending
+						}
 						continue
 					}
 
@@ -407,6 +416,15 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				if body.Handle != nil {
 					link, ok := links[*body.Handle]
 					if !ok {
+						select {
+						case s.close <- &Error{
+							Condition:   ErrCondUnattachedHandle,
+							Description: "received flow frame referencing a handle that's not in use",
+						}:
+							s.doneErr = fmt.Errorf("received flow frame with unknown link handle %d", body.Handle)
+						default:
+							// close error already pending
+						}
 						continue
 					}
 

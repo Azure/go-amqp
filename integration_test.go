@@ -635,141 +635,143 @@ func TestIntegrationClose(t *testing.T) {
 		t.Skip()
 	}
 
-	label := "link"
-	t.Run(label, func(t *testing.T) {
-		checkLeaks := leaktest.CheckTimeout(t, 60*time.Second)
+	for times := 0; times < 100; times++ {
+		label := "link"
+		t.Run(label, func(t *testing.T) {
+			checkLeaks := leaktest.CheckTimeout(t, 60*time.Second)
 
-		// Create client
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		client, err := amqp.Dial(ctx, localBrokerAddr, nil)
-		cancel()
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer client.Close()
+			// Create client
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			client, err := amqp.Dial(ctx, localBrokerAddr, nil)
+			cancel()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer client.Close()
 
-		// Open a session
-		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-		session, err := client.NewSession(ctx, nil)
-		cancel()
-		if err != nil {
-			t.Fatal(err)
-		}
+			// Open a session
+			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+			session, err := client.NewSession(ctx, nil)
+			cancel()
+			if err != nil {
+				t.Fatal(err)
+			}
 
-		// Create a sender
-		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-		receiver, err := session.NewReceiver(ctx, "TestIntegrationClose", nil)
-		cancel()
-		if err != nil {
-			t.Fatal(err)
-		}
+			// Create a sender
+			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+			receiver, err := session.NewReceiver(ctx, "TestIntegrationClose", nil)
+			cancel()
+			if err != nil {
+				t.Fatal(err)
+			}
 
-		testClose(t, receiver.Close)
+			testClose(t, receiver.Close)
 
-		_, err = receiver.Receive(context.Background(), nil)
-		var linkErr *amqp.LinkError
-		require.ErrorAs(t, err, &linkErr)
+			_, err = receiver.Receive(context.Background(), nil)
+			var linkErr *amqp.LinkError
+			require.ErrorAs(t, err, &linkErr)
 
-		err = client.Close() // close before leak check
-		if err != nil {
-			t.Fatal(err)
-		}
+			err = client.Close() // close before leak check
+			if err != nil {
+				t.Fatal(err)
+			}
 
-		checkLeaks()
-	})
+			checkLeaks()
+		})
 
-	label = "session"
-	t.Run(label, func(t *testing.T) {
-		checkLeaks := leaktest.CheckTimeout(t, 60*time.Second)
+		label = "session"
+		t.Run(label, func(t *testing.T) {
+			checkLeaks := leaktest.CheckTimeout(t, 60*time.Second)
 
-		// Create client
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		client, err := amqp.Dial(ctx, localBrokerAddr, nil)
-		cancel()
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer client.Close()
+			// Create client
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			client, err := amqp.Dial(ctx, localBrokerAddr, nil)
+			cancel()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer client.Close()
 
-		// Open a session
-		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-		session, err := client.NewSession(ctx, nil)
-		cancel()
-		if err != nil {
-			t.Fatal(err)
-		}
+			// Open a session
+			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+			session, err := client.NewSession(ctx, nil)
+			cancel()
+			if err != nil {
+				t.Fatal(err)
+			}
 
-		// Create a sender
-		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-		receiver, err := session.NewReceiver(ctx, "TestIntegrationClose", nil)
-		cancel()
-		if err != nil {
-			t.Fatal(err)
-		}
+			// Create a sender
+			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+			receiver, err := session.NewReceiver(ctx, "TestIntegrationClose", nil)
+			cancel()
+			if err != nil {
+				t.Fatal(err)
+			}
 
-		testClose(t, session.Close)
+			testClose(t, session.Close)
 
-		msg, err := receiver.Receive(context.Background(), nil)
-		var sessionErr *amqp.SessionError
-		require.ErrorAs(t, err, &sessionErr)
-		if msg != nil {
-			t.Fatal("expected nil message")
-		}
+			msg, err := receiver.Receive(context.Background(), nil)
+			var sessionErr *amqp.SessionError
+			require.ErrorAs(t, err, &sessionErr)
+			if msg != nil {
+				t.Fatal("expected nil message")
+			}
 
-		err = client.Close() // close before leak check
-		if err != nil {
-			t.Fatal(err)
-		}
+			err = client.Close() // close before leak check
+			if err != nil {
+				t.Fatal(err)
+			}
 
-		checkLeaks()
-	})
+			checkLeaks()
+		})
 
-	label = "conn"
-	t.Run(label, func(t *testing.T) {
-		checkLeaks := leaktest.CheckTimeout(t, 60*time.Second)
+		label = "conn"
+		t.Run(label, func(t *testing.T) {
+			checkLeaks := leaktest.CheckTimeout(t, 60*time.Second)
 
-		// Create client
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		client, err := amqp.Dial(ctx, localBrokerAddr, nil)
-		cancel()
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer client.Close()
+			// Create client
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			client, err := amqp.Dial(ctx, localBrokerAddr, nil)
+			cancel()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer client.Close()
 
-		// Open a session
-		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-		session, err := client.NewSession(ctx, nil)
-		cancel()
-		if err != nil {
-			t.Fatal(err)
-		}
+			// Open a session
+			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+			session, err := client.NewSession(ctx, nil)
+			cancel()
+			if err != nil {
+				t.Fatal(err)
+			}
 
-		// Create a sender
-		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-		receiver, err := session.NewReceiver(ctx, "TestIntegrationClose", nil)
-		cancel()
-		if err != nil {
-			t.Fatal(err)
-		}
+			// Create a sender
+			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+			receiver, err := session.NewReceiver(ctx, "TestIntegrationClose", nil)
+			cancel()
+			if err != nil {
+				t.Fatal(err)
+			}
 
-		err = client.Close()
-		if err != nil {
-			t.Fatalf("Expected nil error from client.Close(), got: %+v", err)
-		}
+			err = client.Close()
+			if err != nil {
+				t.Fatalf("Expected nil error from client.Close(), got: %+v", err)
+			}
 
-		msg, err := receiver.Receive(context.Background(), nil)
-		var connErr *amqp.ConnError
-		if !errors.As(err, &connErr) {
-			t.Fatalf("unexpected error type %T", err)
-			return
-		}
-		if msg != nil {
-			t.Fatal("expected nil message")
-		}
+			msg, err := receiver.Receive(context.Background(), nil)
+			var connErr *amqp.ConnError
+			if !errors.As(err, &connErr) {
+				t.Fatalf("unexpected error type %T", err)
+				return
+			}
+			if msg != nil {
+				t.Fatal("expected nil message")
+			}
 
-		checkLeaks()
-	})
+			checkLeaks()
+		})
+	}
 }
 
 func TestMultipleSessionsOpenClose(t *testing.T) {

@@ -317,7 +317,6 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 			clientClosed = true
 			fr := frames.PerformEnd{Error: err}
 			_ = s.txFrame(&fr, nil)
-			// TODO: per spec, after end has been sent, the session is no longer allowed to send frames
 
 		// incoming frame
 		case q := <-s.rxQ.Wait():
@@ -528,6 +527,12 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 			}
 
 		case fr := <-txTransfer:
+			if clientClosed {
+				// now that the end performative has been sent we're
+				// not allowed to send any more frames.
+				continue
+			}
+
 			debug.Log(2, "TX (Session): %d, %s", s.channel, fr)
 			// record current delivery ID
 			var deliveryID uint32
@@ -571,6 +576,12 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 			}
 
 		case fr := <-s.tx:
+			if clientClosed {
+				// now that the end performative has been sent we're
+				// not allowed to send any more frames.
+				continue
+			}
+
 			debug.Log(2, "TX (Session): %d, %s", s.channel, fr)
 			switch fr := fr.(type) {
 			case *frames.PerformDisposition:

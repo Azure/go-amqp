@@ -30,6 +30,7 @@
   * Higher debug levels add entries when a frame transitions across mux boundaries and other diagnostics info.
 * Document default values for incoming and outgoing windows.
 * Refactored handling of incoming frames to eliminate potential deadlocks due to "mux pumping".
+* Disallow sending of frames once the end performative has been sent.
 
 ## 0.18.1 (2023-01-17)
 

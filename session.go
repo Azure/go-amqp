@@ -530,6 +530,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 			if clientClosed {
 				// now that the end performative has been sent we're
 				// not allowed to send any more frames.
+				debug.Log(1, "TX (Session): discarding transfer: %s\n", fr)
 				continue
 			}
 
@@ -579,6 +580,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 			if clientClosed {
 				// now that the end performative has been sent we're
 				// not allowed to send any more frames.
+				debug.Log(1, "TX (Session): discarding frame: %s\n", fr)
 				continue
 			}
 

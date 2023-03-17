@@ -290,6 +290,15 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 		clientClosed bool // indicates a client-side close
 	)
 
+	closeWithError := func(e1 *Error, e2 error) {
+		select {
+		case s.close <- e1:
+			s.doneErr = e2
+		default:
+			debug.Log(3, "TX (Session) close error already pending, discarding %v", e1)
+		}
+	}
+
 	for {
 		txTransfer := s.txTransfer
 		// disable txTransfer if flow control windows have been exceeded
@@ -361,15 +370,10 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 					link, ok := links[handle]
 					if !ok {
-						select {
-						case s.close <- &Error{
+						closeWithError(&Error{
 							Condition:   ErrCondUnattachedHandle,
 							Description: "received disposition frame referencing a handle that's not in use",
-						}:
-							s.doneErr = fmt.Errorf("received disposition frame with unknown link handle %d", handle)
-						default:
-							// close error already pending
-						}
+						}, fmt.Errorf("received disposition frame with unknown link handle %d", handle))
 						continue
 					}
 
@@ -381,15 +385,10 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 					// This is a protocol error:
 					//       "[...] MUST be set if the peer has received
 					//        the begin frame for the session"
-					select {
-					case s.close <- &Error{
+					closeWithError(&Error{
 						Condition:   ErrCondNotAllowed,
 						Description: "next-incoming-id not set after session established",
-					}:
-						s.doneErr = errors.New("protocol error: received flow without next-incoming-id after session established")
-					default:
-						// close error already pending
-					}
+					}, errors.New("protocol error: received flow without next-incoming-id after session established"))
 					continue
 				}
 
@@ -416,15 +415,10 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				if body.Handle != nil {
 					link, ok := links[*body.Handle]
 					if !ok {
-						select {
-						case s.close <- &Error{
+						closeWithError(&Error{
 							Condition:   ErrCondUnattachedHandle,
 							Description: "received flow frame referencing a handle that's not in use",
-						}:
-							s.doneErr = fmt.Errorf("received flow frame with unknown link handle %d", body.Handle)
-						default:
-							// close error already pending
-						}
+						}, fmt.Errorf("received flow frame with unknown link handle %d", body.Handle))
 						continue
 					}
 
@@ -453,15 +447,10 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				link, linkOk := s.linksByKey[linkKey{name: body.Name, role: !body.Role}]
 				s.linksMu.RUnlock()
 				if !linkOk {
-					select {
-					case s.close <- &Error{
+					closeWithError(&Error{
 						Condition:   ErrCondNotAllowed,
 						Description: "received mismatched attach frame",
-					}:
-						s.doneErr = fmt.Errorf("protocol error: received mismatched attach frame %+v", body)
-					default:
-						// close error already pending
-					}
+					}, fmt.Errorf("protocol error: received mismatched attach frame %+v", body))
 					continue
 				}
 
@@ -484,15 +473,10 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				}
 				link, ok := links[body.Handle]
 				if !ok {
-					select {
-					case s.close <- &Error{
+					closeWithError(&Error{
 						Condition:   ErrCondUnattachedHandle,
 						Description: "received transfer frame referencing a handle that's not in use",
-					}:
-						s.doneErr = fmt.Errorf("received transfer frame with unknown link handle %d", body.Handle)
-					default:
-						// close error already pending
-					}
+					}, fmt.Errorf("received transfer frame with unknown link handle %d", body.Handle))
 					continue
 				}
 
@@ -522,15 +506,10 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 			case *frames.PerformDetach:
 				link, ok := links[body.Handle]
 				if !ok {
-					select {
-					case s.close <- &Error{
+					closeWithError(&Error{
 						Condition:   ErrCondUnattachedHandle,
 						Description: "received detach frame referencing a handle that's not in use",
-					}:
-						s.doneErr = fmt.Errorf("received detach frame with unknown link handle %d", body.Handle)
-					default:
-						// close error already pending
-					}
+					}, fmt.Errorf("received detach frame with unknown link handle %d", body.Handle))
 					continue
 				}
 				s.muxFrameToLink(link, fr)

@@ -405,7 +405,7 @@ func (r *Receiver) messageDisposition(ctx context.Context, msg *Message, state e
 		msg.settled = true
 		return err
 	case <-ctx.Done():
-		// TODO: if we don't receive the confirmation, should the message be considered settled?
+		// didn't receive the ack in the time allotted, leave message as unsettled
 		return ctx.Err()
 	}
 }

@@ -257,14 +257,20 @@ func (l *link) muxHandleFrame(fr frames.FrameBody, clientClosed bool) error {
 
 // Close closes the Sender and AMQP link.
 func (l *link) closeLink(ctx context.Context) error {
-	l.closeOnce.Do(func() { close(l.close) })
+	var ctxErr error
+	l.closeOnce.Do(func() {
+		close(l.close)
+		select {
+		case <-l.done:
+			// mux exited
+		case <-ctx.Done():
+			close(l.forceClose)
+			ctxErr = ctx.Err()
+		}
+	})
 
-	select {
-	case <-l.done:
-		// mux exited
-	case <-ctx.Done():
-		close(l.forceClose)
-		return ctx.Err()
+	if ctxErr != nil {
+		return ctxErr
 	}
 
 	var linkErr *LinkError

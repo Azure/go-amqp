@@ -162,14 +162,20 @@ func (s *Session) begin(ctx context.Context) error {
 // completes, the application can be left in an unknown state, potentially
 // resulting in connection errors.
 func (s *Session) Close(ctx context.Context) error {
-	s.closeOnce.Do(func() { close(s.close) })
+	var ctxErr error
+	s.closeOnce.Do(func() {
+		close(s.close)
+		select {
+		case <-s.done:
+			// mux has exited
+		case <-ctx.Done():
+			close(s.forceClose)
+			ctxErr = ctx.Err()
+		}
+	})
 
-	select {
-	case <-s.done:
-		// mux has exited
-	case <-ctx.Done():
-		close(s.forceClose)
-		return ctx.Err()
+	if ctxErr != nil {
+		return ctxErr
 	}
 
 	var sessionErr *SessionError

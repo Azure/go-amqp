@@ -399,6 +399,8 @@ func TestSessionUnexpectedFrame(t *testing.T) {
 	require.NoError(t, err)
 	netConn.SendFrame(b)
 
+	// sleep for a bit so that the session mux has time to process the invalid frame before we close
+	time.Sleep(50 * time.Millisecond)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	err = session.Close(ctx)
 	cancel()

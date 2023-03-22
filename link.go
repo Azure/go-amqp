@@ -139,6 +139,7 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 
 	resp, ok := fr.(*frames.PerformAttach)
 	if !ok {
+		debug.Log(1, "RX (link): unexpected attach response frame %T", fr)
 		if err := l.session.conn.Close(); err != nil {
 			return err
 		}
@@ -270,7 +271,15 @@ func (l *link) closeLink(ctx context.Context) error {
 	l.closeOnce.Do(func() {
 		// we can't simply close(l.close) as that can race with
 		// the mux receiving an invalid frame during shutdown
-		l.close <- nil
+		select {
+		case l.close <- nil:
+			// close initiated
+		case <-ctx.Done():
+			close(l.forceClose)
+			ctxErr = ctx.Err()
+			return
+		}
+
 		select {
 		case <-l.done:
 			// mux exited

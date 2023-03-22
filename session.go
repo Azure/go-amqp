@@ -146,6 +146,7 @@ func (s *Session) begin(ctx context.Context) error {
 		// either swallow the frame or blow up in some other way, both causing this call to hang.
 		// deallocate session on error.  we can't call
 		// s.Close() as the session mux hasn't started yet.
+		debug.Log(1, "RX (Session): unexpected begin response frame %T", fr)
 		s.conn.deleteSession(s)
 		if err := s.conn.Close(); err != nil {
 			return err
@@ -170,7 +171,15 @@ func (s *Session) Close(ctx context.Context) error {
 	s.closeOnce.Do(func() {
 		// we can't simply close(s.close) as that can race with
 		// the mux receiving an invalid frame during shutdown
-		s.close <- nil
+		select {
+		case s.close <- nil:
+			// close initiated
+		case <-ctx.Done():
+			close(s.forceClose)
+			ctxErr = ctx.Err()
+			return
+		}
+
 		select {
 		case <-s.done:
 			// mux has exited
@@ -285,7 +294,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 		case s.close <- e1:
 			s.doneErr = e2
 		default:
-			debug.Log(3, "TX (Session) close error already pending, discarding %v", e1)
+			debug.Log(3, "TX (Session): close error already pending, discarding %v", e1)
 		}
 	}
 
@@ -413,7 +422,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				// initial-outgoing-id(endpoint) + incoming-window(flow) - next-outgoing-id(endpoint)"
 				remoteIncomingWindow = body.IncomingWindow - nextOutgoingID
 				remoteIncomingWindow += *body.NextIncomingID
-				debug.Log(3, "RX (Session) flow - remoteOutgoingWindow: %d remoteIncomingWindow: %d nextOutgoingID: %d", remoteOutgoingWindow, remoteIncomingWindow, nextOutgoingID)
+				debug.Log(3, "RX (Session): flow - remoteOutgoingWindow: %d remoteIncomingWindow: %d nextOutgoingID: %d", remoteOutgoingWindow, remoteIncomingWindow, nextOutgoingID)
 
 				// Send to link if handle is set
 				if body.Handle != nil {

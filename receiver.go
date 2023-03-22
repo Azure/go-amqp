@@ -239,17 +239,6 @@ func (r *Receiver) Close(ctx context.Context) error {
 	return r.l.closeLink(ctx)
 }
 
-// returns the error passed in
-func (r *Receiver) closeWithError(de *Error) error {
-	select {
-	case r.l.close <- de:
-		// close error queued
-	default:
-		// close error already pending
-	}
-	return &LinkError{inner: de}
-}
-
 // sendDisposition sends a disposition frame to the peer
 func (r *Receiver) sendDisposition(first uint32, last *uint32, state encoding.DeliveryState) error {
 	fr := &frames.PerformDisposition{
@@ -544,9 +533,16 @@ func (r *Receiver) mux() {
 			// populated queue
 			fr := *q.Dequeue()
 			r.l.rxQ.Release(q)
+			if err := r.muxHandleFrame(fr, clientClosed); err != nil {
+				// if the error returned is an AMQP error it means a client-side close was
+				// initiated so we need to keep the mux running in order to send the close.
+				var amqpErr *Error
+				if errors.As(err, &amqpErr) {
+					continue
+				}
 
-			r.l.doneErr = r.muxHandleFrame(fr, clientClosed)
-			if r.l.doneErr != nil {
+				// some other error, exit
+				r.l.doneErr = err
 				return
 			}
 
@@ -685,22 +681,13 @@ func (r *Receiver) muxReceive(fr frames.PerformTransfer) error {
 
 		// these fields are required on first transfer of a message
 		if fr.DeliveryID == nil {
-			return r.closeWithError(&Error{
-				Condition:   ErrCondNotAllowed,
-				Description: "received message without a delivery-id",
-			})
+			return r.l.closeWithError(ErrCondNotAllowed, "received message without a delivery-id")
 		}
 		if fr.MessageFormat == nil {
-			return r.closeWithError(&Error{
-				Condition:   ErrCondNotAllowed,
-				Description: "received message without a message-format",
-			})
+			return r.l.closeWithError(ErrCondNotAllowed, "received message without a message-format")
 		}
 		if fr.DeliveryTag == nil {
-			return r.closeWithError(&Error{
-				Condition:   ErrCondNotAllowed,
-				Description: "received message without a delivery-tag",
-			})
+			return r.l.closeWithError(ErrCondNotAllowed, "received message without a delivery-tag")
 		}
 	} else {
 		// this is a continuation of a multipart message
@@ -713,30 +700,21 @@ func (r *Receiver) muxReceive(fr frames.PerformTransfer) error {
 				"received continuation transfer with inconsistent delivery-id: %d != %d",
 				*fr.DeliveryID, r.msg.deliveryID,
 			)
-			return r.closeWithError(&Error{
-				Condition:   ErrCondNotAllowed,
-				Description: msg,
-			})
+			return r.l.closeWithError(ErrCondNotAllowed, msg)
 		}
 		if fr.MessageFormat != nil && *fr.MessageFormat != r.msg.Format {
 			msg := fmt.Sprintf(
 				"received continuation transfer with inconsistent message-format: %d != %d",
 				*fr.MessageFormat, r.msg.Format,
 			)
-			return r.closeWithError(&Error{
-				Condition:   ErrCondNotAllowed,
-				Description: msg,
-			})
+			return r.l.closeWithError(ErrCondNotAllowed, msg)
 		}
 		if fr.DeliveryTag != nil && !bytes.Equal(fr.DeliveryTag, r.msg.DeliveryTag) {
 			msg := fmt.Sprintf(
 				"received continuation transfer with inconsistent delivery-tag: %q != %q",
 				fr.DeliveryTag, r.msg.DeliveryTag,
 			)
-			return r.closeWithError(&Error{
-				Condition:   ErrCondNotAllowed,
-				Description: msg,
-			})
+			return r.l.closeWithError(ErrCondNotAllowed, msg)
 		}
 	}
 
@@ -750,10 +728,7 @@ func (r *Receiver) muxReceive(fr frames.PerformTransfer) error {
 
 	// ensure maxMessageSize will not be exceeded
 	if r.l.maxMessageSize != 0 && uint64(r.msgBuf.Len())+uint64(len(fr.Payload)) > r.l.maxMessageSize {
-		return r.closeWithError(&Error{
-			Condition:   ErrCondMessageSizeExceeded,
-			Description: fmt.Sprintf("received message larger than max size of %d", r.l.maxMessageSize),
-		})
+		return r.l.closeWithError(ErrCondMessageSizeExceeded, fmt.Sprintf("received message larger than max size of %d", r.l.maxMessageSize))
 	}
 
 	// add the payload the the buffer

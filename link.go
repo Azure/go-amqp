@@ -242,6 +242,12 @@ func (l *link) muxHandleFrame(fr frames.FrameBody, clientClosed bool) error {
 		// - the peer is closing the link so we must ack
 
 		if clientClosed {
+			// if the client-side close was initiated due to an error (l.closeWithError)
+			// then l.doneErr will already be set. in this case, return that error instead
+			// of an empty LinkError which indicates a clean client-side close.
+			if l.doneErr != nil {
+				return l.doneErr
+			}
 			return &LinkError{}
 		}
 
@@ -254,7 +260,7 @@ func (l *link) muxHandleFrame(fr frames.FrameBody, clientClosed bool) error {
 
 	default:
 		debug.Log(1, "RX (link): unexpected frame: %s", fr)
-		return &LinkError{inner: fmt.Errorf("internal error: unexpected frame %T", fr)}
+		return l.closeWithError(ErrCondInternalError, fmt.Sprintf("link received unexpected frame %T", fr))
 	}
 }
 
@@ -262,7 +268,9 @@ func (l *link) muxHandleFrame(fr frames.FrameBody, clientClosed bool) error {
 func (l *link) closeLink(ctx context.Context) error {
 	var ctxErr error
 	l.closeOnce.Do(func() {
-		close(l.close)
+		// we can't simply close(l.close) as that can race with
+		// the mux receiving an invalid frame during shutdown
+		l.close <- nil
 		select {
 		case <-l.done:
 			// mux exited
@@ -282,4 +290,21 @@ func (l *link) closeLink(ctx context.Context) error {
 		return nil
 	}
 	return l.doneErr
+}
+
+// closes the link with the specified AMQP error
+// l.doneErr is populated with a &LinkError{} containing an inner error constructed from the specified values
+//   - cnd is the AMQP error condition
+//   - desc is the error description
+//
+// returns an &Error{} with cnd and desc for its values
+func (l *link) closeWithError(cnd ErrCond, desc string) error {
+	amqpErr := &Error{Condition: cnd, Description: desc}
+	select {
+	case l.close <- amqpErr:
+		l.doneErr = &LinkError{inner: fmt.Errorf("%s: %s", cnd, desc)}
+	default:
+		debug.Log(3, "TX (link) close error already pending, discarding %v", amqpErr)
+	}
+	return amqpErr
 }

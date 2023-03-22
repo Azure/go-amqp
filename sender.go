@@ -329,8 +329,16 @@ Loop:
 			// populated queue
 			fr := *q.Dequeue()
 			s.l.rxQ.Release(q)
-			s.l.doneErr = s.muxHandleFrame(fr, clientClosed)
-			if s.l.doneErr != nil {
+			if err := s.muxHandleFrame(fr, clientClosed); err != nil {
+				// if the error returned is an AMQP error it means a client-side close was
+				// initiated so we need to keep the mux running in order to send the close.
+				var amqpErr *Error
+				if errors.As(err, &amqpErr) {
+					continue
+				}
+
+				// some other error, exit
+				s.l.doneErr = err
 				return
 			}
 

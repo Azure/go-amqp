@@ -550,7 +550,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				debug.Log(1, "RX (Session): unexpected frame: %s\n", body)
 				closeWithError(&Error{
 					Condition:   ErrCondInternalError,
-					Description: "received unexpected frame",
+					Description: "session received unexpected frame",
 				}, fmt.Errorf("internal error: unexpected frame %T", body))
 			}
 

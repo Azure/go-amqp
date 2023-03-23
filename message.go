@@ -99,11 +99,6 @@ type Message struct {
 	// encryption details).
 	Footer Annotations
 
-	// Mark the message as settled when LinkSenderSettle is ModeMixed.
-	//
-	// This field is ignored when LinkSenderSettle is not ModeMixed.
-	SendSettled bool
-
 	rcvr       *Receiver // the receiving link
 	deliveryID uint32    // used when sending disposition
 	settled    bool      // whether transfer was settled by sender

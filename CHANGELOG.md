@@ -15,6 +15,7 @@
 * The `IncomingWindow` and `OutgoingWindow` fields in `SessionOptions` have been removed.
 * The field `SenderOptions.IgnoreDispositionErrors` has been removed.
   * By default, messages that are rejected by the peer no longer close the `Sender`.
+* The field `SendSettled` in type `Message` has been moved to type `SendOptions` and renamed as `Settled`.
 
 ### Bugs Fixed
 

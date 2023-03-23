@@ -35,7 +35,9 @@ func (s *Sender) MaxMessageSize() uint64 {
 
 // SendOptions contains any optional values for the Sender.Send method.
 type SendOptions struct {
-	// for future expansion
+	// Indicates the message is to be sent as settled when settlement mode is SenderSettleModeMixed.
+	// If the settlement mode is SenderSettleModeUnsettled and Settled is true, an error is returned.
+	Settled bool
 }
 
 // Send sends a Message.
@@ -65,7 +67,7 @@ func (s *Sender) Send(ctx context.Context, msg *Message, opts *SendOptions) erro
 	default:
 		// link is still active
 	}
-	done, err := s.send(ctx, msg)
+	done, err := s.send(ctx, msg, opts)
 	if err != nil {
 		return err
 	}
@@ -90,7 +92,7 @@ func (s *Sender) Send(ctx context.Context, msg *Message, opts *SendOptions) erro
 
 // send is separated from Send so that the mutex unlock can be deferred without
 // locking the transfer confirmation that happens in Send.
-func (s *Sender) send(ctx context.Context, msg *Message) (chan encoding.DeliveryState, error) {
+func (s *Sender) send(ctx context.Context, msg *Message, opts *SendOptions) (chan encoding.DeliveryState, error) {
 	const (
 		maxDeliveryTagLength   = 32
 		maxTransferFrameHeader = 66 // determined by calcMaxTransferFrameHeader
@@ -112,10 +114,17 @@ func (s *Sender) send(ctx context.Context, msg *Message) (chan encoding.Delivery
 		return nil, fmt.Errorf("encoded message size exceeds max of %d", s.l.maxMessageSize)
 	}
 
+	senderSettled := senderSettleModeValue(s.l.senderSettleMode) == SenderSettleModeSettled
+	if opts != nil {
+		if opts.Settled && senderSettleModeValue(s.l.senderSettleMode) == SenderSettleModeUnsettled {
+			return nil, errors.New("can't send message as settled when sender settlement mode is unsettled")
+		} else if opts.Settled {
+			senderSettled = true
+		}
+	}
+
 	var (
 		maxPayloadSize = int64(s.l.session.conn.peerMaxFrameSize) - maxTransferFrameHeader
-		sndSettleMode  = s.l.senderSettleMode
-		senderSettled  = sndSettleMode != nil && (*sndSettleMode == SenderSettleModeSettled || (*sndSettleMode == SenderSettleModeMixed && msg.SendSettled))
 	)
 
 	deliveryTag := msg.DeliveryTag

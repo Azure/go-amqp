@@ -410,6 +410,81 @@ func TestSenderSendSettled(t *testing.T) {
 	require.NoError(t, client.Close())
 }
 
+func TestSenderSendSettledModeMixed(t *testing.T) {
+	responder := func(req frames.FrameBody) ([]byte, error) {
+		b, err := senderFrameHandler(SenderSettleModeSettled)(req)
+		if err != nil || b != nil {
+			return b, err
+		}
+		switch tt := req.(type) {
+		case *frames.PerformTransfer:
+			if tt.More {
+				return nil, errors.New("didn't expect more to be true")
+			}
+			if !tt.Settled {
+				return nil, errors.New("expected message to be settled")
+			}
+			if !reflect.DeepEqual([]byte{0, 83, 117, 160, 4, 116, 101, 115, 116}, tt.Payload) {
+				return nil, fmt.Errorf("unexpected payload %v", tt.Payload)
+			}
+			return nil, nil
+		default:
+			return nil, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+	netConn := fake.NewNetConn(responder)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
+	require.NoError(t, err)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx, "target", nil)
+	cancel()
+	require.NoError(t, err)
+
+	sendInitialFlowFrame(t, netConn, 0, 100)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+	require.NoError(t, snd.Send(ctx, NewMessage([]byte("test")), &SendOptions{Settled: true}))
+	cancel()
+
+	require.NoError(t, client.Close())
+}
+
+func TestSenderSendSettledError(t *testing.T) {
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
+	require.NoError(t, err)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx, "target", &SenderOptions{
+		SettlementMode: SenderSettleModeUnsettled.Ptr(),
+	})
+	cancel()
+	require.NoError(t, err)
+
+	sendInitialFlowFrame(t, netConn, 0, 100)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+	require.Error(t, snd.Send(ctx, NewMessage([]byte("test")), &SendOptions{Settled: true}))
+	cancel()
+
+	require.NoError(t, client.Close())
+}
+
 func TestSenderSendRejectedNoDetach(t *testing.T) {
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {

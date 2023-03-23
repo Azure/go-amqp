@@ -168,7 +168,7 @@ func newTestLink(t *testing.T) *Receiver {
 				handles: bitmap.New(32),
 			},
 			rxQ:   queue.NewHolder(queue.New[frames.FrameBody](100)),
-			close: make(chan *Error),
+			close: make(chan struct{}),
 		},
 		autoSendFlow:  true,
 		inFlight:      inFlight{},

@@ -473,8 +473,6 @@ func (r *Receiver) mux() {
 		r.l.doneErr = r.muxFlow(r.l.linkCredit, false)
 	}
 
-	var clientClosed bool // indicates a client-side close
-
 	for {
 		msgLen := r.messagesQ.Len()
 
@@ -518,7 +516,7 @@ func (r *Receiver) mux() {
 		}
 
 		closed := r.l.close
-		if clientClosed {
+		if r.l.closeInProgress {
 			// swap out channel so it no longer triggers
 			closed = nil
 		}
@@ -533,15 +531,11 @@ func (r *Receiver) mux() {
 			// populated queue
 			fr := *q.Dequeue()
 			r.l.rxQ.Release(q)
-			if err := r.muxHandleFrame(fr, clientClosed); err != nil {
-				// if the error returned is an AMQP error it means a client-side close was
-				// initiated so we need to keep the mux running in order to send the close.
-				var amqpErr *Error
-				if errors.As(err, &amqpErr) {
-					continue
-				}
 
-				// some other error, exit
+			// if muxHandleFrame returns an error it means the mux must terminate.
+			// note that in the case of a client-side close due to an error, nil
+			// is returned in order to keep the mux running to ack the detach frame.
+			if err := r.muxHandleFrame(fr); err != nil {
 				r.l.doneErr = err
 				return
 			}
@@ -549,18 +543,20 @@ func (r *Receiver) mux() {
 		case <-r.receiverReady:
 			continue
 
-		case err := <-closed:
-			// receiver is being closed by the client (Close() or protocol error)
-			clientClosed = true
+		case <-closed:
+			if r.l.closeInProgress {
+				// a client-side close due to protocol error is in progress
+				continue
+			}
+			// receiver is being closed by the client
+			r.l.closeInProgress = true
 			fr := &frames.PerformDetach{
 				Handle: r.l.handle,
 				Closed: true,
-				Error:  err,
 			}
 			_ = r.l.session.txFrame(fr, nil)
 
 		case <-r.l.session.done:
-			// TODO: per spec, if the session has terminated, we're not allowed to send frames
 			r.l.doneErr = r.l.session.doneErr
 			return
 		}
@@ -597,19 +593,19 @@ func (r *Receiver) muxFlow(linkCredit uint32, drain bool) error {
 		debug.Log(2, "TX (Receiver): %s", fr)
 		return nil
 	case <-r.l.close:
-		return &LinkError{}
+		return nil
 	case <-r.l.session.done:
 		return r.l.session.doneErr
 	}
 }
 
 // muxHandleFrame processes fr based on type.
-func (r *Receiver) muxHandleFrame(fr frames.FrameBody, clientClosed bool) error {
+func (r *Receiver) muxHandleFrame(fr frames.FrameBody) error {
 	debug.Log(2, "RX (Receiver): %s", fr)
 	switch fr := fr.(type) {
 	// message frame
 	case *frames.PerformTransfer:
-		return r.muxReceive(*fr)
+		r.muxReceive(*fr)
 
 	// flow control frame
 	case *frames.PerformFlow:
@@ -640,7 +636,7 @@ func (r *Receiver) muxHandleFrame(fr frames.FrameBody, clientClosed bool) error 
 		case r.l.session.tx <- resp:
 			debug.Log(2, "TX (Sender): %s", resp)
 		case <-r.l.close:
-			return &LinkError{}
+			return nil
 		case <-r.l.session.done:
 			return r.l.session.doneErr
 		}
@@ -660,13 +656,13 @@ func (r *Receiver) muxHandleFrame(fr frames.FrameBody, clientClosed bool) error 
 		r.inFlight.remove(fr.First, fr.Last, dispositionError)
 
 	default:
-		return r.l.muxHandleFrame(fr, clientClosed)
+		return r.l.muxHandleFrame(fr)
 	}
 
 	return nil
 }
 
-func (r *Receiver) muxReceive(fr frames.PerformTransfer) error {
+func (r *Receiver) muxReceive(fr frames.PerformTransfer) {
 	if !r.more {
 		// this is the first transfer of a message,
 		// record the delivery ID, message format,
@@ -681,13 +677,16 @@ func (r *Receiver) muxReceive(fr frames.PerformTransfer) error {
 
 		// these fields are required on first transfer of a message
 		if fr.DeliveryID == nil {
-			return r.l.closeWithError(ErrCondNotAllowed, "received message without a delivery-id")
+			r.l.closeWithError(ErrCondNotAllowed, "received message without a delivery-id")
+			return
 		}
 		if fr.MessageFormat == nil {
-			return r.l.closeWithError(ErrCondNotAllowed, "received message without a message-format")
+			r.l.closeWithError(ErrCondNotAllowed, "received message without a message-format")
+			return
 		}
 		if fr.DeliveryTag == nil {
-			return r.l.closeWithError(ErrCondNotAllowed, "received message without a delivery-tag")
+			r.l.closeWithError(ErrCondNotAllowed, "received message without a delivery-tag")
+			return
 		}
 	} else {
 		// this is a continuation of a multipart message
@@ -700,21 +699,24 @@ func (r *Receiver) muxReceive(fr frames.PerformTransfer) error {
 				"received continuation transfer with inconsistent delivery-id: %d != %d",
 				*fr.DeliveryID, r.msg.deliveryID,
 			)
-			return r.l.closeWithError(ErrCondNotAllowed, msg)
+			r.l.closeWithError(ErrCondNotAllowed, msg)
+			return
 		}
 		if fr.MessageFormat != nil && *fr.MessageFormat != r.msg.Format {
 			msg := fmt.Sprintf(
 				"received continuation transfer with inconsistent message-format: %d != %d",
 				*fr.MessageFormat, r.msg.Format,
 			)
-			return r.l.closeWithError(ErrCondNotAllowed, msg)
+			r.l.closeWithError(ErrCondNotAllowed, msg)
+			return
 		}
 		if fr.DeliveryTag != nil && !bytes.Equal(fr.DeliveryTag, r.msg.DeliveryTag) {
 			msg := fmt.Sprintf(
 				"received continuation transfer with inconsistent delivery-tag: %q != %q",
 				fr.DeliveryTag, r.msg.DeliveryTag,
 			)
-			return r.l.closeWithError(ErrCondNotAllowed, msg)
+			r.l.closeWithError(ErrCondNotAllowed, msg)
+			return
 		}
 	}
 
@@ -723,12 +725,13 @@ func (r *Receiver) muxReceive(fr frames.PerformTransfer) error {
 		r.msgBuf.Reset()
 		r.msg = Message{}
 		r.more = false
-		return nil
+		return
 	}
 
 	// ensure maxMessageSize will not be exceeded
 	if r.l.maxMessageSize != 0 && uint64(r.msgBuf.Len())+uint64(len(fr.Payload)) > r.l.maxMessageSize {
-		return r.l.closeWithError(ErrCondMessageSizeExceeded, fmt.Sprintf("received message larger than max size of %d", r.l.maxMessageSize))
+		r.l.closeWithError(ErrCondMessageSizeExceeded, fmt.Sprintf("received message larger than max size of %d", r.l.maxMessageSize))
+		return
 	}
 
 	// add the payload the the buffer
@@ -741,13 +744,14 @@ func (r *Receiver) muxReceive(fr frames.PerformTransfer) error {
 	r.more = fr.More
 
 	if fr.More {
-		return nil
+		return
 	}
 
 	// last frame in message
 	err := r.msg.Unmarshal(&r.msgBuf)
 	if err != nil {
-		return &LinkError{inner: err}
+		r.l.closeWithError(ErrCondInternalError, err.Error())
+		return
 	}
 
 	// send to receiver
@@ -769,7 +773,6 @@ func (r *Receiver) muxReceive(fr frames.PerformTransfer) error {
 	r.l.deliveryCount++
 	r.l.linkCredit--
 	debug.Log(3, "RX (Receiver) link %s - deliveryCount: %d, linkCredit: %d, len(messages): %d", r.l.key.name, r.l.deliveryCount, r.l.linkCredit, msgLen)
-	return nil
 }
 
 // inFlight tracks in-flight message dispositions allowing receivers

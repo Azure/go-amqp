@@ -300,8 +300,6 @@ func (s *Sender) mux() {
 		close(s.l.done)
 	}()
 
-	var clientClosed bool // indicates a client-side close
-
 Loop:
 	for {
 		var outgoingTransfers chan frames.PerformTransfer
@@ -313,7 +311,7 @@ Loop:
 		}
 
 		closed := s.l.close
-		if clientClosed {
+		if s.l.closeInProgress {
 			// swap out channel so it no longer triggers
 			closed = nil
 		}
@@ -329,15 +327,11 @@ Loop:
 			// populated queue
 			fr := *q.Dequeue()
 			s.l.rxQ.Release(q)
-			if err := s.muxHandleFrame(fr, clientClosed); err != nil {
-				// if the error returned is an AMQP error it means a client-side close was
-				// initiated so we need to keep the mux running in order to send the close.
-				var amqpErr *Error
-				if errors.As(err, &amqpErr) {
-					continue
-				}
 
-				// some other error, exit
+			// if muxHandleFrame returns an error it means the mux must terminate.
+			// note that in the case of a client-side close due to an error, nil
+			// is returned in order to keep the mux running to ack the detach frame.
+			if err := s.muxHandleFrame(fr); err != nil {
 				s.l.doneErr = err
 				return
 			}
@@ -361,13 +355,16 @@ Loop:
 				continue Loop
 			}
 
-		case err := <-closed:
-			// sender is being closed by the client (Close() or protocol error)
-			clientClosed = true
+		case <-closed:
+			if s.l.closeInProgress {
+				// a client-side close due to protocol error is in progress
+				continue
+			}
+			// sender is being closed by the client
+			s.l.closeInProgress = true
 			fr := &frames.PerformDetach{
 				Handle: s.l.handle,
 				Closed: true,
-				Error:  err,
 			}
 			_ = s.l.session.txFrame(fr, nil)
 
@@ -381,7 +378,7 @@ Loop:
 
 // muxHandleFrame processes fr based on type.
 // depending on the peer's RSM, it might return a disposition frame for sending
-func (s *Sender) muxHandleFrame(fr frames.FrameBody, clientClosed bool) error {
+func (s *Sender) muxHandleFrame(fr frames.FrameBody) error {
 	debug.Log(2, "RX (Sender): %s", fr)
 	switch fr := fr.(type) {
 	// flow control frame
@@ -418,7 +415,7 @@ func (s *Sender) muxHandleFrame(fr frames.FrameBody, clientClosed bool) error {
 		case s.l.session.tx <- resp:
 			debug.Log(2, "TX (Sender): %s", resp)
 		case <-s.l.close:
-			return &LinkError{}
+			return nil
 		case <-s.l.session.done:
 			return s.l.session.doneErr
 		}
@@ -442,7 +439,7 @@ func (s *Sender) muxHandleFrame(fr frames.FrameBody, clientClosed bool) error {
 		case s.l.session.tx <- dr:
 			debug.Log(2, "TX (Sender): mux frame to Session: %d, %s", s.l.session.channel, dr)
 		case <-s.l.close:
-			return &LinkError{}
+			return nil
 		case <-s.l.session.done:
 			return s.l.session.doneErr
 		}
@@ -450,7 +447,7 @@ func (s *Sender) muxHandleFrame(fr frames.FrameBody, clientClosed bool) error {
 		return nil
 
 	default:
-		return s.l.muxHandleFrame(fr, clientClosed)
+		return s.l.muxHandleFrame(fr)
 	}
 
 	return nil

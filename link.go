@@ -37,7 +37,7 @@ type link struct {
 	rxQ *queue.Holder[frames.FrameBody]
 
 	// used for gracefully closing link
-	close      chan *Error   // signals a link's mux to shut down; DO NOT use this to check if a link has terminated, use done instead
+	close      chan struct{} // signals a link's mux to shut down; DO NOT use this to check if a link has terminated, use done instead
 	forceClose chan struct{} // used for forcibly terminate a link if Close() times out/is cancelled
 	closeOnce  *sync.Once    // closeOnce protects close from being closed multiple times
 
@@ -64,13 +64,15 @@ type link struct {
 	senderSettleMode   *SenderSettleMode
 	receiverSettleMode *ReceiverSettleMode
 	maxMessageSize     uint64
+
+	closeInProgress bool // indicates that the detach performative has been sent
 }
 
 func newLink(s *Session, r encoding.Role) link {
 	l := link{
 		key:        linkKey{shared.RandString(40), r},
 		session:    s,
-		close:      make(chan *Error, 1), // buffered so we can queue up an error from the mux
+		close:      make(chan struct{}),
 		forceClose: make(chan struct{}),
 		closeOnce:  &sync.Once{},
 		done:       make(chan struct{}),
@@ -231,18 +233,19 @@ func (l *link) setSettleModes(resp *frames.PerformAttach) error {
 }
 
 // muxHandleFrame processes fr based on type.
-func (l *link) muxHandleFrame(fr frames.FrameBody, clientClosed bool) error {
+func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 	switch fr := fr.(type) {
 	case *frames.PerformDetach:
 		if !fr.Closed {
-			return &LinkError{inner: fmt.Errorf("non-closing detach not supported: %+v", fr)}
+			l.closeWithError(ErrCondNotImplemented, fmt.Sprintf("non-closing detach not supported: %+v", fr))
+			return nil
 		}
 
 		// there are two possibilities:
 		// - this is the ack to a client-side Close()
 		// - the peer is closing the link so we must ack
 
-		if clientClosed {
+		if l.closeInProgress {
 			// if the client-side close was initiated due to an error (l.closeWithError)
 			// then l.doneErr will already be set. in this case, return that error instead
 			// of an empty LinkError which indicates a clean client-side close.
@@ -261,7 +264,8 @@ func (l *link) muxHandleFrame(fr frames.FrameBody, clientClosed bool) error {
 
 	default:
 		debug.Log(1, "RX (link): unexpected frame: %s", fr)
-		return l.closeWithError(ErrCondInternalError, fmt.Sprintf("link received unexpected frame %T", fr))
+		l.closeWithError(ErrCondInternalError, fmt.Sprintf("link received unexpected frame %T", fr))
+		return nil
 	}
 }
 
@@ -269,17 +273,7 @@ func (l *link) muxHandleFrame(fr frames.FrameBody, clientClosed bool) error {
 func (l *link) closeLink(ctx context.Context) error {
 	var ctxErr error
 	l.closeOnce.Do(func() {
-		// we can't simply close(l.close) as that can race with
-		// the mux receiving an invalid frame during shutdown
-		select {
-		case l.close <- nil:
-			// close initiated
-		case <-ctx.Done():
-			close(l.forceClose)
-			ctxErr = ctx.Err()
-			return
-		}
-
+		close(l.close)
 		select {
 		case <-l.done:
 			// mux exited
@@ -301,19 +295,24 @@ func (l *link) closeLink(ctx context.Context) error {
 	return l.doneErr
 }
 
-// closes the link with the specified AMQP error
+// closeWithError initiates closing the link with the specified AMQP error.
+// the mux must continue to run until the ack'ing detach is received.
 // l.doneErr is populated with a &LinkError{} containing an inner error constructed from the specified values
 //   - cnd is the AMQP error condition
 //   - desc is the error description
-//
-// returns an &Error{} with cnd and desc for its values
-func (l *link) closeWithError(cnd ErrCond, desc string) error {
+func (l *link) closeWithError(cnd ErrCond, desc string) {
 	amqpErr := &Error{Condition: cnd, Description: desc}
-	select {
-	case l.close <- amqpErr:
-		l.doneErr = &LinkError{inner: fmt.Errorf("%s: %s", cnd, desc)}
-	default:
+	if l.closeInProgress {
 		debug.Log(3, "TX (link) close error already pending, discarding %v", amqpErr)
+		return
 	}
-	return amqpErr
+
+	dr := &frames.PerformDetach{
+		Handle: l.handle,
+		Closed: true,
+		Error:  amqpErr,
+	}
+	l.closeInProgress = true
+	l.doneErr = &LinkError{inner: fmt.Errorf("%s: %s", cnd, desc)}
+	_ = l.session.txFrame(dr, nil)
 }

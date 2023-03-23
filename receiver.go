@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/Azure/go-amqp/internal/buffer"
 	"github.com/Azure/go-amqp/internal/debug"
@@ -17,15 +16,8 @@ import (
 
 // Default link options
 const (
-	defaultLinkCredit      = 1
-	defaultLinkBatchSize   = 0
-	defaultLinkBatchMaxAge = 5 * time.Second
+	defaultLinkCredit = 1
 )
-
-type messageDisposition struct {
-	id    uint32
-	state encoding.DeliveryState
-}
 
 // Receiver receives messages on a single AMQP link.
 type Receiver struct {
@@ -44,12 +36,9 @@ type Receiver struct {
 	settlementCount   uint32     // the count of settled messages
 	settlementCountMu sync.Mutex // must be held when accessing settlementCount
 
-	autoSendFlow bool                    // automatically send flow frames as credit becomes available
-	batchSize    uint32                  // enable batching of message dispositions
-	batchMaxAge  time.Duration           // maximum time between the start n batch and sending the batch to the server
-	dispositions chan messageDisposition // message dispositions are sent on this channel when batching is enabled
-	inFlight     inFlight                // used to track message disposition when rcv-settle-mode == second
-	creditor     creditor                // manages credits via calls to IssueCredit/DrainCredit
+	autoSendFlow bool     // automatically send flow frames as credit becomes available
+	inFlight     inFlight // used to track message disposition when rcv-settle-mode == second
+	creditor     creditor // manages credits via calls to IssueCredit/DrainCredit
 }
 
 // IssueCredit adds credits to be requested in the next flow request.
@@ -261,90 +250,6 @@ func (r *Receiver) closeWithError(de *Error) error {
 	return &LinkError{inner: de}
 }
 
-func (r *Receiver) dispositionBatcher() {
-	// batch operations:
-	// Keep track of the first and last delivery ID, incrementing as
-	// Accept() is called. After last-first == batchSize, send disposition.
-	// If Reject()/Release() is called, send one disposition for previously
-	// accepted, and one for the rejected/released message. If messages are
-	// accepted out of order, send any existing batch and the current message.
-	var (
-		batchSize    = r.batchSize
-		batchStarted bool
-		first        uint32
-		last         uint32
-	)
-
-	// create an unstarted timer
-	batchTimer := time.NewTimer(1 * time.Minute)
-	batchTimer.Stop()
-	defer batchTimer.Stop()
-
-	for {
-		select {
-		case msgDis := <-r.dispositions:
-
-			// not accepted or batch out of order
-			_, isAccept := msgDis.state.(*encoding.StateAccepted)
-			if !isAccept || (batchStarted && last+1 != msgDis.id) {
-				// send the current batch, if any
-				if batchStarted {
-					lastCopy := last
-					err := r.sendDisposition(first, &lastCopy, &encoding.StateAccepted{})
-					if err != nil {
-						r.inFlight.remove(first, &lastCopy, err)
-					}
-					batchStarted = false
-				}
-
-				// send the current message
-				err := r.sendDisposition(msgDis.id, nil, msgDis.state)
-				if err != nil {
-					r.inFlight.remove(msgDis.id, nil, err)
-				}
-				continue
-			}
-
-			if batchStarted {
-				// increment last
-				last++
-			} else {
-				// start new batch
-				batchStarted = true
-				first = msgDis.id
-				last = msgDis.id
-				batchTimer.Reset(r.batchMaxAge)
-			}
-
-			// send batch if current size == batchSize
-			if last-first+1 >= batchSize {
-				lastCopy := last
-				err := r.sendDisposition(first, &lastCopy, &encoding.StateAccepted{})
-				if err != nil {
-					r.inFlight.remove(first, &lastCopy, err)
-				}
-				batchStarted = false
-				if !batchTimer.Stop() {
-					<-batchTimer.C // batch timer must be drained if stop returns false
-				}
-			}
-
-		// maxBatchAge elapsed, send batch
-		case <-batchTimer.C:
-			lastCopy := last
-			err := r.sendDisposition(first, &lastCopy, &encoding.StateAccepted{})
-			if err != nil {
-				r.inFlight.remove(first, &lastCopy, err)
-			}
-			batchStarted = false
-			batchTimer.Stop()
-
-		case <-r.l.done:
-			return
-		}
-	}
-}
-
 // sendDisposition sends a disposition frame to the peer
 func (r *Receiver) sendDisposition(first uint32, last *uint32, state encoding.DeliveryState) error {
 	fr := &frames.PerformDisposition{
@@ -375,18 +280,8 @@ func (r *Receiver) messageDisposition(ctx context.Context, msg *Message, state e
 		wait = r.inFlight.add(msg.deliveryID)
 	}
 
-	if r.batchSize > 0 {
-		select {
-		case r.dispositions <- messageDisposition{id: msg.deliveryID, state: state}:
-			// disposition sent to batcher
-		case <-r.l.done:
-			return r.l.doneErr
-		}
-	} else {
-		err := r.sendDisposition(msg.deliveryID, nil, state)
-		if err != nil {
-			return err
-		}
+	if err := r.sendDisposition(msg.deliveryID, nil, state); err != nil {
+		return err
 	}
 
 	if wait == nil {
@@ -457,8 +352,6 @@ func newReceiver(source string, session *Session, opts *ReceiverOptions) (*Recei
 		l:             l,
 		autoSendFlow:  true,
 		receiverReady: make(chan struct{}, 1),
-		batchSize:     defaultLinkBatchSize,
-		batchMaxAge:   defaultLinkBatchMaxAge,
 	}
 
 	r.messagesQ = queue.NewHolder(queue.New[Message](int(session.incomingWindow)))
@@ -467,10 +360,6 @@ func newReceiver(source string, session *Session, opts *ReceiverOptions) (*Recei
 		return r, nil
 	}
 
-	r.batchSize = opts.BatchSize
-	if opts.BatchMaxAge > 0 {
-		r.batchMaxAge = opts.BatchMaxAge
-	}
 	for _, v := range opts.Capabilities {
 		r.l.target.Capabilities = append(r.l.target.Capabilities, encoding.Symbol(v))
 	}

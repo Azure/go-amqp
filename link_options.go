@@ -1,8 +1,6 @@
 package amqp
 
 import (
-	"time"
-
 	"github.com/Azure/go-amqp/internal/encoding"
 )
 
@@ -81,23 +79,6 @@ type SenderOptions struct {
 }
 
 type ReceiverOptions struct {
-	// BatchSize toggles batching of message disposition.
-	//
-	// When enabled, accepting a message does not send the disposition
-	// to the server until the batch is equal to BatchSize or the
-	// batch max age expires.
-	//
-	// Default: 0.
-	BatchSize uint32
-
-	// BatchMaxAge sets the maximum time between the start
-	// of a disposition batch and sending the batch to the server.
-	//
-	// Has no effect when Batching is false.
-	//
-	// Default: 5 seconds.
-	BatchMaxAge time.Duration
-
 	// Capabilities is the list of extension capabilities the receiver supports.
 	Capabilities []string
 

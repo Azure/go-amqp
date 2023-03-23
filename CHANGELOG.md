@@ -11,7 +11,7 @@
 * Renamed fields in the `ReceiverOptions` for configuring options on the source.
 * Renamed `DetachError` to `LinkError` as "detach" has a specific meaning which doesn't equate to the returned link errors.
 * The `Receiver.DrainCredit()` API has been removed.
-* The `Batching` field in `ReceiverOptions` has been renamed to `BatchSize` and its type changed to `uint32`.
+* Removed fields `Batching` and `BatchMaxAge` in `ReceiverOptions`.
 * The `IncomingWindow` and `OutgoingWindow` fields in `SessionOptions` have been removed.
 * The field `SenderOptions.IgnoreDispositionErrors` has been removed.
   * By default, messages that are rejected by the peer no longer close the `Sender`.

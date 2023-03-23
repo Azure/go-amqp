@@ -201,101 +201,6 @@ func TestSessionNewReceiverBadOptionFails(t *testing.T) {
 	require.NoError(t, client.Close())
 }
 
-func TestSessionNewReceiverBatchingOneCredit(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		switch tt := req.(type) {
-		case *fake.AMQPProto:
-			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
-		case *frames.PerformOpen:
-			return fake.PerformOpen("container")
-		case *frames.PerformBegin:
-			return fake.PerformBegin(0)
-		case *frames.PerformEnd:
-			return fake.PerformEnd(0, nil)
-		case *frames.PerformAttach:
-			return fake.ReceiverAttach(0, tt.Name, 0, ReceiverSettleModeFirst, nil)
-		case *frames.PerformFlow:
-			return nil, nil
-		case *frames.PerformClose:
-			return fake.PerformClose(nil)
-		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
-		}
-	}
-	netConn := fake.NewNetConn(responder)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	client, err := NewConn(ctx, netConn, nil)
-	cancel()
-	require.NoError(t, err)
-
-	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx, nil)
-	cancel()
-	require.NoError(t, err)
-	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	recv, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
-		BatchSize: 5,
-	})
-	cancel()
-	require.NoError(t, err)
-	require.NotNil(t, recv)
-	require.EqualValues(t, 0, recv.batchSize, "expected batching disabled with one link credit")
-	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	err = session.Close(ctx)
-	cancel()
-	require.NoError(t, err)
-	require.NoError(t, client.Close())
-}
-
-func TestSessionNewReceiverBatchingEnabled(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		switch tt := req.(type) {
-		case *fake.AMQPProto:
-			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
-		case *frames.PerformOpen:
-			return fake.PerformOpen("container")
-		case *frames.PerformBegin:
-			return fake.PerformBegin(0)
-		case *frames.PerformEnd:
-			return fake.PerformEnd(0, nil)
-		case *frames.PerformAttach:
-			return fake.ReceiverAttach(0, tt.Name, 0, ReceiverSettleModeFirst, nil)
-		case *frames.PerformFlow:
-			return nil, nil
-		case *frames.PerformClose:
-			return fake.PerformClose(nil)
-		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
-		}
-	}
-	netConn := fake.NewNetConn(responder)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	client, err := NewConn(ctx, netConn, nil)
-	cancel()
-	require.NoError(t, err)
-
-	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx, nil)
-	cancel()
-	require.NoError(t, err)
-	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	recv, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
-		BatchSize: 10,
-		Credit:    10,
-	})
-	cancel()
-	require.NoError(t, err)
-	require.NotNil(t, recv)
-	require.EqualValues(t, 10, recv.batchSize, "expected batching enabled with multiple link credits")
-	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	err = session.Close(ctx)
-	cancel()
-	require.NoError(t, err)
-	require.NoError(t, client.Close())
-}
-
 func TestSessionNewReceiverMismatchedLinkName(t *testing.T) {
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
@@ -328,8 +233,7 @@ func TestSessionNewReceiverMismatchedLinkName(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 	recv, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
-		BatchSize: 10,
-		Credit:    10,
+		Credit: 10,
 	})
 	cancel()
 	require.Error(t, err)

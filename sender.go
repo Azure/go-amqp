@@ -18,12 +18,6 @@ type Sender struct {
 	l         link
 	transfers chan frames.PerformTransfer // sender uses to send transfer frames
 
-	// Indicates whether we should automatically close the link on disposition errors or not.
-	// Some AMQP servers (like Event Hubs) benefit from keeping the link open on disposition errors
-	// (for instance, if you're doing many parallel sends over the same link and you get back a
-	// throttling error, which is not fatal)
-	closeOnDispositionError bool
-
 	mu              sync.Mutex // protects buf and nextDeliveryTag
 	buf             buffer.Buffer
 	nextDeliveryTag uint64
@@ -80,11 +74,10 @@ func (s *Sender) Send(ctx context.Context, msg *Message, opts *SendOptions) erro
 	select {
 	case state := <-done:
 		if state, ok := state.(*encoding.StateRejected); ok {
-			if s.detachOnRejectDisp() {
-				// TODO: this appears to be duplicated in the mux
-				return &LinkError{RemoteErr: state.Error}
+			if state.Error != nil {
+				return state.Error
 			}
-			return state.Error
+			return errors.New("the peer rejected the message without specifying an error")
 		}
 		return nil
 	case <-s.l.done:
@@ -200,8 +193,7 @@ func newSender(target string, session *Session, opts *SenderOptions) (*Sender, e
 	l.target = &frames.Target{Address: target}
 	l.source = new(frames.Source)
 	s := &Sender{
-		l:                       l,
-		closeOnDispositionError: true,
+		l: l,
 	}
 
 	if opts == nil {
@@ -226,7 +218,6 @@ func newSender(target string, session *Session, opts *SenderOptions) (*Sender, e
 		s.l.source.ExpiryPolicy = opts.ExpiryPolicy
 	}
 	s.l.source.Timeout = opts.ExpiryTimeout
-	s.closeOnDispositionError = !opts.IgnoreDispositionErrors
 	if opts.Name != "" {
 		s.l.key.name = opts.Name
 	}
@@ -416,13 +407,6 @@ func (s *Sender) muxHandleFrame(fr frames.FrameBody, clientClosed bool) error {
 		}
 
 	case *frames.PerformDisposition:
-		// If sending async and a message is rejected, cause a link error.
-		//
-		// This isn't ideal, but there isn't a clear better way to handle it.
-		if fr, ok := fr.State.(*encoding.StateRejected); ok && s.detachOnRejectDisp() {
-			return &LinkError{RemoteErr: fr.Error}
-		}
-
 		if fr.Settled {
 			return nil
 		}
@@ -453,14 +437,4 @@ func (s *Sender) muxHandleFrame(fr frames.FrameBody, clientClosed bool) error {
 	}
 
 	return nil
-}
-
-func (s *Sender) detachOnRejectDisp() bool {
-	// only detach on rejection when no RSM was requested or in ModeFirst.
-	// if the receiver is in ModeSecond, it will send an explicit rejection disposition
-	// that we'll have to ack. so in that case, we don't treat it as a link error.
-	if s.closeOnDispositionError && (s.l.receiverSettleMode == nil || *s.l.receiverSettleMode == ReceiverSettleModeFirst) {
-		return true
-	}
-	return false
 }

@@ -13,6 +13,8 @@
 * The `Receiver.DrainCredit()` API has been removed.
 * The `Batching` field in `ReceiverOptions` has been renamed to `BatchSize` and its type changed to `uint32`.
 * The `IncomingWindow` and `OutgoingWindow` fields in `SessionOptions` have been removed.
+* The field `SenderOptions.IgnoreDispositionErrors` has been removed.
+  * By default, messages that are rejected by the peer no longer close the `Sender`.
 
 ### Bugs Fixed
 

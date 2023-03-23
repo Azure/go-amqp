@@ -198,7 +198,6 @@ func TestNewSendingLink(t *testing.T) {
 				require.False(t, l.l.dynamicAddr)
 				require.Empty(t, l.l.source.ExpiryPolicy)
 				require.Zero(t, l.l.source.Timeout)
-				require.True(t, l.closeOnDispositionError)
 				require.NotEmpty(t, l.l.key.name)
 				require.Empty(t, l.l.properties)
 				require.Nil(t, l.l.senderSettleMode)
@@ -209,13 +208,12 @@ func TestNewSendingLink(t *testing.T) {
 		{
 			label: "with options",
 			opts: SenderOptions{
-				Capabilities:            []string{"foo", "bar"},
-				Durability:              DurabilityUnsettledState,
-				DynamicAddress:          true,
-				ExpiryPolicy:            ExpiryPolicyLinkDetach,
-				ExpiryTimeout:           5,
-				IgnoreDispositionErrors: true,
-				Name:                    name,
+				Capabilities:   []string{"foo", "bar"},
+				Durability:     DurabilityUnsettledState,
+				DynamicAddress: true,
+				ExpiryPolicy:   ExpiryPolicyLinkDetach,
+				ExpiryTimeout:  5,
+				Name:           name,
 				Properties: map[string]any{
 					"property": 123,
 				},
@@ -228,7 +226,6 @@ func TestNewSendingLink(t *testing.T) {
 				require.True(t, l.l.dynamicAddr)
 				require.Equal(t, ExpiryPolicyLinkDetach, l.l.source.ExpiryPolicy)
 				require.Equal(t, uint32(5), l.l.source.Timeout)
-				require.False(t, l.closeOnDispositionError)
 				require.Equal(t, name, l.l.key.name)
 				require.Equal(t, map[encoding.Symbol]any{
 					"property": 123,

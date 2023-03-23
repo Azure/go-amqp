@@ -410,60 +410,6 @@ func TestSenderSendSettled(t *testing.T) {
 	require.NoError(t, client.Close())
 }
 
-func TestSenderSendRejected(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := senderFrameHandler(SenderSettleModeUnsettled)(req)
-		if err != nil || b != nil {
-			return b, err
-		}
-		switch tt := req.(type) {
-		case *frames.PerformTransfer:
-			return fake.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, nil, &encoding.StateRejected{
-				Error: &Error{
-					Condition:   "rejected",
-					Description: "didn't like it",
-				},
-			})
-		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
-		}
-	}
-	netConn := fake.NewNetConn(responder)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	client, err := NewConn(ctx, netConn, nil)
-	cancel()
-	require.NoError(t, err)
-
-	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	session, err := client.NewSession(ctx, nil)
-	cancel()
-	require.NoError(t, err)
-	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := session.NewSender(ctx, "target", nil)
-	cancel()
-	require.NoError(t, err)
-
-	sendInitialFlowFrame(t, netConn, 0, 100)
-
-	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	err = snd.Send(ctx, NewMessage([]byte("test")), nil)
-	cancel()
-	var linkErr *LinkError
-	require.ErrorAs(t, err, &linkErr)
-	require.NotNil(t, linkErr.RemoteErr)
-	require.Equal(t, ErrCond("rejected"), linkErr.RemoteErr.Condition)
-
-	// link should now be detached
-	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	err = snd.Send(ctx, NewMessage([]byte("test")), nil)
-	cancel()
-	if !errors.As(err, &linkErr) {
-		t.Fatalf("unexpected error type %T", err)
-	}
-	require.NoError(t, client.Close())
-}
-
 func TestSenderSendRejectedNoDetach(t *testing.T) {
 	responder := func(req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {
@@ -508,9 +454,7 @@ func TestSenderSendRejectedNoDetach(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := session.NewSender(ctx, "target", &SenderOptions{
-		IgnoreDispositionErrors: true,
-	})
+	snd, err := session.NewSender(ctx, "target", nil)
 	cancel()
 	require.NoError(t, err)
 

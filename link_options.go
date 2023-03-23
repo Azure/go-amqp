@@ -33,11 +33,6 @@ type SenderOptions struct {
 	// Default: 0.
 	ExpiryTimeout uint32
 
-	// IgnoreDispositionErrors controls automatic close on disposition errors.
-	//
-	// Default: false.
-	IgnoreDispositionErrors bool
-
 	// Name sets the name of the link.
 	//
 	// Link names must be unique per-connection and direction.

@@ -16,6 +16,8 @@
 * The field `SenderOptions.IgnoreDispositionErrors` has been removed.
   * By default, messages that are rejected by the peer no longer close the `Sender`.
 * The field `SendSettled` in type `Message` has been moved to type `SendOptions` and renamed as `Settled`.
+* The following type aliases have been removed.
+  * `Address`, `Binary`, `MessageID`, `SequenceNumber`, `Symbol`
 
 ### Bugs Fixed
 

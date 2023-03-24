@@ -38,6 +38,7 @@
 * Disallow sending of frames once the end performative has been sent.
 * Clean up client-side state when a `context.Context` expires or is cancelled and document the potential side-effects.
 * Unexpected frames will now terminate a `Session`, `Receiver`, or `Sender` as required.
+* Cleaned up tests that triggered the race detector.
 
 ## 0.18.1 (2023-01-17)
 

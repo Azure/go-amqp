@@ -450,12 +450,24 @@ func (r *Receiver) attach(ctx context.Context) error {
 		return err
 	}
 
-	go r.mux()
-
 	return nil
 }
 
-func (r *Receiver) mux() {
+func nop() {}
+
+type receiverTestHooks struct {
+	MuxStart  func()
+	MuxSelect func()
+}
+
+func (r *Receiver) mux(hooks receiverTestHooks) {
+	if hooks.MuxSelect == nil {
+		hooks.MuxSelect = nop
+	}
+	if hooks.MuxStart == nil {
+		hooks.MuxStart = nop
+	}
+
 	defer func() {
 		// unblock any in flight message dispositions
 		r.inFlight.clear(r.l.doneErr)
@@ -468,6 +480,8 @@ func (r *Receiver) mux() {
 		r.l.session.deallocateHandle(&r.l)
 		close(r.l.done)
 	}()
+
+	hooks.MuxStart()
 
 	if r.autoSendFlow {
 		r.l.doneErr = r.muxFlow(r.l.linkCredit, false)
@@ -520,6 +534,8 @@ func (r *Receiver) mux() {
 			// swap out channel so it no longer triggers
 			closed = nil
 		}
+
+		hooks.MuxSelect()
 
 		select {
 		case <-r.l.forceClose:

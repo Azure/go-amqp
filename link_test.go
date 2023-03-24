@@ -11,6 +11,7 @@ import (
 	"github.com/Azure/go-amqp/internal/fake"
 	"github.com/Azure/go-amqp/internal/frames"
 	"github.com/Azure/go-amqp/internal/queue"
+	"github.com/Azure/go-amqp/internal/test"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,7 +19,14 @@ func TestLinkFlowThatNeedsToReplenishCredits(t *testing.T) {
 	for times := 0; times < 100; times++ {
 		l := newTestLink(t)
 		l.l.linkCredit = 2
-		go l.mux()
+
+		waitForCredit := make(chan struct{})
+
+		go l.mux(receiverTestHooks{
+			MuxStart: func() {
+				<-waitForCredit
+			},
+		})
 
 		err := l.IssueCredit(1)
 		require.Error(t, err, "issueCredit can only be used with receiver links using manual credit management")
@@ -26,6 +34,7 @@ func TestLinkFlowThatNeedsToReplenishCredits(t *testing.T) {
 		// we've consumed half of the maximum credit we're allowed to have - reflow!
 		l.l.linkCredit = 1
 		l.unsettledMessages = map[string]struct{}{}
+		close(waitForCredit)
 
 		l.onSettlement(1)
 
@@ -53,17 +62,27 @@ func TestLinkFlowThatNeedsToReplenishCredits(t *testing.T) {
 		}
 
 		cancel()
-		close(l.l.close)
+		close(l.l.forceClose)
+		<-l.l.done
 	}
 }
 
 func TestLinkFlowWithZeroCredits(t *testing.T) {
 	l := newTestLink(t)
-	go l.mux()
-	defer close(l.l.close)
+
+	muxSem := test.NewMuxSemaphore(0)
+
+	go l.mux(receiverTestHooks{
+		MuxSelect: func() {
+			muxSem.OnLoop()
+		},
+	})
+	defer close(l.l.forceClose)
 
 	err := l.IssueCredit(1)
 	require.Error(t, err, "issueCredit can only be used with receiver links using manual credit management")
+
+	muxSem.Wait()
 
 	// and flow goes through the non-manual credit path
 	require.EqualValues(t, 0, l.l.linkCredit, "No link credits have been added")
@@ -74,6 +93,8 @@ func TestLinkFlowWithZeroCredits(t *testing.T) {
 		"hello2": {},
 	}
 
+	muxSem.Release(0)
+
 	select {
 	case l.receiverReady <- struct{}{}:
 		// woke up mux
@@ -81,15 +102,17 @@ func TestLinkFlowWithZeroCredits(t *testing.T) {
 		t.Fatal("failed to wake up mux")
 	}
 
+	muxSem.Wait()
 	require.Zero(t, l.l.linkCredit)
+	muxSem.Release(-1)
 }
 
 func TestLinkFlowWithManualCreditor(t *testing.T) {
 	l := newTestLink(t)
 	l.autoSendFlow = false
 	l.l.linkCredit = 1
-	go l.mux()
-	defer close(l.l.close)
+	go l.mux(receiverTestHooks{})
+	defer close(l.l.forceClose)
 
 	require.NoError(t, l.IssueCredit(100))
 
@@ -109,8 +132,8 @@ func TestLinkFlowWithManualCreditorAndNoFlowNeeded(t *testing.T) {
 	l := newTestLink(t)
 	l.autoSendFlow = false
 	l.l.linkCredit = 1
-	go l.mux()
-	defer close(l.l.close)
+	go l.mux(receiverTestHooks{})
+	defer close(l.l.forceClose)
 
 	select {
 	case l.receiverReady <- struct{}{}:
@@ -132,8 +155,6 @@ func TestMuxFlowHandlesDrainProperly(t *testing.T) {
 	l := newTestLink(t)
 	l.autoSendFlow = false
 	l.l.linkCredit = 101
-	go l.mux()
-	defer close(l.l.close)
 
 	// simulate what our 'drain' call to muxFlow would look like
 	// when draining
@@ -167,8 +188,9 @@ func newTestLink(t *testing.T) *Receiver {
 				conn:    conn,
 				handles: bitmap.New(32),
 			},
-			rxQ:   queue.NewHolder(queue.New[frames.FrameBody](100)),
-			close: make(chan struct{}),
+			rxQ:        queue.NewHolder(queue.New[frames.FrameBody](100)),
+			close:      make(chan struct{}),
+			forceClose: make(chan struct{}),
 		},
 		autoSendFlow:  true,
 		inFlight:      inFlight{},

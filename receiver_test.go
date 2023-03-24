@@ -10,6 +10,7 @@ import (
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/fake"
 	"github.com/Azure/go-amqp/internal/frames"
+	"github.com/Azure/go-amqp/internal/test"
 	"github.com/stretchr/testify/require"
 )
 
@@ -383,6 +384,8 @@ func TestReceiveInvalidMessage(t *testing.T) {
 }
 
 func TestReceiveSuccessReceiverSettleModeFirst(t *testing.T) {
+	muxSem := test.NewMuxSemaphore(2)
+
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
@@ -414,36 +417,37 @@ func TestReceiveSuccessReceiverSettleModeFirst(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
+	r, err := newReceiverWithHooks(ctx, session, "source", &ReceiverOptions{
 		SettlementMode: ReceiverSettleModeFirst.Ptr(),
-	})
+	}, receiverTestHooks{MuxSelect: muxSem.OnLoop})
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	msg, err := r.Receive(ctx, nil)
 	cancel()
 	require.NoError(t, err)
+	muxSem.Wait()
 	if c := r.countUnsettled(); c != 1 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	// link credit should be 0
-	require.NoError(t, waitForReceiver(r, true))
 	if c := r.l.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
+	muxSem.Release(0)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	err = r.AcceptMessage(ctx, msg)
 	cancel()
 	require.NoError(t, err)
+	muxSem.Wait()
 	if c := r.countUnsettled(); c != 0 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
-	// wait for the link to unpause as credit should now be available
-	require.NoError(t, waitForReceiver(r, false))
 	// link credit should be 1
 	if c := r.l.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
+	muxSem.Release(-1)
 	// subsequent dispositions should have no effect
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	err = r.AcceptMessage(ctx, msg)
@@ -453,6 +457,8 @@ func TestReceiveSuccessReceiverSettleModeFirst(t *testing.T) {
 }
 
 func TestReceiveSuccessReceiverSettleModeSecondAccept(t *testing.T) {
+	muxSem := test.NewMuxSemaphore(2)
+
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
@@ -487,9 +493,9 @@ func TestReceiveSuccessReceiverSettleModeSecondAccept(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
+	r, err := newReceiverWithHooks(ctx, session, "source", &ReceiverOptions{
 		SettlementMode: ReceiverSettleModeSecond.Ptr(),
-	})
+	}, receiverTestHooks{MuxSelect: muxSem.OnLoop})
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
@@ -499,33 +505,26 @@ func TestReceiveSuccessReceiverSettleModeSecondAccept(t *testing.T) {
 	if c := r.countUnsettled(); c != 1 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
-	// wait for the link to pause as we've consumed all available credit
-	require.NoError(t, waitForReceiver(r, true))
+	muxSem.Wait()
 	// link credit must be zero since we only started with 1
 	if c := r.l.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
+	muxSem.Release(1)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	err = r.AcceptMessage(ctx, msg)
 	cancel()
 	require.NoError(t, err)
+	muxSem.Wait()
 	if c := r.countUnsettled(); c != 0 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	require.Equal(t, true, msg.settled)
-	// perform a dummy receive with short timeout to trigger flow
-	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	_, err = r.Receive(ctx, nil)
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatal(err)
-	}
-	cancel()
-	// wait for the link to unpause as credit should now be available
-	require.NoError(t, waitForReceiver(r, false))
 	// link credit should be back to 1
 	if c := r.l.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
+	muxSem.Release(-1)
 	// subsequent dispositions should have no effect
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	err = r.AcceptMessage(ctx, msg)
@@ -535,6 +534,8 @@ func TestReceiveSuccessReceiverSettleModeSecondAccept(t *testing.T) {
 }
 
 func TestReceiveSuccessReceiverSettleModeSecondAcceptOnClosedLink(t *testing.T) {
+	muxSem := test.NewMuxSemaphore(2)
+
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
@@ -569,25 +570,25 @@ func TestReceiveSuccessReceiverSettleModeSecondAcceptOnClosedLink(t *testing.T) 
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
+	r, err := newReceiverWithHooks(ctx, session, "source", &ReceiverOptions{
 		SettlementMode: ReceiverSettleModeSecond.Ptr(),
-	})
+	}, receiverTestHooks{MuxSelect: muxSem.OnLoop})
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	msg, err := r.Receive(ctx, nil)
 	cancel()
 	require.NoError(t, err)
+	muxSem.Wait()
 	if c := r.countUnsettled(); c != 1 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
-	// wait for the link to pause as we've consumed all available credit
-	require.NoError(t, waitForReceiver(r, true))
 	// link credit must be zero since we only started with 1
 	if c := r.l.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
 
+	muxSem.Release(-1)
 	require.NoError(t, r.Close(context.Background()))
 
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
@@ -598,6 +599,8 @@ func TestReceiveSuccessReceiverSettleModeSecondAcceptOnClosedLink(t *testing.T) 
 }
 
 func TestReceiveSuccessReceiverSettleModeSecondReject(t *testing.T) {
+	muxSem := test.NewMuxSemaphore(2)
+
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
@@ -632,48 +635,43 @@ func TestReceiveSuccessReceiverSettleModeSecondReject(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
+	r, err := newReceiverWithHooks(ctx, session, "source", &ReceiverOptions{
 		SettlementMode: ReceiverSettleModeSecond.Ptr(),
-	})
+	}, receiverTestHooks{MuxSelect: muxSem.OnLoop})
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	msg, err := r.Receive(ctx, nil)
 	cancel()
 	require.NoError(t, err)
+	muxSem.Wait()
 	if c := r.countUnsettled(); c != 1 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
-	// wait for the link to pause as we've consumed all available credit
-	require.NoError(t, waitForReceiver(r, true))
 	// link credit must be zero since we only started with 1
 	if c := r.l.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
+	muxSem.Release(1)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	err = r.RejectMessage(ctx, msg, nil)
 	cancel()
 	require.NoError(t, err)
+	muxSem.Wait()
 	if c := r.countUnsettled(); c != 0 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
-	// perform a dummy receive with short timeout to trigger flow
-	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	_, err = r.Receive(ctx, nil)
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatal(err)
-	}
-	cancel()
-	// wait for the link to unpause as credit should now be available
-	require.NoError(t, waitForReceiver(r, false))
 	// link credit should be back to 1
 	if c := r.l.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
+	muxSem.Release(-1)
 	require.NoError(t, client.Close())
 }
 
 func TestReceiveSuccessReceiverSettleModeSecondRelease(t *testing.T) {
+	muxSem := test.NewMuxSemaphore(2)
+
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
@@ -708,48 +706,43 @@ func TestReceiveSuccessReceiverSettleModeSecondRelease(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
+	r, err := newReceiverWithHooks(ctx, session, "source", &ReceiverOptions{
 		SettlementMode: ReceiverSettleModeSecond.Ptr(),
-	})
+	}, receiverTestHooks{MuxSelect: muxSem.OnLoop})
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	msg, err := r.Receive(ctx, nil)
 	cancel()
 	require.NoError(t, err)
+	muxSem.Wait()
 	if c := r.countUnsettled(); c != 1 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
-	// wait for the link to pause as we've consumed all available credit
-	require.NoError(t, waitForReceiver(r, true))
 	// link credit must be zero since we only started with 1
 	if c := r.l.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
+	muxSem.Release(1)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	err = r.ReleaseMessage(ctx, msg)
 	cancel()
 	require.NoError(t, err)
+	muxSem.Wait()
 	if c := r.countUnsettled(); c != 0 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
-	// perform a dummy receive with short timeout to trigger flow
-	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	_, err = r.Receive(ctx, nil)
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatal(err)
-	}
-	cancel()
-	// wait for the link to unpause as credit should now be available
-	require.NoError(t, waitForReceiver(r, false))
 	// link credit should be back to 1
 	if c := r.l.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
+	muxSem.Release(-1)
 	require.NoError(t, client.Close())
 }
 
 func TestReceiveSuccessReceiverSettleModeSecondModify(t *testing.T) {
+	muxSem := test.NewMuxSemaphore(2)
+
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
@@ -789,24 +782,24 @@ func TestReceiveSuccessReceiverSettleModeSecondModify(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
+	r, err := newReceiverWithHooks(ctx, session, "source", &ReceiverOptions{
 		SettlementMode: ReceiverSettleModeSecond.Ptr(),
-	})
+	}, receiverTestHooks{MuxSelect: muxSem.OnLoop})
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	msg, err := r.Receive(ctx, nil)
 	cancel()
 	require.NoError(t, err)
+	muxSem.Wait()
 	if c := r.countUnsettled(); c != 1 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
-	// wait for the link to pause as we've consumed all available credit
-	require.NoError(t, waitForReceiver(r, true))
 	// link credit must be zero since we only started with 1
 	if c := r.l.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
+	muxSem.Release(1)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	err = r.ModifyMessage(ctx, msg, &ModifyMessageOptions{
 		UndeliverableHere: true,
@@ -816,22 +809,15 @@ func TestReceiveSuccessReceiverSettleModeSecondModify(t *testing.T) {
 	})
 	cancel()
 	require.NoError(t, err)
+	muxSem.Wait()
 	if c := r.countUnsettled(); c != 0 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
-	// perform a dummy receive with short timeout to trigger flow
-	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	_, err = r.Receive(ctx, nil)
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatal(err)
-	}
-	cancel()
-	// wait for the link to unpause as credit should now be available
-	require.NoError(t, waitForReceiver(r, false))
 	// link credit should be back to 1
 	if c := r.l.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
+	muxSem.Release(-1)
 	require.NoError(t, client.Close())
 }
 
@@ -871,6 +857,8 @@ func TestReceiverPrefetch(t *testing.T) {
 }
 
 func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
+	muxSem := test.NewMuxSemaphore(4)
+
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
@@ -900,9 +888,9 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
+	r, err := newReceiverWithHooks(ctx, session, "source", &ReceiverOptions{
 		SettlementMode: ReceiverSettleModeSecond.Ptr(),
-	})
+	}, receiverTestHooks{MuxSelect: muxSem.OnLoop})
 	cancel()
 	require.NoError(t, err)
 	msgChan := make(chan *Message)
@@ -923,36 +911,29 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 		result = append(result, msg.Data[i]...)
 	}
 	require.Equal(t, payload, result)
+	muxSem.Wait()
 	if c := r.countUnsettled(); c != 1 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
-	// wait for the link to pause as we've consumed all available credit
-	require.NoError(t, waitForReceiver(r, true))
 	// link credit must be zero since we only started with 1
 	if c := r.l.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
+	muxSem.Release(1)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	err = r.AcceptMessage(ctx, msg)
 	cancel()
 	require.NoError(t, err)
+	muxSem.Wait()
 	if c := r.countUnsettled(); c != 0 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
 	require.Equal(t, true, msg.settled)
-	// perform a dummy receive with short timeout to trigger flow
-	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	_, err = r.Receive(ctx, nil)
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatal(err)
-	}
-	cancel()
-	// wait for the link to unpause as credit should now be available
-	require.NoError(t, waitForReceiver(r, false))
 	// link credit should be back to 1
 	if c := r.l.linkCredit; c != 1 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
+	muxSem.Release(-1)
 	require.NoError(t, client.Close())
 }
 
@@ -1187,6 +1168,8 @@ func TestReceiveMessageTooBig(t *testing.T) {
 }
 
 func TestReceiveSuccessAcceptFails(t *testing.T) {
+	muxSem := test.NewMuxSemaphore(2)
+
 	const linkHandle = 0
 	deliveryID := uint32(1)
 	responder := func(req frames.FrameBody) ([]byte, error) {
@@ -1216,24 +1199,24 @@ func TestReceiveSuccessAcceptFails(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
+	r, err := newReceiverWithHooks(ctx, session, "source", &ReceiverOptions{
 		SettlementMode: ReceiverSettleModeSecond.Ptr(),
-	})
+	}, receiverTestHooks{MuxSelect: muxSem.OnLoop})
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	msg, err := r.Receive(ctx, nil)
 	cancel()
 	require.NoError(t, err)
+	muxSem.Wait()
 	if c := r.countUnsettled(); c != 1 {
 		t.Fatalf("unexpected unsettled count %d", c)
 	}
-	// wait for the link to pause as we've consumed all available credit
-	require.NoError(t, waitForReceiver(r, true))
 	// link credit must be zero since we only started with 1
 	if c := r.l.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
+	muxSem.Release(-1)
 	// close client before accepting the message
 	require.NoError(t, client.Close())
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)

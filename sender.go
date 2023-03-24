@@ -340,6 +340,7 @@ Loop:
 		case tr := <-outgoingTransfers:
 			select {
 			case s.l.session.txTransfer <- &tr:
+				// TODO: this logging races with assignment of DeliveryID by Session.mux()
 				debug.Log(2, "TX (Sender): mux transfer to Session: %d, %s", s.l.session.channel, tr)
 				// decrement link-credit after entire message transferred
 				if !tr.More {

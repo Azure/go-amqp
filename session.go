@@ -219,6 +219,8 @@ func (s *Session) NewReceiver(ctx context.Context, source string, opts *Receiver
 		return nil, err
 	}
 
+	go r.mux(receiverTestHooks{})
+
 	return r, nil
 }
 

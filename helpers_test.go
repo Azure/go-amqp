@@ -3,8 +3,6 @@ package amqp
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
-	"time"
 
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/fake"
@@ -108,24 +106,17 @@ func receiverFrameHandlerNoUnhandled(rsm encoding.ReceiverSettleMode) func(frame
 	}
 }
 
-// helper to wait for a link to pause/resume
-// returns an error if it times out waiting
-func waitForReceiver(r *Receiver, paused bool) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	for {
-		credit := atomic.LoadUint32(&r.l.linkCredit)
-		// waiting for the link to pause means its credit has been consumed
-		if (paused && credit == 0) || (!paused && credit > 0) {
-			return nil
-		} else if err := ctx.Err(); err != nil {
-			return err
-		}
-		select {
-		case <-r.l.done:
-			return fmt.Errorf("link terminated:  %v", r.l.doneErr)
-		case <-time.After(50 * time.Millisecond):
-			// try again
-		}
+// this is the same API as Session.NewReceiver() but with support for adding test hooks
+func newReceiverWithHooks(ctx context.Context, s *Session, source string, opts *ReceiverOptions, hooks receiverTestHooks) (*Receiver, error) {
+	r, err := newReceiver(source, s, opts)
+	if err != nil {
+		return nil, err
 	}
+	if err = r.attach(ctx); err != nil {
+		return nil, err
+	}
+
+	go r.mux(hooks)
+
+	return r, nil
 }

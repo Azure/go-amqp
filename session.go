@@ -492,7 +492,6 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				}
 
 				s.muxFrameToLink(link, fr)
-				debug.Log(2, "RX (Session): mux transfer to link: %s", fr)
 
 				// if this message is received unsettled and link rcv-settle-mode == second, add to handlesByRemoteDeliveryID
 				if !body.Settled && body.DeliveryID != nil && link.receiverSettleMode != nil && *link.receiverSettleMode == ReceiverSettleModeSecond {
@@ -569,7 +568,6 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				continue
 			}
 
-			debug.Log(2, "TX (Session): %d, %s", s.channel, fr)
 			// record current delivery ID
 			var deliveryID uint32
 			if fr.DeliveryID == &needsDeliveryID {
@@ -587,6 +585,9 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				// to deliveryIDByHandle already
 				deliveryID = deliveryIDByHandle[fr.Handle]
 			}
+
+			// log after the delivery ID has been assigned
+			debug.Log(2, "TX (Session): %d, %s", s.channel, fr)
 
 			// frame has been sender-settled, remove from map
 			if fr.Settled {

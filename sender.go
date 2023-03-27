@@ -340,8 +340,7 @@ Loop:
 		case tr := <-outgoingTransfers:
 			select {
 			case s.l.session.txTransfer <- &tr:
-				// TODO: this logging races with assignment of DeliveryID by Session.mux()
-				debug.Log(2, "TX (Sender): mux transfer to Session: %d, %s", s.l.session.channel, tr)
+				debug.Log(2, "TX (Sender): mux transfer to Session: %d, %s", s.l.session.channel, &tr)
 				// decrement link-credit after entire message transferred
 				if !tr.More {
 					s.l.deliveryCount++
@@ -414,7 +413,7 @@ func (s *Sender) muxHandleFrame(fr frames.FrameBody) error {
 
 		select {
 		case s.l.session.tx <- resp:
-			debug.Log(2, "TX (Sender): %s", resp)
+			debug.Log(2, "TX (Sender): mux frame to Session: %d, %s", s.l.session.channel, resp)
 		case <-s.l.close:
 			return nil
 		case <-s.l.session.done:

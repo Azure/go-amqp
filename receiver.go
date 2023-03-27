@@ -606,7 +606,7 @@ func (r *Receiver) muxFlow(linkCredit uint32, drain bool) error {
 
 	select {
 	case r.l.session.tx <- fr:
-		debug.Log(2, "TX (Receiver): %s", fr)
+		debug.Log(2, "TX (Receiver): mux frame to Session: %d, %s", r.l.session.channel, fr)
 		return nil
 	case <-r.l.close:
 		return nil
@@ -650,7 +650,7 @@ func (r *Receiver) muxHandleFrame(fr frames.FrameBody) error {
 
 		select {
 		case r.l.session.tx <- resp:
-			debug.Log(2, "TX (Sender): %s", resp)
+			debug.Log(2, "TX (Receiver): mux frame to Session: %d, %s", r.l.session.channel, resp)
 		case <-r.l.close:
 			return nil
 		case <-r.l.session.done:

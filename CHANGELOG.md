@@ -1,6 +1,6 @@
 # Release History
 
-## 0.19.0 (Unreleased)
+## 0.19.0 (2023-03-30)
 
 ### Breaking Changes
 

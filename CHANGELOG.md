@@ -18,6 +18,7 @@
 * The field `SendSettled` in type `Message` has been moved to type `SendOptions` and renamed as `Settled`.
 * The following type aliases have been removed.
   * `Address`, `Binary`, `MessageID`, `SequenceNumber`, `Symbol`
+* Method `Message.LinkName()` has been removed.
 
 ### Bugs Fixed
 

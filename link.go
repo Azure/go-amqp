@@ -41,8 +41,9 @@ type link struct {
 	forceClose chan struct{} // used for forcibly terminate a link if Close() times out/is cancelled
 	closeOnce  *sync.Once    // closeOnce protects close from being closed multiple times
 
-	done    chan struct{} // closed when the link has terminated (mux exited); DO NOT wait on this from within a link's mux() as it will never trigger!
-	doneErr error         // contains the error state returned from Close(); DO NOT TOUCH outside of link.go until done has been closed!
+	done     chan struct{} // closed when the link has terminated (mux exited); DO NOT wait on this from within a link's mux() as it will never trigger!
+	doneErr  error         // contains the mux error state; ONLY written to by the mux and MUST only be read from after done is closed!
+	closeErr error         // contains the error state returned from closeLink(); ONLY closeLink() reads/writes this!
 
 	session    *Session                // parent session
 	source     *frames.Source          // used for Receiver links
@@ -276,10 +277,16 @@ func (l *link) closeLink(ctx context.Context) error {
 		close(l.close)
 		select {
 		case <-l.done:
-			// mux exited
+			l.closeErr = l.doneErr
 		case <-ctx.Done():
 			close(l.forceClose)
+
+			// notify the caller that the close timed out/was cancelled
 			ctxErr = ctx.Err()
+
+			// record that the link was forcibly closed.
+			// subsequent calls to closeLink() will return this
+			l.closeErr = &LinkError{inner: errLinkForciblyClosed}
 		}
 	})
 
@@ -288,11 +295,11 @@ func (l *link) closeLink(ctx context.Context) error {
 	}
 
 	var linkErr *LinkError
-	if errors.As(l.doneErr, &linkErr) && linkErr.inner == nil {
-		// an empty LinkError means the link was closed by the caller
+	if errors.As(l.closeErr, &linkErr) && linkErr.RemoteErr == nil && linkErr.inner == nil {
+		// an empty LinkError means the link was cleanly closed by the caller
 		return nil
 	}
-	return l.doneErr
+	return l.closeErr
 }
 
 // closeWithError initiates closing the link with the specified AMQP error.
@@ -316,3 +323,5 @@ func (l *link) closeWithError(cnd ErrCond, desc string) {
 	l.doneErr = &LinkError{inner: fmt.Errorf("%s: %s", cnd, desc)}
 	_ = l.session.txFrame(dr, nil)
 }
+
+var errLinkForciblyClosed = errors.New("the link was forcibly closed")

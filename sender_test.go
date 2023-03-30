@@ -214,6 +214,58 @@ func TestSenderSendOnDetached(t *testing.T) {
 	require.NoError(t, client.Close())
 }
 
+func TestSenderCloseTimeout(t *testing.T) {
+	responder := func(req frames.FrameBody) ([]byte, error) {
+		switch tt := req.(type) {
+		case *fake.AMQPProto:
+			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
+		case *frames.PerformOpen:
+			return fake.PerformOpen("container")
+		case *frames.PerformBegin:
+			return fake.PerformBegin(0)
+		case *frames.PerformEnd:
+			return fake.PerformEnd(0, nil)
+		case *frames.PerformAttach:
+			return fake.SenderAttach(0, tt.Name, tt.Handle, SenderSettleModeUnsettled)
+		case *frames.PerformDetach:
+			// sleep to trigger sender close timeout
+			time.Sleep(1 * time.Second)
+			return fake.PerformDetach(0, tt.Handle, nil)
+		case *frames.PerformClose:
+			return fake.PerformClose(nil)
+		default:
+			return nil, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+	netConn := fake.NewNetConn(responder)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
+	require.NoError(t, err)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx, "target", nil)
+	cancel()
+	require.NoError(t, err)
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+	err = snd.Close(ctx)
+	cancel()
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+	err = snd.Close(ctx)
+	cancel()
+	var linkErr *LinkError
+	require.ErrorAs(t, err, &linkErr)
+	require.Contains(t, linkErr.Error(), "forcibly closed")
+	require.NoError(t, client.Close())
+}
+
 func TestSenderAttachError(t *testing.T) {
 	detachAck := make(chan bool, 1)
 	var enqueueFrames func(string)

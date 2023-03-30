@@ -319,7 +319,7 @@ Loop:
 		select {
 		case <-s.l.forceClose:
 			// the call to s.Close() timed out waiting for the ack
-			s.l.doneErr = &LinkError{inner: errors.New("the sender was forcibly closed")}
+			s.l.doneErr = &LinkError{inner: errLinkForciblyClosed}
 			return
 
 		// received frame

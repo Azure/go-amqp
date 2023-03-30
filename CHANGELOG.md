@@ -1,5 +1,12 @@
 # Release History
 
+## 0.19.1 (Unreleased)
+
+### Bugs Fixed
+
+* Fixed a race closing a `Session`, `Receiver`, or `Sender` in succession when the first attempt times out.
+* Check the `LinkError.RemoteErr` field when determining if a link was cleanly closed.
+
 ## 0.19.0 (2023-03-30)
 
 ### Breaking Changes

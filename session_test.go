@@ -128,7 +128,6 @@ func TestSessionCloseTimeout(t *testing.T) {
 		}
 	}
 	netConn := fake.NewNetConn(responder)
-
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
 	cancel()
@@ -142,6 +141,14 @@ func TestSessionCloseTimeout(t *testing.T) {
 	err = session.Close(ctx)
 	cancel()
 	require.ErrorIs(t, err, context.DeadlineExceeded)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+	err = session.Close(ctx)
+	cancel()
+	var sessionErr *SessionError
+	require.ErrorAs(t, err, &sessionErr)
+	require.Contains(t, sessionErr.Error(), "forcibly closed")
+
 	require.NoError(t, client.Close())
 }
 

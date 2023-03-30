@@ -60,8 +60,9 @@ type Session struct {
 	closeOnce  sync.Once
 
 	// part of internal public surface area
-	done    chan struct{} // closed when the session has terminated (mux exited); DO NOT wait on this from within Session.mux() as it will never trigger!
-	doneErr error         // contains the error state returned from Close(); DO NOT TOUCH outside of session.go until done has been closed!
+	done     chan struct{} // closed when the session has terminated (mux exited); DO NOT wait on this from within Session.mux() as it will never trigger!
+	doneErr  error         // contains the mux error state; ONLY written to by the mux and MUST only be read from after done is closed!
+	closeErr error         // contains the error state returned from Close(); ONLY Close() reads/writes this!
 }
 
 func newSession(c *Conn, channel uint16, opts *SessionOptions) *Session {
@@ -172,10 +173,16 @@ func (s *Session) Close(ctx context.Context) error {
 		close(s.close)
 		select {
 		case <-s.done:
-			// mux has exited
+			s.closeErr = s.doneErr
 		case <-ctx.Done():
 			close(s.forceClose)
+
+			// notify the caller that the close timed out/was cancelled
 			ctxErr = ctx.Err()
+
+			// record that the session was forcibly closed.
+			// subsequent calls to Close() will return this
+			s.closeErr = &SessionError{inner: errSessionForciblyClosed}
 		}
 	})
 
@@ -184,11 +191,11 @@ func (s *Session) Close(ctx context.Context) error {
 	}
 
 	var sessionErr *SessionError
-	if errors.As(s.doneErr, &sessionErr) && sessionErr.RemoteErr == nil && sessionErr.inner == nil {
-		// an empty SessionError means the session was closed by the caller
+	if errors.As(s.closeErr, &sessionErr) && sessionErr.RemoteErr == nil && sessionErr.inner == nil {
+		// an empty SessionError means the session was cleanly closed by the caller
 		return nil
 	}
-	return s.doneErr
+	return s.closeErr
 }
 
 // txFrame sends a frame to the connWriter.
@@ -325,7 +332,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 		case <-s.forceClose:
 			// the call to s.Close() timed out waiting for the ack
-			s.doneErr = errors.New("the session was forcibly closed")
+			s.doneErr = errSessionForciblyClosed
 			return
 
 		case <-closed:
@@ -702,3 +709,5 @@ func (s *Session) muxFrameToLink(l *link, fr frames.FrameBody) {
 // the address of this var is a sentinel value indicating
 // that a transfer frame is in need of a delivery ID
 var needsDeliveryID uint32
+
+var errSessionForciblyClosed = errors.New("the session was forcibly closed")

@@ -538,7 +538,7 @@ func (r *Receiver) mux(hooks receiverTestHooks) {
 		select {
 		case <-r.l.forceClose:
 			// the call to r.Close() timed out waiting for the ack
-			r.l.doneErr = &LinkError{inner: errors.New("the receiver was forcibly closed")}
+			r.l.doneErr = &LinkError{inner: errLinkForciblyClosed}
 			return
 
 		case q := <-r.l.rxQ.Wait():

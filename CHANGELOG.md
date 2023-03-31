@@ -1,5 +1,12 @@
 # Release History
 
+## 1.0.0 (Unreleased)
+
+### Bugs Fixed
+
+* Calling `Dial()` with a cancelled context doesn't create a connection.
+* Context cancellation is properly honored in calls to `Dial()` and `NewConn()`.
+
 ## 0.19.1 (2023-03-31)
 
 ### Bugs Fixed

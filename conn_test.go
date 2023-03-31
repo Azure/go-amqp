@@ -151,12 +151,12 @@ type fakeDialer struct {
 	fail bool
 }
 
-func (f fakeDialer) NetDialerDial(deadline time.Time, c *Conn, host, port string) (err error) {
+func (f fakeDialer) NetDialerDial(ctx context.Context, c *Conn, host, port string) (err error) {
 	err = f.error()
 	return
 }
 
-func (f fakeDialer) TLSDialWithDialer(deadline time.Time, c *Conn, host, port string) (err error) {
+func (f fakeDialer) TLSDialWithDialer(ctx context.Context, c *Conn, host, port string) (err error) {
 	err = f.error()
 	return
 }
@@ -169,30 +169,30 @@ func (f fakeDialer) error() error {
 }
 
 func TestDialConn(t *testing.T) {
-	c, err := dialConn(time.Time{}, ":bad url/ value", &ConnOptions{dialer: fakeDialer{}})
+	c, err := dialConn(context.Background(), ":bad url/ value", &ConnOptions{dialer: fakeDialer{}})
 	require.Error(t, err)
 	require.Nil(t, c)
-	c, err = dialConn(time.Time{}, "http://localhost", &ConnOptions{dialer: fakeDialer{}})
+	c, err = dialConn(context.Background(), "http://localhost", &ConnOptions{dialer: fakeDialer{}})
 	require.Error(t, err)
 	require.Nil(t, c)
-	c, err = dialConn(time.Time{}, "amqp://localhost", &ConnOptions{dialer: fakeDialer{}})
+	c, err = dialConn(context.Background(), "amqp://localhost", &ConnOptions{dialer: fakeDialer{}})
 	require.NoError(t, err)
 	require.NotNil(t, c)
 	require.Nil(t, c.tlsConfig)
-	c, err = dialConn(time.Time{}, "amqps://localhost", &ConnOptions{dialer: fakeDialer{}})
+	c, err = dialConn(context.Background(), "amqps://localhost", &ConnOptions{dialer: fakeDialer{}})
 	require.NoError(t, err)
 	require.NotNil(t, c)
 	require.NotNil(t, c.tlsConfig)
-	c, err = dialConn(time.Time{}, "amqp://localhost:12345", &ConnOptions{dialer: fakeDialer{}})
+	c, err = dialConn(context.Background(), "amqp://localhost:12345", &ConnOptions{dialer: fakeDialer{}})
 	require.NoError(t, err)
 	require.NotNil(t, c)
-	c, err = dialConn(time.Time{}, "amqp://username:password@localhost", &ConnOptions{dialer: fakeDialer{}})
+	c, err = dialConn(context.Background(), "amqp://username:password@localhost", &ConnOptions{dialer: fakeDialer{}})
 	require.NoError(t, err)
 	require.NotNil(t, c)
 	if _, ok := c.saslHandlers[saslMechanismPLAIN]; !ok {
 		t.Fatal("missing SASL plain handler")
 	}
-	c, err = dialConn(time.Time{}, "amqp://localhost", &ConnOptions{dialer: fakeDialer{fail: true}})
+	c, err = dialConn(context.Background(), "amqp://localhost", &ConnOptions{dialer: fakeDialer{fail: true}})
 	require.Error(t, err)
 	require.Nil(t, c)
 }
@@ -275,7 +275,9 @@ func TestStart(t *testing.T) {
 			netConn := fake.NewNetConn(tt.responder)
 			conn, err := newConn(netConn, nil)
 			require.NoError(t, err)
-			err = conn.start(time.Now().Add(5 * time.Second))
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			err = conn.start(ctx)
+			cancel()
 			if tt.fails && err == nil {
 				t.Error("unexpected nil error")
 			} else if !tt.fails && err != nil {
@@ -289,13 +291,17 @@ func TestClose(t *testing.T) {
 	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 	conn, err := newConn(netConn, nil)
 	require.NoError(t, err)
-	require.NoError(t, conn.start(time.Time{}))
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	require.NoError(t, conn.start(ctx))
+	cancel()
 	require.NoError(t, conn.Close())
 	// with Close error
 	netConn = fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 	conn, err = newConn(netConn, nil)
 	require.NoError(t, err)
-	require.NoError(t, conn.start(time.Time{}))
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	require.NoError(t, conn.start(ctx))
+	cancel()
 	netConn.OnClose = func() error {
 		return errors.New("mock close failed")
 	}
@@ -322,7 +328,9 @@ func TestServerSideClose(t *testing.T) {
 	netConn := fake.NewNetConn(responder)
 	conn, err := newConn(netConn, nil)
 	require.NoError(t, err)
-	require.NoError(t, conn.start(time.Time{}))
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	require.NoError(t, conn.start(ctx))
+	cancel()
 	fr, err := fake.PerformClose(nil)
 	require.NoError(t, err)
 	netConn.SendFrame(fr)
@@ -335,7 +343,9 @@ func TestServerSideClose(t *testing.T) {
 	netConn = fake.NewNetConn(responder)
 	conn, err = newConn(netConn, nil)
 	require.NoError(t, err)
-	require.NoError(t, conn.start(time.Time{}))
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	require.NoError(t, conn.start(ctx))
+	cancel()
 	fr, err = fake.PerformClose(&Error{Condition: "Close", Description: "mock server error"})
 	require.NoError(t, err)
 	netConn.SendFrame(fr)
@@ -371,10 +381,12 @@ func TestKeepAlives(t *testing.T) {
 	netConn := fake.NewNetConn(responder)
 	conn, err := newConn(netConn, nil)
 	require.NoError(t, err)
-	require.NoError(t, conn.start(time.Time{}))
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	require.NoError(t, conn.start(ctx))
+	cancel()
 	// send keepalive
 	netConn.SendKeepAlive()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	select {
 	case <-keepAlives:
@@ -426,7 +438,9 @@ func TestKeepAlivesIdleTimeout(t *testing.T) {
 		}
 	}()
 
-	require.NoError(t, conn.start(time.Time{}))
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	require.NoError(t, conn.start(ctx))
+	cancel()
 
 	time.Sleep(2 * idleTimeout)
 	require.NoError(t, conn.Close())
@@ -436,7 +450,9 @@ func TestConnReaderError(t *testing.T) {
 	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 	conn, err := newConn(netConn, nil)
 	require.NoError(t, err)
-	require.NoError(t, conn.start(time.Time{}))
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	require.NoError(t, conn.start(ctx))
+	cancel()
 	// trigger some kind of error
 	netConn.ReadErr <- errors.New("failed")
 	// wait a bit for the connReader goroutine to read from the mock
@@ -452,7 +468,9 @@ func TestConnWriterError(t *testing.T) {
 	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
 	conn, err := newConn(netConn, nil)
 	require.NoError(t, err)
-	require.NoError(t, conn.start(time.Time{}))
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	require.NoError(t, conn.start(ctx))
+	cancel()
 	netConn.WriteErr <- errors.New("boom")
 	// wait a bit for connReader to read from the mock
 	time.Sleep(100 * time.Millisecond)
@@ -482,20 +500,35 @@ func TestConnWithZeroByteReads(t *testing.T) {
 
 	conn, err := newConn(netConn, nil)
 	require.NoError(t, err)
-	require.NoError(t, conn.start(time.Time{}))
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	require.NoError(t, conn.start(ctx))
+	cancel()
 	require.NoError(t, conn.Close())
+}
+
+func TestConnNegotiationTimeout(t *testing.T) {
+	responder := func(req frames.FrameBody) ([]byte, error) {
+		return nil, nil
+	}
+
+	netConn := fake.NewNetConn(responder)
+	conn, err := newConn(netConn, nil)
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	require.ErrorIs(t, conn.start(ctx), context.DeadlineExceeded)
+	cancel()
 }
 
 type mockDialer struct {
 	resp func(frames.FrameBody) ([]byte, error)
 }
 
-func (m mockDialer) NetDialerDial(deadline time.Time, c *Conn, host, port string) error {
+func (m mockDialer) NetDialerDial(ctx context.Context, c *Conn, host, port string) error {
 	c.net = fake.NewNetConn(m.resp)
 	return nil
 }
 
-func (mockDialer) TLSDialWithDialer(deadline time.Time, c *Conn, host, port string) error {
+func (mockDialer) TLSDialWithDialer(ctx context.Context, c *Conn, host, port string) error {
 	panic("nyi")
 }
 

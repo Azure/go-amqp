@@ -87,12 +87,11 @@ type ConnOptions struct {
 //
 // opts: pass nil to accept the default values.
 func Dial(ctx context.Context, addr string, opts *ConnOptions) (*Conn, error) {
-	deadline, _ := ctx.Deadline()
-	c, err := dialConn(deadline, addr, opts)
+	c, err := dialConn(ctx, addr, opts)
 	if err != nil {
 		return nil, err
 	}
-	err = c.start(deadline)
+	err = c.start(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -106,8 +105,7 @@ func NewConn(ctx context.Context, conn net.Conn, opts *ConnOptions) (*Conn, erro
 	if err != nil {
 		return nil, err
 	}
-	deadline, _ := ctx.Deadline()
-	err = c.start(deadline)
+	err = c.start(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -167,26 +165,26 @@ type Conn struct {
 
 // used to abstract the underlying dialer for testing purposes
 type dialer interface {
-	NetDialerDial(deadline time.Time, c *Conn, host, port string) error
-	TLSDialWithDialer(deadline time.Time, c *Conn, host, port string) error
+	NetDialerDial(ctx context.Context, c *Conn, host, port string) error
+	TLSDialWithDialer(ctx context.Context, c *Conn, host, port string) error
 }
 
 // implements the dialer interface
 type defaultDialer struct{}
 
-func (defaultDialer) NetDialerDial(deadline time.Time, c *Conn, host, port string) (err error) {
-	dialer := &net.Dialer{Deadline: deadline}
-	c.net, err = dialer.Dial("tcp", net.JoinHostPort(host, port))
+func (defaultDialer) NetDialerDial(ctx context.Context, c *Conn, host, port string) (err error) {
+	dialer := &net.Dialer{}
+	c.net, err = dialer.DialContext(ctx, "tcp", net.JoinHostPort(host, port))
 	return
 }
 
-func (defaultDialer) TLSDialWithDialer(deadline time.Time, c *Conn, host, port string) (err error) {
-	dialer := &net.Dialer{Deadline: deadline}
-	c.net, err = tls.DialWithDialer(dialer, "tcp", net.JoinHostPort(host, port), c.tlsConfig)
+func (defaultDialer) TLSDialWithDialer(ctx context.Context, c *Conn, host, port string) (err error) {
+	dialer := &tls.Dialer{Config: c.tlsConfig}
+	c.net, err = dialer.DialContext(ctx, "tcp", net.JoinHostPort(host, port))
 	return
 }
 
-func dialConn(deadline time.Time, addr string, opts *ConnOptions) (*Conn, error) {
+func dialConn(ctx context.Context, addr string, opts *ConnOptions) (*Conn, error) {
 	u, err := url.Parse(addr)
 	if err != nil {
 		return nil, err
@@ -221,11 +219,11 @@ func dialConn(deadline time.Time, addr string, opts *ConnOptions) (*Conn, error)
 
 	switch u.Scheme {
 	case "amqp", "":
-		err = c.dialer.NetDialerDial(deadline, c, host, port)
+		err = c.dialer.NetDialerDial(ctx, c, host, port)
 	case "amqps", "amqp+ssl":
 		c.initTLSConfig()
 		c.tlsNegotiation = false
-		err = c.dialer.TLSDialWithDialer(deadline, c, host, port)
+		err = c.dialer.TLSDialWithDialer(ctx, c, host, port)
 	default:
 		err = fmt.Errorf("unsupported scheme %q", u.Scheme)
 	}
@@ -311,25 +309,36 @@ func (c *Conn) initTLSConfig() {
 
 // start establishes the connection and begins multiplexing network IO.
 // It is an error to call Start() on a connection that's been closed.
-func (c *Conn) start(deadline time.Time) error {
-	// set connection establishment deadline
-	_ = c.net.SetDeadline(deadline)
+func (c *Conn) start(ctx context.Context) (err error) {
+	// if the context has a deadline or is cancellable, start the interruptor goroutine.
+	// this will close the underlying net.Conn in response to the context.
 
-	// run connection establishment state machine
-	for state := c.negotiateProto; state != nil; {
-		var err error
-		state, err = state()
-		// check if err occurred
-		if err != nil {
-			close(c.txDone) // close here since connWriter hasn't been started yet
-			close(c.rxDone)
-			_ = c.Close()
-			return err
-		}
+	if ctx.Done() != nil {
+		done := make(chan struct{})
+		interruptRes := make(chan error, 1)
+
+		defer func() {
+			close(done)
+			if ctxErr := <-interruptRes; ctxErr != nil {
+				// return context error to caller
+				err = ctxErr
+			}
+		}()
+
+		go func() {
+			select {
+			case <-ctx.Done():
+				c.closeDuringStart()
+				interruptRes <- ctx.Err()
+			case <-done:
+				interruptRes <- nil
+			}
+		}()
 	}
 
-	// remove connection establishment deadline
-	_ = c.net.SetDeadline(time.Time{})
+	if err = c.startImpl(ctx); err != nil {
+		return err
+	}
 
 	// we can't create the channel bitmap until the connection has been established.
 	// this is because our peer can tell us the max channels they support.
@@ -337,6 +346,29 @@ func (c *Conn) start(deadline time.Time) error {
 
 	go c.connWriter()
 	go c.connReader()
+
+	return
+}
+
+func (c *Conn) startImpl(ctx context.Context) error {
+	// set connection establishment deadline as required
+	if deadline, ok := ctx.Deadline(); ok && !deadline.IsZero() {
+		_ = c.net.SetDeadline(deadline)
+
+		// remove connection establishment deadline
+		defer c.net.SetDeadline(time.Time{})
+	}
+
+	// run connection establishment state machine
+	for state := c.negotiateProto; state != nil; {
+		var err error
+		state, err = state(ctx)
+		// check if err occurred
+		if err != nil {
+			c.closeDuringStart()
+			return err
+		}
+	}
 
 	return nil
 }
@@ -389,6 +421,13 @@ func (c *Conn) close() {
 		} else {
 			c.doneErr = &ConnError{inner: closeErr}
 		}
+	})
+}
+
+// closeDuringStart is a special close to be used only during startup (i.e. c.start() and any of its children)
+func (c *Conn) closeDuringStart() {
+	c.closeOnce.Do(func() {
+		c.net.Close()
 	})
 }
 
@@ -724,11 +763,11 @@ func (c *Conn) sendFrame(fr frames.Frame) error {
 //
 // The state is advanced by returning the next state.
 // The state machine concludes when nil is returned.
-type stateFunc func() (stateFunc, error)
+type stateFunc func(context.Context) (stateFunc, error)
 
 // negotiateProto determines which proto to negotiate next.
 // used externally by SASL only.
-func (c *Conn) negotiateProto() (stateFunc, error) {
+func (c *Conn) negotiateProto(ctx context.Context) (stateFunc, error) {
 	// in the order each must be negotiated
 	switch {
 	case c.tlsNegotiation && !c.tlsComplete:
@@ -829,14 +868,14 @@ func (c *Conn) readProtoHeader() (protoHeader, error) {
 }
 
 // startTLS wraps the conn with TLS and returns to Client.negotiateProto
-func (c *Conn) startTLS() (stateFunc, error) {
+func (c *Conn) startTLS(ctx context.Context) (stateFunc, error) {
 	c.initTLSConfig()
 
 	_ = c.net.SetReadDeadline(time.Time{}) // clear timeout
 
 	// wrap existing net.Conn and perform TLS handshake
 	tlsConn := tls.Client(c.net, c.tlsConfig)
-	if err := tlsConn.Handshake(); err != nil {
+	if err := tlsConn.HandshakeContext(ctx); err != nil {
 		return nil, err
 	}
 
@@ -849,7 +888,7 @@ func (c *Conn) startTLS() (stateFunc, error) {
 }
 
 // openAMQP round trips the AMQP open performative
-func (c *Conn) openAMQP() (stateFunc, error) {
+func (c *Conn) openAMQP(context.Context) (stateFunc, error) {
 	// send open frame
 	open := &frames.PerformOpen{
 		ContainerID:  c.containerID,
@@ -899,7 +938,7 @@ func (c *Conn) openAMQP() (stateFunc, error) {
 
 // negotiateSASL returns the SASL handler for the first matched
 // mechanism specified by the server
-func (c *Conn) negotiateSASL() (stateFunc, error) {
+func (c *Conn) negotiateSASL(context.Context) (stateFunc, error) {
 	// read mechanisms frame
 	fr, err := c.readSingleFrame()
 	if err != nil {
@@ -928,7 +967,7 @@ func (c *Conn) negotiateSASL() (stateFunc, error) {
 // SASL handlers return this stateFunc when the mechanism specific negotiation
 // has completed.
 // used externally by SASL only.
-func (c *Conn) saslOutcome() (stateFunc, error) {
+func (c *Conn) saslOutcome(context.Context) (stateFunc, error) {
 	// read outcome frame
 	fr, err := c.readSingleFrame()
 	if err != nil {

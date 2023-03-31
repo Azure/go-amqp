@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"net"
 	"os"
 	"regexp"
 	"strings"
@@ -812,6 +813,22 @@ func TestMultipleSessionsOpenClose(t *testing.T) {
 	}
 
 	client.Close()
+	checkLeaks()
+}
+
+func TestDialWithCancelledContext(t *testing.T) {
+	if localBrokerAddr == "" {
+		t.Skip()
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	cancel()
+	client, err := amqp.Dial(ctx, localBrokerAddr, nil)
+	var dialErr *net.OpError
+	require.ErrorAs(t, err, &dialErr)
+	require.Nil(t, client)
+
+	checkLeaks := leaktest.Check(t)
 	checkLeaks()
 }
 

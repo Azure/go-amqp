@@ -1,6 +1,7 @@
 package amqp
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/Azure/go-amqp/internal/debug"
@@ -32,7 +33,7 @@ func SASLTypePlain(username, password string) SASLType {
 		}
 
 		// add the handler the the map
-		c.saslHandlers[saslMechanismPLAIN] = func() (stateFunc, error) {
+		c.saslHandlers[saslMechanismPLAIN] = func(context.Context) (stateFunc, error) {
 			// send saslInit with PLAIN payload
 			init := &frames.SASLInit{
 				Mechanism:       "PLAIN",
@@ -65,7 +66,7 @@ func SASLTypeAnonymous() SASLType {
 		}
 
 		// add the handler the the map
-		c.saslHandlers[saslMechanismANONYMOUS] = func() (stateFunc, error) {
+		c.saslHandlers[saslMechanismANONYMOUS] = func(context.Context) (stateFunc, error) {
 			init := &frames.SASLInit{
 				Mechanism:       saslMechanismANONYMOUS,
 				InitialResponse: []byte("anonymous"),
@@ -98,7 +99,7 @@ func SASLTypeExternal(resp string) SASLType {
 		}
 
 		// add the handler the the map
-		c.saslHandlers[saslMechanismEXTERNAL] = func() (stateFunc, error) {
+		c.saslHandlers[saslMechanismEXTERNAL] = func(context.Context) (stateFunc, error) {
 			init := &frames.SASLInit{
 				Mechanism:       saslMechanismEXTERNAL,
 				InitialResponse: []byte(resp),
@@ -160,7 +161,7 @@ type saslXOAUTH2Handler struct {
 	errorResponse        []byte // https://developers.google.com/gmail/imap/xoauth2-protocol#error_response
 }
 
-func (s saslXOAUTH2Handler) init() (stateFunc, error) {
+func (s saslXOAUTH2Handler) init(context.Context) (stateFunc, error) {
 	originalPeerMaxFrameSize := s.conn.peerMaxFrameSize
 	if s.maxFrameSizeOverride > s.conn.peerMaxFrameSize {
 		s.conn.peerMaxFrameSize = s.maxFrameSizeOverride
@@ -180,7 +181,7 @@ func (s saslXOAUTH2Handler) init() (stateFunc, error) {
 	return s.step, nil
 }
 
-func (s saslXOAUTH2Handler) step() (stateFunc, error) {
+func (s saslXOAUTH2Handler) step(context.Context) (stateFunc, error) {
 	// read challenge or outcome frame
 	fr, err := s.conn.readFrame()
 	if err != nil {

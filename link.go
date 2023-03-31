@@ -142,7 +142,7 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 
 	resp, ok := fr.(*frames.PerformAttach)
 	if !ok {
-		debug.Log(1, "RX (link): unexpected attach response frame %T", fr)
+		debug.Log(1, "RX (link %p): unexpected attach response frame %T", l, fr)
 		if err := l.session.conn.Close(); err != nil {
 			return err
 		}
@@ -264,7 +264,7 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 		return &LinkError{RemoteErr: fr.Error}
 
 	default:
-		debug.Log(1, "RX (link): unexpected frame: %s", fr)
+		debug.Log(1, "RX (link %p): unexpected frame: %s", l, fr)
 		l.closeWithError(ErrCondInternalError, fmt.Sprintf("link received unexpected frame %T", fr))
 		return nil
 	}
@@ -286,7 +286,8 @@ func (l *link) closeLink(ctx context.Context) error {
 
 			// record that the link was forcibly closed.
 			// subsequent calls to closeLink() will return this
-			l.closeErr = &LinkError{inner: errLinkForciblyClosed}
+			debug.Log(1, "TX (link %p) link %s was forcibly closed: %v", l, l.key.name, ctxErr)
+			l.closeErr = &LinkError{inner: fmt.Errorf(strLinkForciblyClosed, l.key.name)}
 		}
 	})
 
@@ -310,7 +311,7 @@ func (l *link) closeLink(ctx context.Context) error {
 func (l *link) closeWithError(cnd ErrCond, desc string) {
 	amqpErr := &Error{Condition: cnd, Description: desc}
 	if l.closeInProgress {
-		debug.Log(3, "TX (link) close error already pending, discarding %v", amqpErr)
+		debug.Log(3, "TX (link %p) close error already pending, discarding %v", l, amqpErr)
 		return
 	}
 
@@ -324,4 +325,4 @@ func (l *link) closeWithError(cnd ErrCond, desc string) {
 	_ = l.session.txFrame(dr, nil)
 }
 
-var errLinkForciblyClosed = errors.New("the link was forcibly closed")
+const strLinkForciblyClosed = "link %s was forcibly closed"

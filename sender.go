@@ -304,10 +304,10 @@ Loop:
 	for {
 		var outgoingTransfers chan frames.PerformTransfer
 		if s.l.linkCredit > 0 {
-			debug.Log(1, "TX (Sender) (enable): target: %q, link credit: %d, deliveryCount: %d", s.l.target.Address, s.l.linkCredit, s.l.deliveryCount)
+			debug.Log(1, "TX (Sender %p) (enable): target: %q, link credit: %d, deliveryCount: %d", s, s.l.target.Address, s.l.linkCredit, s.l.deliveryCount)
 			outgoingTransfers = s.transfers
 		} else {
-			debug.Log(1, "TX (Sender) (pause): target: %q, link credit: %d, deliveryCount: %d", s.l.target.Address, s.l.linkCredit, s.l.deliveryCount)
+			debug.Log(1, "TX (Sender %p) (pause): target: %q, link credit: %d, deliveryCount: %d", s, s.l.target.Address, s.l.linkCredit, s.l.deliveryCount)
 		}
 
 		closed := s.l.close
@@ -319,7 +319,7 @@ Loop:
 		select {
 		case <-s.l.forceClose:
 			// the call to s.Close() timed out waiting for the ack
-			s.l.doneErr = &LinkError{inner: errLinkForciblyClosed}
+			s.l.doneErr = &LinkError{inner: fmt.Errorf(strLinkForciblyClosed, s.l.key.name)}
 			return
 
 		// received frame
@@ -340,13 +340,13 @@ Loop:
 		case tr := <-outgoingTransfers:
 			select {
 			case s.l.session.txTransfer <- &tr:
-				debug.Log(2, "TX (Sender): mux transfer to Session: %d, %s", s.l.session.channel, &tr)
+				debug.Log(2, "TX (Sender %p): mux transfer to Session: %d, %s", s, s.l.session.channel, &tr)
 				// decrement link-credit after entire message transferred
 				if !tr.More {
 					s.l.deliveryCount++
 					s.l.linkCredit--
 					// we are the sender and we keep track of the peer's link credit
-					debug.Log(3, "TX (Sender): link: %s, link credit: %d", s.l.key.name, s.l.linkCredit)
+					debug.Log(3, "TX (Sender %p): link: %s, link credit: %d", s, s.l.key.name, s.l.linkCredit)
 				}
 				continue Loop
 			case <-s.l.close:
@@ -379,7 +379,7 @@ Loop:
 // muxHandleFrame processes fr based on type.
 // depending on the peer's RSM, it might return a disposition frame for sending
 func (s *Sender) muxHandleFrame(fr frames.FrameBody) error {
-	debug.Log(2, "RX (Sender): %s", fr)
+	debug.Log(2, "RX (Sender %p): %s", s, fr)
 	switch fr := fr.(type) {
 	// flow control frame
 	case *frames.PerformFlow:
@@ -413,7 +413,7 @@ func (s *Sender) muxHandleFrame(fr frames.FrameBody) error {
 
 		select {
 		case s.l.session.tx <- resp:
-			debug.Log(2, "TX (Sender): mux frame to Session: %d, %s", s.l.session.channel, resp)
+			debug.Log(2, "TX (Sender %p): mux frame to Session (%p): %d, %s", s, s.l.session, s.l.session.channel, resp)
 		case <-s.l.close:
 			return nil
 		case <-s.l.session.done:
@@ -437,7 +437,7 @@ func (s *Sender) muxHandleFrame(fr frames.FrameBody) error {
 
 		select {
 		case s.l.session.tx <- dr:
-			debug.Log(2, "TX (Sender): mux frame to Session: %d, %s", s.l.session.channel, dr)
+			debug.Log(2, "TX (Sender %p): mux frame to Session (%p): %d, %s", s, s.l.session, s.l.session.channel, dr)
 		case <-s.l.close:
 			return nil
 		case <-s.l.session.done:

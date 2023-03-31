@@ -147,7 +147,7 @@ func (s *Session) begin(ctx context.Context) error {
 		// either swallow the frame or blow up in some other way, both causing this call to hang.
 		// deallocate session on error.  we can't call
 		// s.Close() as the session mux hasn't started yet.
-		debug.Log(1, "RX (Session): unexpected begin response frame %T", fr)
+		debug.Log(1, "RX (Session %p): unexpected begin response frame %T", s, fr)
 		s.conn.deleteSession(s)
 		if err := s.conn.Close(); err != nil {
 			return err
@@ -182,6 +182,7 @@ func (s *Session) Close(ctx context.Context) error {
 
 			// record that the session was forcibly closed.
 			// subsequent calls to Close() will return this
+			debug.Log(1, "TX (Session %p) session for channel %d was forcibly closed: %v", s, s.channel, ctxErr)
 			s.closeErr = &SessionError{inner: errSessionForciblyClosed}
 		}
 	})
@@ -201,6 +202,7 @@ func (s *Session) Close(ctx context.Context) error {
 // txFrame sends a frame to the connWriter.
 // it returns an error if the connection has been closed.
 func (s *Session) txFrame(p frames.FrameBody, done chan encoding.DeliveryState) error {
+	debug.Log(2, "TX (Session %p) mux frame to Conn (%p): %s", s, s.conn, p)
 	return s.conn.sendFrame(frames.Frame{
 		Type:    frames.TypeAMQP,
 		Channel: s.channel,
@@ -290,7 +292,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 	closeWithError := func(e1 *Error, e2 error) {
 		if closeInProgress {
-			debug.Log(3, "TX (Session): close already pending, discarding %v", e1)
+			debug.Log(3, "TX (Session %p): close already pending, discarding %v", s, e1)
 			return
 		}
 
@@ -303,9 +305,8 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 		txTransfer := s.txTransfer
 		// disable txTransfer if flow control windows have been exceeded
 		if remoteIncomingWindow == 0 || s.outgoingWindow == 0 {
-			debug.Log(1, "TX (Session): disabling txTransfer - window exceeded. remoteIncomingWindow: %d outgoingWindow: %d",
-				remoteIncomingWindow,
-				s.outgoingWindow)
+			debug.Log(1, "TX (Session %p): disabling txTransfer - window exceeded. remoteIncomingWindow: %d outgoingWindow: %d",
+				s, remoteIncomingWindow, s.outgoingWindow)
 			txTransfer = nil
 		}
 
@@ -349,7 +350,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 		case q := <-s.rxQ.Wait():
 			fr := *q.Dequeue()
 			s.rxQ.Release(q)
-			debug.Log(2, "RX (Session): %s", fr)
+			debug.Log(2, "RX (Session %p): %s", s, fr)
 
 			switch body := fr.(type) {
 			// Disposition frames can reference transfers from more than one
@@ -368,7 +369,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 					handle, ok := handles[deliveryID]
 					if !ok {
-						debug.Log(2, "RX (Session): role %s: didn't find deliveryID %d in handles map", body.Role, deliveryID)
+						debug.Log(2, "RX (Session %p): role %s: didn't find deliveryID %d in handles map", s, body.Role, deliveryID)
 						continue
 					}
 					delete(handles, deliveryID)
@@ -427,7 +428,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				// initial-outgoing-id(endpoint) + incoming-window(flow) - next-outgoing-id(endpoint)"
 				remoteIncomingWindow = body.IncomingWindow - nextOutgoingID
 				remoteIncomingWindow += *body.NextIncomingID
-				debug.Log(3, "RX (Session): flow - remoteOutgoingWindow: %d remoteIncomingWindow: %d nextOutgoingID: %d", remoteOutgoingWindow, remoteIncomingWindow, nextOutgoingID)
+				debug.Log(3, "RX (Session %p): flow - remoteOutgoingWindow: %d remoteIncomingWindow: %d nextOutgoingID: %d", s, remoteOutgoingWindow, remoteIncomingWindow, nextOutgoingID)
 
 				// Send to link if handle is set
 				if body.Handle != nil {
@@ -502,13 +503,13 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 				// if this message is received unsettled and link rcv-settle-mode == second, add to handlesByRemoteDeliveryID
 				if !body.Settled && body.DeliveryID != nil && link.receiverSettleMode != nil && *link.receiverSettleMode == ReceiverSettleModeSecond {
-					debug.Log(1, "RX (Session): adding handle to handlesByRemoteDeliveryID. delivery ID: %d", *body.DeliveryID)
+					debug.Log(1, "RX (Session %p): adding handle to handlesByRemoteDeliveryID. delivery ID: %d", s, *body.DeliveryID)
 					handlesByRemoteDeliveryID[*body.DeliveryID] = body.Handle
 				}
 
 				// Update peer's outgoing window if half has been consumed.
 				if s.needFlowCount >= s.incomingWindow/2 {
-					debug.Log(3, "RX (Session): channel %d: flow - s.needFlowCount(%d) >= s.incomingWindow(%d)/2\n", s.channel, s.needFlowCount, s.incomingWindow)
+					debug.Log(3, "RX (Session %p): channel %d: flow - s.needFlowCount(%d) >= s.incomingWindow(%d)/2\n", s, s.channel, s.needFlowCount, s.incomingWindow)
 					s.needFlowCount = 0
 					nID := nextIncomingID
 					flow := &frames.PerformFlow{
@@ -560,7 +561,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				return
 
 			default:
-				debug.Log(1, "RX (Session): unexpected frame: %s\n", body)
+				debug.Log(1, "RX (Session %p): unexpected frame: %s\n", s, body)
 				closeWithError(&Error{
 					Condition:   ErrCondInternalError,
 					Description: "session received unexpected frame",
@@ -571,7 +572,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 			if closeInProgress {
 				// now that the end performative has been sent we're
 				// not allowed to send any more frames.
-				debug.Log(1, "TX (Session): discarding transfer: %s\n", fr)
+				debug.Log(1, "TX (Session %p): discarding transfer: %s\n", s, fr)
 				continue
 			}
 
@@ -594,7 +595,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 			}
 
 			// log after the delivery ID has been assigned
-			debug.Log(2, "TX (Session): %d, %s", s.channel, fr)
+			debug.Log(2, "TX (Session %p): %d, %s", s, s.channel, fr)
 
 			// frame has been sender-settled, remove from map
 			if fr.Settled {
@@ -623,11 +624,11 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 			if closeInProgress {
 				// now that the end performative has been sent we're
 				// not allowed to send any more frames.
-				debug.Log(1, "TX (Session): discarding frame: %s\n", fr)
+				debug.Log(1, "TX (Session %p): discarding frame: %s", s, fr)
 				continue
 			}
 
-			debug.Log(2, "TX (Session): %d, %s", s.channel, fr)
+			debug.Log(2, "TX (Session %p): %d, %s", s, s.channel, fr)
 			switch fr := fr.(type) {
 			case *frames.PerformDisposition:
 				if fr.Settled && fr.Role == encoding.RoleSender {
@@ -703,7 +704,7 @@ func (s *Session) muxFrameToLink(l *link, fr frames.FrameBody) {
 	q := l.rxQ.Acquire()
 	q.Enqueue(fr)
 	l.rxQ.Release(q)
-	debug.Log(2, "RX (Session): mux frame to link: %s, %s", l.key.name, fr)
+	debug.Log(2, "RX (Session %p): mux frame to link (%p): %s, %s", s, l, l.key.name, fr)
 }
 
 // the address of this var is a sentinel value indicating

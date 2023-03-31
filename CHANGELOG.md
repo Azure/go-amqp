@@ -7,6 +7,10 @@
 * Calling `Dial()` with a cancelled context doesn't create a connection.
 * Context cancellation is properly honored in calls to `Dial()` and `NewConn()`.
 
+### Other Changes
+
+* Debug logging includes the address of the object that's writing a log entry.
+
 ## 0.19.1 (2023-03-31)
 
 ### Bugs Fixed

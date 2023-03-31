@@ -490,7 +490,7 @@ func (c *Conn) connReader() {
 	var err error
 	for {
 		if err != nil {
-			debug.Log(1, "RX (connReader): terminal error: %v", err)
+			debug.Log(1, "RX (connReader %p): terminal error: %v", c, err)
 			c.rxErr = err
 			return
 		}
@@ -501,7 +501,7 @@ func (c *Conn) connReader() {
 			continue
 		}
 
-		debug.Log(1, "RX (connReader): %s", fr)
+		debug.Log(1, "RX (connReader %p): %s", c, fr)
 
 		var (
 			session *Session
@@ -563,7 +563,7 @@ func (c *Conn) connReader() {
 		q := session.rxQ.Acquire()
 		q.Enqueue(fr.Body)
 		session.rxQ.Release(q)
-		debug.Log(2, "RX (connReader): mux frame to session: %s", fr)
+		debug.Log(2, "RX (connReader %p): mux frame to Session (%p): %s", c, session, fr)
 	}
 }
 
@@ -630,7 +630,7 @@ func (c *Conn) readFrame() (frames.Frame, error) {
 
 		// check if body is empty (keepalive)
 		if bodySize == 0 {
-			debug.Log(3, "RX (connReader): received keep-alive frame")
+			debug.Log(3, "RX (connReader %p): received keep-alive frame", c)
 			continue
 		}
 
@@ -673,7 +673,7 @@ func (c *Conn) connWriter() {
 	var err error
 	for {
 		if err != nil {
-			debug.Log(1, "TX (connWriter): terminal error: %v", err)
+			debug.Log(1, "TX (connWriter %p): terminal error: %v", c, err)
 			c.txErr = err
 			return
 		}
@@ -681,7 +681,7 @@ func (c *Conn) connWriter() {
 		select {
 		// frame write request
 		case fr := <-c.txFrame:
-			debug.Log(1, "TX (connWriter): %s", fr)
+			debug.Log(1, "TX (connWriter %p): %s", c, fr)
 			err = c.writeFrame(fr)
 			if err == nil && fr.Done != nil {
 				close(fr.Done)
@@ -689,7 +689,7 @@ func (c *Conn) connWriter() {
 
 		// keepalive timer
 		case <-keepalive:
-			debug.Log(3, "TX (connWriter): sending keep-alive frame")
+			debug.Log(3, "TX (connWriter %p): sending keep-alive frame", c)
 			_, err = c.net.Write(keepaliveFrame)
 			// It would be slightly more efficient in terms of network
 			// resources to reset the timer each time a frame is sent.
@@ -709,7 +709,7 @@ func (c *Conn) connWriter() {
 				Type: frames.TypeAMQP,
 				Body: &frames.PerformClose{},
 			}
-			debug.Log(1, "TX (connWriter): %s", fr)
+			debug.Log(1, "TX (connWriter %p): %s", c, fr)
 			c.txErr = c.writeFrame(fr)
 			return
 		}
@@ -735,7 +735,7 @@ func (c *Conn) writeFrame(fr frames.Frame) error {
 	// write to network
 	n, err := c.net.Write(c.txBuf.Bytes())
 	if l := c.txBuf.Len(); n > 0 && n < l && err != nil {
-		debug.Log(1, "TX (writeFrame): wrote %d bytes less than len %d: %v", n, l, err)
+		debug.Log(1, "TX (writeFrame %p): wrote %d bytes less than len %d: %v", c, n, l, err)
 	}
 	return err
 }
@@ -754,7 +754,7 @@ var keepaliveFrame = []byte{0x00, 0x00, 0x00, 0x08, 0x02, 0x00, 0x00, 0x00}
 func (c *Conn) sendFrame(fr frames.Frame) error {
 	select {
 	case c.txFrame <- fr:
-		debug.Log(2, "TX (Conn): mux frame to connWriter: %s", fr)
+		debug.Log(2, "TX (Conn %p): mux frame to connWriter: %s", c, fr)
 		return nil
 	case <-c.done:
 		return c.doneErr
@@ -905,7 +905,7 @@ func (c *Conn) openAMQP(context.Context) (stateFunc, error) {
 		Body:    open,
 		Channel: 0,
 	}
-	debug.Log(1, "TX (openAMQP): %s", fr)
+	debug.Log(1, "TX (openAMQP %p): %s", c, fr)
 	err := c.writeFrame(fr)
 	if err != nil {
 		return nil, err
@@ -916,7 +916,7 @@ func (c *Conn) openAMQP(context.Context) (stateFunc, error) {
 	if err != nil {
 		return nil, err
 	}
-	debug.Log(1, "RX (openAMQP): %s", fr)
+	debug.Log(1, "RX (openAMQP %p): %s", c, fr)
 	o, ok := fr.Body.(*frames.PerformOpen)
 	if !ok {
 		return nil, fmt.Errorf("openAMQP: unexpected frame type %T", fr.Body)
@@ -946,7 +946,7 @@ func (c *Conn) negotiateSASL(context.Context) (stateFunc, error) {
 	if err != nil {
 		return nil, err
 	}
-	debug.Log(1, "RX (negotiateSASL): %s", fr)
+	debug.Log(1, "RX (negotiateSASL %p): %s", c, fr)
 	sm, ok := fr.Body.(*frames.SASLMechanisms)
 	if !ok {
 		return nil, fmt.Errorf("negotiateSASL: unexpected frame type %T", fr.Body)
@@ -975,7 +975,7 @@ func (c *Conn) saslOutcome(context.Context) (stateFunc, error) {
 	if err != nil {
 		return nil, err
 	}
-	debug.Log(1, "RX (saslOutcome): %s", fr)
+	debug.Log(1, "RX (saslOutcome %p): %s", c, fr)
 	so, ok := fr.Body.(*frames.SASLOutcome)
 	if !ok {
 		return nil, fmt.Errorf("saslOutcome: unexpected frame type %T", fr.Body)

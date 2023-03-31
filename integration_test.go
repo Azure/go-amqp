@@ -821,7 +821,7 @@ func TestDialWithCancelledContext(t *testing.T) {
 		t.Skip()
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	client, err := amqp.Dial(ctx, localBrokerAddr, nil)
 	var dialErr *net.OpError

@@ -356,7 +356,9 @@ func (c *Conn) startImpl(ctx context.Context) error {
 		_ = c.net.SetDeadline(deadline)
 
 		// remove connection establishment deadline
-		defer c.net.SetDeadline(time.Time{})
+		defer func() {
+			_ = c.net.SetDeadline(time.Time{})
+		}()
 	}
 
 	// run connection establishment state machine

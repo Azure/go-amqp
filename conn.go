@@ -378,6 +378,13 @@ func (c *Conn) startImpl(ctx context.Context) error {
 // Close closes the connection.
 func (c *Conn) Close() error {
 	c.close()
+
+	// wait until the reader/writer goroutines have exited before proceeding.
+	// this is to prevent a race between calling Close() and a reader/writer
+	// goroutine calling close() due to a terminal error.
+	<-c.txDone
+	<-c.rxDone
+
 	var connErr *ConnError
 	if errors.As(c.doneErr, &connErr) && connErr.RemoteErr == nil && connErr.inner == nil {
 		// an empty ConnectionError means the connection was closed by the caller

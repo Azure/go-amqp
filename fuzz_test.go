@@ -18,9 +18,9 @@ import (
 
 func fuzzConn(data []byte) int {
 	// Receive
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	client, err := NewConn(ctx, testconn.New(data), &ConnOptions{
-		IdleTimeout: 10 * time.Millisecond,
+		IdleTimeout: 20 * time.Millisecond,
 		SASLType:    SASLTypePlain("listen", "3aCXZYFcuZA89xe6lZkfYJvOPnTGipA3ap7NvPruBhI="),
 	})
 	cancel()

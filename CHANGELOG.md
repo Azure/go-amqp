@@ -6,6 +6,7 @@
 
 * Calling `Dial()` with a cancelled context doesn't create a connection.
 * Context cancellation is properly honored in calls to `Dial()` and `NewConn()`.
+* Fixed potential race during `Conn.Close()`.
 
 ## 0.19.1 (2023-03-31)
 

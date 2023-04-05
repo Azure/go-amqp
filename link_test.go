@@ -167,7 +167,7 @@ func TestMuxFlowHandlesDrainProperly(t *testing.T) {
 }
 
 func newTestLink(t *testing.T) *Receiver {
-	fakeConn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
+	fakeConn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(0, ReceiverSettleModeFirst))
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	conn, err := NewConn(ctx, fakeConn, nil)
 	require.NoError(t, err)
@@ -380,7 +380,7 @@ func TestNewReceivingLink(t *testing.T) {
 func TestSessionFlowDisablesTransfer(t *testing.T) {
 	t.Skip("TODO: finish for link testing")
 	nextIncomingID := uint32(0)
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	client, err := NewConn(ctx, netConn, nil)

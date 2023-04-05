@@ -15,7 +15,7 @@ import (
 )
 
 func TestReceiverInvalidOptions(t *testing.T) {
-	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
+	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(0, ReceiverSettleModeFirst))
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -52,14 +52,14 @@ func TestReceiverInvalidOptions(t *testing.T) {
 
 func TestReceiverMethodsNoReceive(t *testing.T) {
 	const linkName = "test"
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch ff := req.(type) {
 		case *fake.AMQPProto:
 			return fake.ProtoHeader(fake.ProtoAMQP)
 		case *frames.PerformOpen:
 			return fake.PerformOpen("test")
 		case *frames.PerformBegin:
-			return fake.PerformBegin(0)
+			return fake.PerformBegin(0, remoteChannel)
 		case *frames.PerformAttach:
 			require.Equal(t, DurabilityUnsettledState, ff.Target.Durable)
 			require.Equal(t, ExpiryPolicyNever, ff.Target.ExpiryPolicy)
@@ -101,7 +101,7 @@ func TestReceiverMethodsNoReceive(t *testing.T) {
 }
 
 func TestReceiverLinkSourceFilter(t *testing.T) {
-	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
+	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(0, ReceiverSettleModeFirst))
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -130,7 +130,7 @@ func TestReceiverLinkSourceFilter(t *testing.T) {
 }
 
 func TestReceiverOnClosed(t *testing.T) {
-	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
+	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(0, ReceiverSettleModeFirst))
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -163,7 +163,7 @@ func TestReceiverOnClosed(t *testing.T) {
 }
 
 func TestReceiverOnSessionClosed(t *testing.T) {
-	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
+	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(0, ReceiverSettleModeFirst))
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -193,7 +193,7 @@ func TestReceiverOnSessionClosed(t *testing.T) {
 }
 
 func TestReceiverOnConnClosed(t *testing.T) {
-	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
+	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(0, ReceiverSettleModeFirst))
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -226,7 +226,7 @@ func TestReceiverOnConnClosed(t *testing.T) {
 }
 
 func TestReceiverOnDetached(t *testing.T) {
-	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
+	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(0, ReceiverSettleModeFirst))
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -265,14 +265,14 @@ func TestReceiverOnDetached(t *testing.T) {
 }
 
 func TestReceiverCloseTimeout(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return fake.PerformOpen("container")
 		case *frames.PerformBegin:
-			return fake.PerformBegin(0)
+			return fake.PerformBegin(0, remoteChannel)
 		case *frames.PerformEnd:
 			return fake.PerformEnd(0, nil)
 		case *frames.PerformAttach:
@@ -321,7 +321,7 @@ func TestReceiverCloseTimeout(t *testing.T) {
 func TestReceiveInvalidMessage(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
@@ -330,7 +330,7 @@ func TestReceiveInvalidMessage(t *testing.T) {
 		case *frames.PerformClose:
 			return fake.PerformClose(nil)
 		case *frames.PerformBegin:
-			return fake.PerformBegin(0)
+			return fake.PerformBegin(0, remoteChannel)
 		case *frames.PerformEnd:
 			return fake.PerformEnd(0, nil)
 		case *frames.PerformAttach:
@@ -442,8 +442,8 @@ func TestReceiveSuccessReceiverSettleModeFirst(t *testing.T) {
 
 	const linkHandle = 0
 	deliveryID := uint32(1)
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ReceiverSettleModeFirst)(req)
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(0, ReceiverSettleModeFirst)(remoteChannel, req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -515,8 +515,8 @@ func TestReceiveSuccessReceiverSettleModeSecondAccept(t *testing.T) {
 
 	const linkHandle = 0
 	deliveryID := uint32(1)
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ReceiverSettleModeSecond)(req)
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -592,8 +592,8 @@ func TestReceiveSuccessReceiverSettleModeSecondAcceptOnClosedLink(t *testing.T) 
 
 	const linkHandle = 0
 	deliveryID := uint32(1)
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ReceiverSettleModeSecond)(req)
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -657,8 +657,8 @@ func TestReceiveSuccessReceiverSettleModeSecondReject(t *testing.T) {
 
 	const linkHandle = 0
 	deliveryID := uint32(1)
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ReceiverSettleModeSecond)(req)
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -728,8 +728,8 @@ func TestReceiveSuccessReceiverSettleModeSecondRelease(t *testing.T) {
 
 	const linkHandle = 0
 	deliveryID := uint32(1)
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ReceiverSettleModeSecond)(req)
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -799,8 +799,8 @@ func TestReceiveSuccessReceiverSettleModeSecondModify(t *testing.T) {
 
 	const linkHandle = 0
 	deliveryID := uint32(1)
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ReceiverSettleModeSecond)(req)
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -876,7 +876,7 @@ func TestReceiveSuccessReceiverSettleModeSecondModify(t *testing.T) {
 }
 
 func TestReceiverPrefetch(t *testing.T) {
-	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
+	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(0, ReceiverSettleModeFirst))
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -915,8 +915,8 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 
 	const linkHandle = 0
 	deliveryID := uint32(1)
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ReceiverSettleModeSecond)(req)
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -994,7 +994,7 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 func TestReceiveInvalidMultiFrameMessage(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
@@ -1003,7 +1003,7 @@ func TestReceiveInvalidMultiFrameMessage(t *testing.T) {
 		case *frames.PerformClose:
 			return fake.PerformClose(nil)
 		case *frames.PerformBegin:
-			return fake.PerformBegin(0)
+			return fake.PerformBegin(0, remoteChannel)
 		case *frames.PerformEnd:
 			return fake.PerformEnd(0, nil)
 		case *frames.PerformAttach:
@@ -1115,8 +1115,8 @@ func TestReceiveInvalidMultiFrameMessage(t *testing.T) {
 func TestReceiveMultiFrameMessageAborted(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ReceiverSettleModeSecond)(req)
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -1177,8 +1177,8 @@ func TestReceiveMultiFrameMessageAborted(t *testing.T) {
 func TestReceiveMessageTooBig(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ReceiverSettleModeSecond)(req)
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -1226,8 +1226,8 @@ func TestReceiveSuccessAcceptFails(t *testing.T) {
 
 	const linkHandle = 0
 	deliveryID := uint32(1)
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ReceiverSettleModeSecond)(req)
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -1286,7 +1286,7 @@ func TestReceiveSuccessAcceptFails(t *testing.T) {
 }
 
 func TestReceiverCloseOnUnsettledWithPending(t *testing.T) {
-	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
+	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(0, ReceiverSettleModeFirst))
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -1315,7 +1315,7 @@ func TestReceiverCloseOnUnsettledWithPending(t *testing.T) {
 }
 
 func TestReceiverConnReaderError(t *testing.T) {
-	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
+	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(0, ReceiverSettleModeFirst))
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -1351,7 +1351,7 @@ func TestReceiverConnReaderError(t *testing.T) {
 }
 
 func TestReceiverConnWriterError(t *testing.T) {
-	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
+	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(0, ReceiverSettleModeFirst))
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()

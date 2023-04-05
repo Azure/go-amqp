@@ -14,14 +14,14 @@ import (
 
 func TestSessionClose(t *testing.T) {
 	channelNum := uint16(0)
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return fake.PerformOpen("container")
 		case *frames.PerformBegin:
-			b, err := fake.PerformBegin(uint16(channelNum))
+			b, err := fake.PerformBegin(uint16(channelNum), remoteChannel)
 			if err != nil {
 				return nil, err
 			}
@@ -63,14 +63,14 @@ func TestSessionClose(t *testing.T) {
 }
 
 func TestSessionServerClose(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return fake.PerformOpen("container")
 		case *frames.PerformBegin:
-			return fake.PerformBegin(0)
+			return fake.PerformBegin(0, remoteChannel)
 		case *frames.PerformEnd:
 			return nil, nil // swallow
 		case *frames.PerformClose:
@@ -109,14 +109,14 @@ func TestSessionServerClose(t *testing.T) {
 }
 
 func TestSessionCloseTimeout(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return fake.PerformOpen("container")
 		case *frames.PerformBegin:
-			return fake.PerformBegin(0)
+			return fake.PerformBegin(0, remoteChannel)
 		case *frames.PerformEnd:
 			// sleep to trigger session close timeout
 			time.Sleep(1 * time.Second)
@@ -153,7 +153,7 @@ func TestSessionCloseTimeout(t *testing.T) {
 }
 
 func TestConnCloseSessionClose(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -181,7 +181,7 @@ func TestConnCloseSessionClose(t *testing.T) {
 }
 
 func TestSessionNewReceiverBadOptionFails(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -209,14 +209,14 @@ func TestSessionNewReceiverBadOptionFails(t *testing.T) {
 }
 
 func TestSessionNewReceiverMismatchedLinkName(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return fake.PerformOpen("container")
 		case *frames.PerformBegin:
-			return fake.PerformBegin(0)
+			return fake.PerformBegin(0, remoteChannel)
 		case *frames.PerformEnd:
 			return fake.PerformEnd(0, nil)
 		case *frames.PerformAttach:
@@ -253,7 +253,7 @@ func TestSessionNewReceiverMismatchedLinkName(t *testing.T) {
 }
 
 func TestSessionNewSenderBadOptionFails(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -281,14 +281,14 @@ func TestSessionNewSenderBadOptionFails(t *testing.T) {
 }
 
 func TestSessionNewSenderMismatchedLinkName(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return fake.PerformOpen("container")
 		case *frames.PerformBegin:
-			return fake.PerformBegin(0)
+			return fake.PerformBegin(0, remoteChannel)
 		case *frames.PerformEnd:
 			return fake.PerformEnd(0, nil)
 		case *frames.PerformAttach:
@@ -323,7 +323,7 @@ func TestSessionNewSenderMismatchedLinkName(t *testing.T) {
 }
 
 func TestSessionNewSenderDuplicateLinks(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -356,7 +356,7 @@ func TestSessionNewSenderDuplicateLinks(t *testing.T) {
 }
 
 func TestSessionNewSenderMaxHandles(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -389,7 +389,7 @@ func TestSessionNewSenderMaxHandles(t *testing.T) {
 }
 
 func TestSessionUnexpectedFrame(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -420,7 +420,7 @@ func TestSessionUnexpectedFrame(t *testing.T) {
 }
 
 func TestSessionInvalidFlowFrame(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -450,14 +450,14 @@ func TestSessionFlowFrameWithEcho(t *testing.T) {
 	nextIncomingID := uint32(1)
 	const nextOutgoingID = 2
 	echo := make(chan struct{})
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return fake.PerformOpen("container")
 		case *frames.PerformBegin:
-			return fake.PerformBegin(0)
+			return fake.PerformBegin(0, remoteChannel)
 		case *frames.PerformFlow:
 			defer func() { close(echo) }()
 			// here we receive the echo.  verify state
@@ -513,14 +513,14 @@ func TestSessionFlowFrameWithEcho(t *testing.T) {
 
 func TestSessionInvalidAttachDeadlock(t *testing.T) {
 	var enqueueFrames func(string)
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return fake.PerformOpen("container")
 		case *frames.PerformBegin:
-			return fake.PerformBegin(0)
+			return fake.PerformBegin(0, remoteChannel)
 		case *frames.PerformEnd:
 			return fake.PerformEnd(0, nil)
 		case *frames.PerformAttach:
@@ -573,7 +573,7 @@ func TestSessionInvalidAttachDeadlock(t *testing.T) {
 func TestNewSessionContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
@@ -605,7 +605,7 @@ func TestNewSessionContextCancelled(t *testing.T) {
 }
 
 func TestSessionReceiveTransferNoHandle(t *testing.T) {
-	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
+	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(0, ReceiverSettleModeFirst))
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -631,7 +631,7 @@ func TestSessionReceiveTransferNoHandle(t *testing.T) {
 }
 
 func TestSessionReceiveDetachrNoHandle(t *testing.T) {
-	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(ReceiverSettleModeFirst))
+	conn := fake.NewNetConn(receiverFrameHandlerNoUnhandled(0, ReceiverSettleModeFirst))
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()

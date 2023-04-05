@@ -15,7 +15,7 @@ import (
 )
 
 func TestSenderInvalidOptions(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -37,14 +37,14 @@ func TestSenderInvalidOptions(t *testing.T) {
 }
 
 func TestSenderMethodsNoSend(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return fake.PerformOpen("container")
 		case *frames.PerformBegin:
-			return fake.PerformBegin(0)
+			return fake.PerformBegin(0, remoteChannel)
 		case *frames.PerformEnd:
 			return fake.PerformEnd(0, nil)
 		case *frames.PerformAttach:
@@ -94,7 +94,7 @@ func TestSenderMethodsNoSend(t *testing.T) {
 }
 
 func TestSenderSendOnClosed(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -122,7 +122,7 @@ func TestSenderSendOnClosed(t *testing.T) {
 }
 
 func TestSenderSendOnSessionClosed(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -153,7 +153,7 @@ func TestSenderSendOnSessionClosed(t *testing.T) {
 }
 
 func TestSenderSendOnConnClosed(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -181,7 +181,7 @@ func TestSenderSendOnConnClosed(t *testing.T) {
 }
 
 func TestSenderSendOnDetached(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -215,14 +215,14 @@ func TestSenderSendOnDetached(t *testing.T) {
 }
 
 func TestSenderCloseTimeout(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return fake.PerformOpen("container")
 		case *frames.PerformBegin:
-			return fake.PerformBegin(0)
+			return fake.PerformBegin(0, remoteChannel)
 		case *frames.PerformEnd:
 			return fake.PerformEnd(0, nil)
 		case *frames.PerformAttach:
@@ -269,14 +269,14 @@ func TestSenderCloseTimeout(t *testing.T) {
 func TestSenderAttachError(t *testing.T) {
 	detachAck := make(chan bool, 1)
 	var enqueueFrames func(string)
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return fake.PerformOpen("container")
 		case *frames.PerformBegin:
-			return fake.PerformBegin(0)
+			return fake.PerformBegin(0, remoteChannel)
 		case *frames.PerformEnd:
 			return fake.PerformEnd(0, nil)
 		case *frames.PerformAttach:
@@ -341,7 +341,7 @@ func TestSenderAttachError(t *testing.T) {
 }
 
 func TestSenderSendMismatchedModes(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -364,8 +364,8 @@ func TestSenderSendMismatchedModes(t *testing.T) {
 }
 
 func TestSenderSendSuccess(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := senderFrameHandler(SenderSettleModeUnsettled)(req)
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
+		b, err := senderFrameHandler(0, SenderSettleModeUnsettled)(remoteChannel, req)
 		if err != nil || b != nil {
 			return b, err
 		}
@@ -404,7 +404,7 @@ func TestSenderSendSuccess(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 
-	sendInitialFlowFrame(t, netConn, 0, 100)
+	sendInitialFlowFrame(t, 0, netConn, 0, 100)
 
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	require.NoError(t, snd.Send(ctx, NewMessage([]byte("test")), nil))
@@ -414,8 +414,8 @@ func TestSenderSendSuccess(t *testing.T) {
 }
 
 func TestSenderSendSettled(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := senderFrameHandler(SenderSettleModeSettled)(req)
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
+		b, err := senderFrameHandler(0, SenderSettleModeSettled)(remoteChannel, req)
 		if err != nil || b != nil {
 			return b, err
 		}
@@ -453,7 +453,7 @@ func TestSenderSendSettled(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 
-	sendInitialFlowFrame(t, netConn, 0, 100)
+	sendInitialFlowFrame(t, 0, netConn, 0, 100)
 
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	require.NoError(t, snd.Send(ctx, NewMessage([]byte("test")), nil))
@@ -463,8 +463,8 @@ func TestSenderSendSettled(t *testing.T) {
 }
 
 func TestSenderSendSettledModeMixed(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := senderFrameHandler(SenderSettleModeSettled)(req)
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
+		b, err := senderFrameHandler(0, SenderSettleModeSettled)(remoteChannel, req)
 		if err != nil || b != nil {
 			return b, err
 		}
@@ -500,7 +500,7 @@ func TestSenderSendSettledModeMixed(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 
-	sendInitialFlowFrame(t, netConn, 0, 100)
+	sendInitialFlowFrame(t, 0, netConn, 0, 100)
 
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	require.NoError(t, snd.Send(ctx, NewMessage([]byte("test")), &SendOptions{Settled: true}))
@@ -510,7 +510,7 @@ func TestSenderSendSettledModeMixed(t *testing.T) {
 }
 
 func TestSenderSendSettledError(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -528,7 +528,7 @@ func TestSenderSendSettledError(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 
-	sendInitialFlowFrame(t, netConn, 0, 100)
+	sendInitialFlowFrame(t, 0, netConn, 0, 100)
 
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	require.Error(t, snd.Send(ctx, NewMessage([]byte("test")), &SendOptions{Settled: true}))
@@ -538,14 +538,14 @@ func TestSenderSendSettledError(t *testing.T) {
 }
 
 func TestSenderSendRejectedNoDetach(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return fake.PerformOpen("container")
 		case *frames.PerformBegin:
-			return fake.PerformBegin(0)
+			return fake.PerformBegin(0, remoteChannel)
 		case *frames.PerformEnd:
 			return fake.PerformEnd(0, nil)
 		case *frames.PerformAttach:
@@ -585,7 +585,7 @@ func TestSenderSendRejectedNoDetach(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 
-	sendInitialFlowFrame(t, netConn, 0, 100)
+	sendInitialFlowFrame(t, 0, netConn, 0, 100)
 
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	err = snd.Send(ctx, NewMessage([]byte("test")), nil)
@@ -605,8 +605,8 @@ func TestSenderSendRejectedNoDetach(t *testing.T) {
 }
 
 func TestSenderSendDetached(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := senderFrameHandler(SenderSettleModeUnsettled)(req)
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
+		b, err := senderFrameHandler(0, SenderSettleModeUnsettled)(remoteChannel, req)
 		if err != nil || b != nil {
 			return b, err
 		}
@@ -636,7 +636,7 @@ func TestSenderSendDetached(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 
-	sendInitialFlowFrame(t, netConn, 0, 100)
+	sendInitialFlowFrame(t, 0, netConn, 0, 100)
 
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	err = snd.Send(ctx, NewMessage([]byte("test")), nil)
@@ -650,7 +650,7 @@ func TestSenderSendDetached(t *testing.T) {
 }
 
 func TestSenderSendTimeout(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -675,14 +675,14 @@ func TestSenderSendTimeout(t *testing.T) {
 }
 
 func TestSenderSendMsgTooBig(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return fake.PerformOpen("container")
 		case *frames.PerformBegin:
-			return fake.PerformBegin(0)
+			return fake.PerformBegin(0, remoteChannel)
 		case *frames.PerformEnd:
 			return fake.PerformEnd(0, nil)
 		case *frames.PerformAttach:
@@ -725,7 +725,7 @@ func TestSenderSendMsgTooBig(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 
-	sendInitialFlowFrame(t, netConn, 0, 100)
+	sendInitialFlowFrame(t, 0, netConn, 0, 100)
 
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	require.Error(t, snd.Send(ctx, NewMessage([]byte("test message that's too big")), nil))
@@ -735,8 +735,8 @@ func TestSenderSendMsgTooBig(t *testing.T) {
 }
 
 func TestSenderSendTagTooBig(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := senderFrameHandler(SenderSettleModeUnsettled)(req)
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
+		b, err := senderFrameHandler(0, SenderSettleModeUnsettled)(remoteChannel, req)
 		if err != nil || b != nil {
 			return b, err
 		}
@@ -763,7 +763,7 @@ func TestSenderSendTagTooBig(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 
-	sendInitialFlowFrame(t, netConn, 0, 100)
+	sendInitialFlowFrame(t, 0, netConn, 0, 100)
 
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	msg := NewMessage([]byte("test"))
@@ -779,7 +779,7 @@ func TestSenderSendMultiTransfer(t *testing.T) {
 	var deliveryID uint32
 	transferCount := 0
 	const maxReceiverFrameSize = 128
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
@@ -791,7 +791,7 @@ func TestSenderSendMultiTransfer(t *testing.T) {
 				MaxFrameSize: maxReceiverFrameSize, // really small max frame size
 			})
 		case *frames.PerformBegin:
-			return fake.PerformBegin(0)
+			return fake.PerformBegin(0, remoteChannel)
 		case *frames.PerformEnd:
 			return fake.PerformEnd(0, nil)
 		case *frames.PerformAttach:
@@ -839,7 +839,7 @@ func TestSenderSendMultiTransfer(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 
-	sendInitialFlowFrame(t, netConn, 0, 100)
+	sendInitialFlowFrame(t, 0, netConn, 0, 100)
 
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	payload := make([]byte, maxReceiverFrameSize*4)
@@ -856,7 +856,7 @@ func TestSenderSendMultiTransfer(t *testing.T) {
 }
 
 func TestSenderConnReaderError(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -891,7 +891,7 @@ func TestSenderConnReaderError(t *testing.T) {
 }
 
 func TestSenderConnWriterError(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -908,7 +908,7 @@ func TestSenderConnWriterError(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, snd)
 
-	sendInitialFlowFrame(t, netConn, 0, 100)
+	sendInitialFlowFrame(t, 0, netConn, 0, 100)
 
 	// simulate some connWriter error
 	netConn.WriteErr <- errors.New("failed")
@@ -926,8 +926,8 @@ func TestSenderConnWriterError(t *testing.T) {
 func TestSenderFlowFrameWithEcho(t *testing.T) {
 	linkCredit := uint32(1)
 	echo := make(chan struct{})
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := senderFrameHandler(SenderSettleModeUnsettled)(req)
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
+		b, err := senderFrameHandler(0, SenderSettleModeUnsettled)(remoteChannel, req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -989,7 +989,7 @@ func TestSenderFlowFrameWithEcho(t *testing.T) {
 }
 
 func TestNewSenderTimedOut(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
@@ -998,7 +998,7 @@ func TestNewSenderTimedOut(t *testing.T) {
 		case *frames.PerformClose:
 			return fake.PerformClose(nil)
 		case *frames.PerformBegin:
-			return fake.PerformBegin(0)
+			return fake.PerformBegin(0, remoteChannel)
 		case *frames.PerformAttach:
 			// swallow the frame so attach never gets an ack
 			return nil, nil
@@ -1025,14 +1025,14 @@ func TestNewSenderTimedOut(t *testing.T) {
 
 func TestNewSenderWriteError(t *testing.T) {
 	detachAck := make(chan struct{})
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return fake.PerformOpen("container")
 		case *frames.PerformBegin:
-			return fake.PerformBegin(0)
+			return fake.PerformBegin(0, remoteChannel)
 		case *frames.PerformAttach:
 			return nil, errors.New("write error")
 		case *frames.PerformDetach:
@@ -1073,7 +1073,7 @@ func TestNewSenderWriteError(t *testing.T) {
 func TestNewSenderContextCancelled(t *testing.T) {
 	senderCtx, senderCancel := context.WithCancel(context.Background())
 
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
@@ -1082,7 +1082,7 @@ func TestNewSenderContextCancelled(t *testing.T) {
 		case *frames.PerformClose:
 			return fake.PerformClose(nil)
 		case *frames.PerformBegin:
-			return fake.PerformBegin(0)
+			return fake.PerformBegin(0, remoteChannel)
 		case *frames.PerformEnd:
 			return fake.PerformEnd(0, nil)
 		case *frames.PerformAttach:
@@ -1113,7 +1113,7 @@ func TestNewSenderContextCancelled(t *testing.T) {
 }
 
 func TestSenderUnexpectedFrame(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)

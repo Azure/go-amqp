@@ -201,12 +201,12 @@ func TestStart(t *testing.T) {
 	tests := []struct {
 		label     string
 		fails     bool
-		responder func(frames.FrameBody) ([]byte, error)
+		responder func(uint16, frames.FrameBody) ([]byte, error)
 	}{
 		{
 			label: "bad header",
 			fails: true,
-			responder: func(req frames.FrameBody) ([]byte, error) {
+			responder: func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 				switch req.(type) {
 				case *fake.AMQPProto:
 					return []byte{'B', 'A', 'A', 'D', 0, 1, 0, 0}, nil
@@ -218,7 +218,7 @@ func TestStart(t *testing.T) {
 		{
 			label: "incorrect version",
 			fails: true,
-			responder: func(req frames.FrameBody) ([]byte, error) {
+			responder: func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 				switch req.(type) {
 				case *fake.AMQPProto:
 					return []byte{'A', 'M', 'Q', 'P', 0, 2, 0, 0}, nil
@@ -230,7 +230,7 @@ func TestStart(t *testing.T) {
 		{
 			label: "failed PerformOpen",
 			fails: true,
-			responder: func(req frames.FrameBody) ([]byte, error) {
+			responder: func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 				switch req.(type) {
 				case *fake.AMQPProto:
 					return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
@@ -244,12 +244,12 @@ func TestStart(t *testing.T) {
 		{
 			label: "unexpected PerformOpen response",
 			fails: true,
-			responder: func(req frames.FrameBody) ([]byte, error) {
+			responder: func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 				switch req.(type) {
 				case *fake.AMQPProto:
 					return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 				case *frames.PerformOpen:
-					return fake.PerformBegin(1)
+					return fake.PerformBegin(0, 1)
 				default:
 					return nil, fmt.Errorf("unhandled frame %T", req)
 				}
@@ -257,7 +257,7 @@ func TestStart(t *testing.T) {
 		},
 		{
 			label: "success",
-			responder: func(req frames.FrameBody) ([]byte, error) {
+			responder: func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 				switch req.(type) {
 				case *fake.AMQPProto:
 					return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
@@ -288,7 +288,7 @@ func TestStart(t *testing.T) {
 }
 
 func TestClose(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
 	conn, err := newConn(netConn, nil)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -296,7 +296,7 @@ func TestClose(t *testing.T) {
 	cancel()
 	require.NoError(t, conn.Close())
 	// with Close error
-	netConn = fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn = fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
 	conn, err = newConn(netConn, nil)
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -312,7 +312,7 @@ func TestClose(t *testing.T) {
 
 func TestServerSideClose(t *testing.T) {
 	closeReceived := make(chan struct{})
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
@@ -361,7 +361,7 @@ func TestKeepAlives(t *testing.T) {
 	// two in this test.  the test needs to receive at least one keep-alive,
 	// so use a buffered channel to absorb any extras.
 	keepAlives := make(chan struct{}, 3)
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
@@ -401,7 +401,7 @@ func TestKeepAlivesIdleTimeout(t *testing.T) {
 	start := make(chan struct{})
 	done := make(chan struct{})
 
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
@@ -447,7 +447,7 @@ func TestKeepAlivesIdleTimeout(t *testing.T) {
 }
 
 func TestConnReaderError(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
 	conn, err := newConn(netConn, nil)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -465,7 +465,7 @@ func TestConnReaderError(t *testing.T) {
 }
 
 func TestConnWriterError(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
 	conn, err := newConn(netConn, nil)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -482,7 +482,7 @@ func TestConnWriterError(t *testing.T) {
 }
 
 func TestConnWithZeroByteReads(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
@@ -507,7 +507,7 @@ func TestConnWithZeroByteReads(t *testing.T) {
 }
 
 func TestConnNegotiationTimeout(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		return nil, nil
 	}
 
@@ -520,7 +520,7 @@ func TestConnNegotiationTimeout(t *testing.T) {
 }
 
 type mockDialer struct {
-	resp func(frames.FrameBody) ([]byte, error)
+	resp func(uint16, frames.FrameBody) ([]byte, error)
 }
 
 func (m mockDialer) NetDialerDial(ctx context.Context, c *Conn, host, port string) error {
@@ -533,7 +533,7 @@ func (mockDialer) TLSDialWithDialer(ctx context.Context, c *Conn, host, port str
 }
 
 func TestClientDial(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
@@ -549,7 +549,7 @@ func TestClientDial(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, client)
 	// error case
-	responder = func(req frames.FrameBody) ([]byte, error) {
+	responder = func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
@@ -567,7 +567,7 @@ func TestClientDial(t *testing.T) {
 }
 
 func TestClientClose(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
@@ -617,7 +617,7 @@ func TestSessionOptions(t *testing.T) {
 
 func TestClientNewSession(t *testing.T) {
 	const channelNum = 0
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch tt := req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
@@ -627,7 +627,7 @@ func TestClientNewSession(t *testing.T) {
 			if tt.RemoteChannel != nil {
 				return nil, errors.New("expected nil remote channel")
 			}
-			return fake.PerformBegin(channelNum)
+			return fake.PerformBegin(channelNum, remoteChannel)
 		case *frames.PerformClose:
 			return fake.PerformClose(nil)
 		default:
@@ -661,14 +661,14 @@ func TestClientNewSession(t *testing.T) {
 
 func TestClientMultipleSessions(t *testing.T) {
 	channelNum := uint16(0)
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
 			return fake.PerformOpen("container")
 		case *frames.PerformBegin:
-			b, err := fake.PerformBegin(channelNum)
+			b, err := fake.PerformBegin(channelNum, remoteChannel)
 			channelNum++
 			return b, err
 		case *frames.PerformClose:
@@ -702,7 +702,7 @@ func TestClientMultipleSessions(t *testing.T) {
 
 func TestClientTooManySessions(t *testing.T) {
 	channelNum := uint16(0)
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
@@ -715,7 +715,7 @@ func TestClientTooManySessions(t *testing.T) {
 				MaxFrameSize: 4294967295,
 			})
 		case *frames.PerformBegin:
-			b, err := fake.PerformBegin(channelNum)
+			b, err := fake.PerformBegin(channelNum, remoteChannel)
 			channelNum++
 			return b, err
 		case *frames.PerformClose:
@@ -747,7 +747,7 @@ func TestClientTooManySessions(t *testing.T) {
 }
 
 func TestClientNewSessionMissingRemoteChannel(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
@@ -782,7 +782,7 @@ func TestClientNewSessionMissingRemoteChannel(t *testing.T) {
 }
 
 func TestClientNewSessionInvalidInitialResponse(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
@@ -810,7 +810,7 @@ func TestClientNewSessionInvalidInitialResponse(t *testing.T) {
 
 func TestClientNewSessionInvalidSecondResponseSameChannel(t *testing.T) {
 	firstChan := true
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
@@ -821,7 +821,7 @@ func TestClientNewSessionInvalidSecondResponseSameChannel(t *testing.T) {
 		case *frames.PerformBegin:
 			if firstChan {
 				firstChan = false
-				return fake.PerformBegin(0)
+				return fake.PerformBegin(0, remoteChannel)
 			}
 			// respond with the wrong frame type
 			return fake.PerformOpen("bad")
@@ -855,7 +855,7 @@ func TestClientNewSessionInvalidSecondResponseSameChannel(t *testing.T) {
 
 func TestClientNewSessionInvalidSecondResponseDifferentChannel(t *testing.T) {
 	firstChan := true
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
@@ -864,7 +864,7 @@ func TestClientNewSessionInvalidSecondResponseDifferentChannel(t *testing.T) {
 		case *frames.PerformBegin:
 			if firstChan {
 				firstChan = false
-				return fake.PerformBegin(0)
+				return fake.PerformBegin(0, remoteChannel)
 			}
 			// respond with the wrong frame type
 			// note that it has to be for the next channel
@@ -897,7 +897,7 @@ func TestClientNewSessionInvalidSecondResponseDifferentChannel(t *testing.T) {
 }
 
 func TestNewSessionTimedOut(t *testing.T) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
@@ -928,7 +928,7 @@ func TestNewSessionTimedOut(t *testing.T) {
 
 func TestNewSessionWriteError(t *testing.T) {
 	endAck := make(chan struct{})
-	responder := func(req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil

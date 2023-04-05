@@ -13,8 +13,8 @@ import (
 )
 
 func BenchmarkSenderSendSSMUnsettled(b *testing.B) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := senderFrameHandler(SenderSettleModeUnsettled)(req)
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
+		b, err := senderFrameHandler(0, SenderSettleModeUnsettled)(remoteChannel, req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -44,7 +44,7 @@ func BenchmarkSenderSendSSMUnsettled(b *testing.B) {
 	})
 	cancel()
 	require.NoError(b, err)
-	sendInitialFlowFrame(b, conn, 0, 1000000)
+	sendInitialFlowFrame(b, 0, conn, 0, 1000000)
 	b.ResetTimer()
 	b.ReportAllocs()
 
@@ -58,8 +58,8 @@ func BenchmarkSenderSendSSMUnsettled(b *testing.B) {
 }
 
 func BenchmarkSenderSendSSMSettled(b *testing.B) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := senderFrameHandler(SenderSettleModeSettled)(req)
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
+		b, err := senderFrameHandler(0, SenderSettleModeSettled)(remoteChannel, req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -89,7 +89,7 @@ func BenchmarkSenderSendSSMSettled(b *testing.B) {
 	})
 	cancel()
 	require.NoError(b, err)
-	sendInitialFlowFrame(b, conn, 0, 1000000)
+	sendInitialFlowFrame(b, 0, conn, 0, 1000000)
 	b.ResetTimer()
 	b.ReportAllocs()
 
@@ -103,8 +103,8 @@ func BenchmarkSenderSendSSMSettled(b *testing.B) {
 }
 
 func BenchmarkReceiverReceiveRSMFirst(b *testing.B) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ReceiverSettleModeFirst)(req)
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(0, ReceiverSettleModeFirst)(remoteChannel, req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -154,8 +154,8 @@ func BenchmarkReceiverReceiveRSMFirst(b *testing.B) {
 }
 
 func BenchmarkReceiverReceiveRSMSecond(b *testing.B) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ReceiverSettleModeSecond)(req)
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
 		if b != nil || err != nil {
 			return b, err
 		}
@@ -205,8 +205,8 @@ func BenchmarkReceiverReceiveRSMSecond(b *testing.B) {
 }
 
 func BenchmarkReceiverSettleMessage(b *testing.B) {
-	responder := func(req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(ReceiverSettleModeFirst)(req)
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(0, ReceiverSettleModeFirst)(remoteChannel, req)
 		if b != nil || err != nil {
 			return b, err
 		}

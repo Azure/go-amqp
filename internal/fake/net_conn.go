@@ -15,7 +15,7 @@ import (
 // Responder is invoked by Write when a frame is received.
 // Return a nil slice/nil error to swallow the frame.
 // Return a non-nil error to simulate a write error.
-func NewNetConn(resp func(frames.FrameBody) ([]byte, error)) *NetConn {
+func NewNetConn(resp func(remoteChannel uint16, fr frames.FrameBody) ([]byte, error)) *NetConn {
 	return &NetConn{
 		ReadErr:  make(chan error),
 		WriteErr: make(chan error, 1),
@@ -47,7 +47,7 @@ type NetConn struct {
 	// Has a buffer of one so setting a pending error won't block.
 	WriteErr chan error
 
-	resp      func(frames.FrameBody) ([]byte, error)
+	resp      func(uint16, frames.FrameBody) ([]byte, error)
 	readDL    readTimer
 	readData  chan []byte
 	readClose chan struct{}
@@ -68,8 +68,8 @@ func (n *NetConn) SendKeepAlive() {
 
 // SendMultiFrameTransfer splits payload into 32-byte chunks, encodes, and sends to the client.
 // Payload must be big enough for at least two chunks.
-func (n *NetConn) SendMultiFrameTransfer(remoteChannel uint16, linkHandle, deliveryID uint32, payload []byte, edit func(int, *frames.PerformTransfer)) error {
-	bb, err := encodeMultiFrameTransfer(remoteChannel, linkHandle, deliveryID, payload, edit)
+func (n *NetConn) SendMultiFrameTransfer(channel uint16, linkHandle, deliveryID uint32, payload []byte, edit func(int, *frames.PerformTransfer)) error {
+	bb, err := encodeMultiFrameTransfer(channel, linkHandle, deliveryID, payload, edit)
 	if err != nil {
 		return err
 	}
@@ -129,11 +129,11 @@ func (n *NetConn) Write(b []byte) (int, error) {
 		// no fake write error
 	}
 
-	frame, err := decodeFrame(b)
+	remoteChannel, frame, err := decodeFrame(b)
 	if err != nil {
 		return 0, err
 	}
-	resp, err := n.resp(frame)
+	resp, err := n.resp(remoteChannel, frame)
 	if err != nil {
 		return 0, err
 	}
@@ -219,8 +219,8 @@ func PerformOpen(containerID string) ([]byte, error) {
 
 // PerformBegin appends a PerformBegin frame with the specified remote channel ID.
 // This frame is needed when making a call to Client.NewSession().
-func PerformBegin(remoteChannel uint16) ([]byte, error) {
-	return EncodeFrame(frames.TypeAMQP, remoteChannel, &frames.PerformBegin{
+func PerformBegin(channel, remoteChannel uint16) ([]byte, error) {
+	return EncodeFrame(frames.TypeAMQP, channel, &frames.PerformBegin{
 		RemoteChannel:  &remoteChannel,
 		NextOutgoingID: 1,
 		IncomingWindow: 5000,
@@ -231,8 +231,8 @@ func PerformBegin(remoteChannel uint16) ([]byte, error) {
 
 // SenderAttach encodes a PerformAttach frame with the specified values.
 // This frame is needed when making a call to Session.NewSender().
-func SenderAttach(remoteChannel uint16, linkName string, linkHandle uint32, mode encoding.SenderSettleMode) ([]byte, error) {
-	return EncodeFrame(frames.TypeAMQP, remoteChannel, &frames.PerformAttach{
+func SenderAttach(channel uint16, linkName string, linkHandle uint32, mode encoding.SenderSettleMode) ([]byte, error) {
+	return EncodeFrame(frames.TypeAMQP, channel, &frames.PerformAttach{
 		Name:   linkName,
 		Handle: linkHandle,
 		Role:   encoding.RoleReceiver,
@@ -248,8 +248,8 @@ func SenderAttach(remoteChannel uint16, linkName string, linkHandle uint32, mode
 
 // ReceiverAttach appends a PerformAttach frame with the specified values.
 // This frame is needed when making a call to Session.NewReceiver().
-func ReceiverAttach(remoteChannel uint16, linkName string, linkHandle uint32, mode encoding.ReceiverSettleMode, filter encoding.Filter) ([]byte, error) {
-	return EncodeFrame(frames.TypeAMQP, remoteChannel, &frames.PerformAttach{
+func ReceiverAttach(channel uint16, linkName string, linkHandle uint32, mode encoding.ReceiverSettleMode, filter encoding.Filter) ([]byte, error) {
+	return EncodeFrame(frames.TypeAMQP, channel, &frames.PerformAttach{
 		Name:   linkName,
 		Handle: linkHandle,
 		Role:   encoding.RoleSender,
@@ -266,7 +266,7 @@ func ReceiverAttach(remoteChannel uint16, linkName string, linkHandle uint32, mo
 
 // PerformTransfer appends a PerformTransfer frame with the specified values.
 // The linkHandle MUST match the linkHandle value specified in ReceiverAttach.
-func PerformTransfer(remoteChannel uint16, linkHandle, deliveryID uint32, payload []byte) ([]byte, error) {
+func PerformTransfer(channel uint16, linkHandle, deliveryID uint32, payload []byte) ([]byte, error) {
 	format := uint32(0)
 	payloadBuf := &buffer.Buffer{}
 	encoding.WriteDescriptor(payloadBuf, encoding.TypeCodeApplicationData)
@@ -274,7 +274,7 @@ func PerformTransfer(remoteChannel uint16, linkHandle, deliveryID uint32, payloa
 	if err != nil {
 		return nil, err
 	}
-	return EncodeFrame(frames.TypeAMQP, remoteChannel, &frames.PerformTransfer{
+	return EncodeFrame(frames.TypeAMQP, channel, &frames.PerformTransfer{
 		Handle:        linkHandle,
 		DeliveryID:    &deliveryID,
 		DeliveryTag:   []byte("tag"),
@@ -285,8 +285,8 @@ func PerformTransfer(remoteChannel uint16, linkHandle, deliveryID uint32, payloa
 
 // PerformDisposition appends a PerformDisposition frame with the specified values.
 // The firstID MUST match the deliveryID value specified in PerformTransfer.
-func PerformDisposition(role encoding.Role, remoteChannel uint16, firstID uint32, lastID *uint32, state encoding.DeliveryState) ([]byte, error) {
-	return EncodeFrame(frames.TypeAMQP, remoteChannel, &frames.PerformDisposition{
+func PerformDisposition(role encoding.Role, channel uint16, firstID uint32, lastID *uint32, state encoding.DeliveryState) ([]byte, error) {
+	return EncodeFrame(frames.TypeAMQP, channel, &frames.PerformDisposition{
 		Role:    role,
 		First:   firstID,
 		Last:    lastID,
@@ -296,13 +296,13 @@ func PerformDisposition(role encoding.Role, remoteChannel uint16, firstID uint32
 }
 
 // PerformDetach encodes a PerformDetach frame with an optional error.
-func PerformDetach(remoteChannel uint16, linkHandle uint32, e *encoding.Error) ([]byte, error) {
-	return EncodeFrame(frames.TypeAMQP, remoteChannel, &frames.PerformDetach{Handle: linkHandle, Closed: true, Error: e})
+func PerformDetach(channel uint16, linkHandle uint32, e *encoding.Error) ([]byte, error) {
+	return EncodeFrame(frames.TypeAMQP, channel, &frames.PerformDetach{Handle: linkHandle, Closed: true, Error: e})
 }
 
 // PerformEnd encodes a PerformEnd frame with an optional error.
-func PerformEnd(remoteChannel uint16, e *encoding.Error) ([]byte, error) {
-	return EncodeFrame(frames.TypeAMQP, remoteChannel, &frames.PerformEnd{Error: e})
+func PerformEnd(channel uint16, e *encoding.Error) ([]byte, error) {
+	return EncodeFrame(frames.TypeAMQP, channel, &frames.PerformEnd{Error: e})
 }
 
 // PerformClose encodes a PerformClose frame with an optional error.
@@ -331,7 +331,7 @@ func (f frameHeader) Marshal(wr *buffer.Buffer) error {
 }
 
 // EncodeFrame encodes the specified frame to be sent over the wire.
-func EncodeFrame(t frames.Type, remoteChannel uint16, f frames.FrameBody) ([]byte, error) {
+func EncodeFrame(t frames.Type, channel uint16, f frames.FrameBody) ([]byte, error) {
 	bodyBuf := buffer.New([]byte{})
 	if err := encoding.Marshal(bodyBuf, f); err != nil {
 		return nil, err
@@ -341,7 +341,7 @@ func EncodeFrame(t frames.Type, remoteChannel uint16, f frames.FrameBody) ([]byt
 		Size:       uint32(bodyBuf.Len()) + 8,
 		DataOffset: 2,
 		FrameType:  uint8(t),
-		Channel:    remoteChannel,
+		Channel:    channel,
 	}
 	headerBuf := buffer.New([]byte{})
 	if err := encoding.Marshal(headerBuf, header); err != nil {
@@ -353,29 +353,33 @@ func EncodeFrame(t frames.Type, remoteChannel uint16, f frames.FrameBody) ([]byt
 	return raw, nil
 }
 
-func decodeFrame(b []byte) (frames.FrameBody, error) {
+func decodeFrame(b []byte) (uint16, frames.FrameBody, error) {
 	if len(b) > 3 && b[0] == 'A' && b[1] == 'M' && b[2] == 'Q' && b[3] == 'P' {
-		return &AMQPProto{}, nil
+		return 0, &AMQPProto{}, nil
 	}
 	buf := buffer.New(b)
 	header, err := frames.ParseHeader(buf)
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
 	bodySize := int64(header.Size - frames.HeaderSize)
 	if bodySize == 0 {
 		// keep alive frame
-		return &KeepAlive{}, nil
+		return 0, &KeepAlive{}, nil
 	}
 	// parse the frame
 	b, ok := buf.Next(bodySize)
 	if !ok {
-		return nil, err
+		return 0, nil, err
 	}
-	return frames.ParseBody(buffer.New(b))
+	fr, err := frames.ParseBody(buffer.New(b))
+	if err != nil {
+		return 0, nil, err
+	}
+	return header.Channel, fr, nil
 }
 
-func encodeMultiFrameTransfer(remoteChannel uint16, linkHandle, deliveryID uint32, payload []byte, edit func(int, *frames.PerformTransfer)) ([][]byte, error) {
+func encodeMultiFrameTransfer(channel uint16, linkHandle, deliveryID uint32, payload []byte, edit func(int, *frames.PerformTransfer)) ([][]byte, error) {
 	frameData := [][]byte{}
 	format := uint32(0)
 	payloadBuf := &buffer.Buffer{}
@@ -422,7 +426,7 @@ func encodeMultiFrameTransfer(remoteChannel uint16, linkHandle, deliveryID uint3
 		if edit != nil {
 			edit(chunk, fr)
 		}
-		b, err := EncodeFrame(frames.TypeAMQP, remoteChannel, fr)
+		b, err := EncodeFrame(frames.TypeAMQP, channel, fr)
 		if err != nil {
 			return nil, err
 		}

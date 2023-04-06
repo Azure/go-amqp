@@ -821,6 +821,8 @@ func TestDialWithCancelledContext(t *testing.T) {
 		t.Skip()
 	}
 
+	checkLeaks := leaktest.Check(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	client, err := amqp.Dial(ctx, localBrokerAddr, nil)
@@ -828,7 +830,30 @@ func TestDialWithCancelledContext(t *testing.T) {
 	require.ErrorAs(t, err, &dialErr)
 	require.Nil(t, client)
 
+	checkLeaks()
+}
+
+func TestNewSessionWithCancelledContext(t *testing.T) {
+	if localBrokerAddr == "" {
+		t.Skip()
+	}
+
 	checkLeaks := leaktest.Check(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := amqp.Dial(ctx, localBrokerAddr, nil)
+	cancel()
+	require.NoError(t, err)
+
+	for times := 0; times < 100; times++ {
+		ctx, cancel = context.WithCancel(context.Background())
+		cancel()
+		session, err := client.NewSession(ctx, nil)
+		require.ErrorIs(t, err, context.Canceled)
+		require.Nil(t, session)
+	}
+
+	require.NoError(t, client.Close())
 	checkLeaks()
 }
 
@@ -1069,6 +1094,37 @@ func TestReceivingLotsOfSettledMessages(t *testing.T) {
 	testClose(t, receiver.Close)
 
 	client.Close()
+}
+
+func TestNewReceiverWithCancelledContext(t *testing.T) {
+	if localBrokerAddr == "" {
+		t.Skip()
+	}
+
+	checkLeaks := leaktest.Check(t)
+
+	// Create client
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := amqp.Dial(ctx, localBrokerAddr, nil)
+	cancel()
+	require.NoError(t, err)
+
+	// Open a session
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+
+	for times := 0; times < 100; times++ {
+		ctx, cancel = context.WithCancel(context.Background())
+		cancel()
+		receiver, err := session.NewReceiver(ctx, "thesource", nil)
+		require.ErrorIs(t, err, context.Canceled)
+		require.Nil(t, receiver)
+	}
+
+	require.NoError(t, client.Close())
+	checkLeaks()
 }
 
 func repeatStrings(count int, strs ...string) []string {

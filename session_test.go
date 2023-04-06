@@ -147,7 +147,7 @@ func TestSessionCloseTimeout(t *testing.T) {
 	cancel()
 	var sessionErr *SessionError
 	require.ErrorAs(t, err, &sessionErr)
-	require.Contains(t, sessionErr.Error(), "forcibly closed")
+	require.Contains(t, sessionErr.Error(), context.DeadlineExceeded.Error())
 
 	require.NoError(t, client.Close())
 }

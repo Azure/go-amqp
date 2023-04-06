@@ -262,7 +262,7 @@ func TestSenderCloseTimeout(t *testing.T) {
 	cancel()
 	var linkErr *LinkError
 	require.ErrorAs(t, err, &linkErr)
-	require.Contains(t, linkErr.Error(), "forcibly closed")
+	require.Contains(t, linkErr.Error(), context.DeadlineExceeded.Error())
 	require.NoError(t, client.Close())
 }
 
@@ -989,8 +989,9 @@ func TestSenderFlowFrameWithEcho(t *testing.T) {
 }
 
 func TestNewSenderTimedOut(t *testing.T) {
+	var senderCount uint32
 	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
-		switch req.(type) {
+		switch fr := req.(type) {
 		case *fake.AMQPProto:
 			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
 		case *frames.PerformOpen:
@@ -1000,8 +1001,15 @@ func TestNewSenderTimedOut(t *testing.T) {
 		case *frames.PerformBegin:
 			return fake.PerformBegin(0, remoteChannel)
 		case *frames.PerformAttach:
-			// swallow the frame so attach never gets an ack
-			return nil, nil
+			if senderCount == 0 {
+				senderCount++
+				// wait a bit so NewSender times out
+				time.Sleep(100 * time.Millisecond)
+				return fake.SenderAttach(0, fr.Name, fr.Handle, SenderSettleModeMixed)
+			}
+			return fake.SenderAttach(0, fr.Name, fr.Handle, SenderSettleModeMixed)
+		case *frames.PerformDetach:
+			return fake.PerformDetach(0, fr.Handle, nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -1016,11 +1024,26 @@ func TestNewSenderTimedOut(t *testing.T) {
 	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.NoError(t, err)
-	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+
+	// first sender fails due to deadline exceeded
+	ctx, cancel = context.WithTimeout(context.Background(), 20*time.Millisecond)
 	snd, err := session.NewSender(ctx, "target", nil)
 	cancel()
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.Nil(t, snd)
+
+	// should have one sender to clean up
+	require.Len(t, session.abandonedLinks, 1)
+	require.Len(t, session.linksByKey, 1)
+
+	// creating a new sender cleans up the old one
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err = session.NewSender(ctx, "target", nil)
+	cancel()
+	require.NoError(t, err)
+	require.NotNil(t, snd)
+	require.Empty(t, session.abandonedLinks)
+	require.Len(t, session.linksByKey, 1)
 }
 
 func TestNewSenderWriteError(t *testing.T) {

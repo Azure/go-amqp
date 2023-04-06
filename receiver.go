@@ -232,8 +232,9 @@ func (r *Receiver) LinkSourceFilterValue(name string) any {
 //   - ctx controls waiting for the peer to acknowledge the close
 //
 // If the context's deadline expires or is cancelled before the operation
-// completes, the application can be left in an unknown state, potentially
-// resulting in connection errors.
+// completes, an error is returned.  However, the operation will continue to
+// execute in the background. Subsequent calls will return a *LinkError
+// that contains the context's error message.
 func (r *Receiver) Close(ctx context.Context) error {
 	return r.l.closeLink(ctx)
 }
@@ -495,7 +496,6 @@ func (r *Receiver) mux(hooks receiverTestHooks) {
 			r.creditor.EndDrain()
 		}
 
-		r.l.session.deallocateHandle(&r.l)
 		close(r.l.done)
 	}()
 
@@ -564,11 +564,6 @@ func (r *Receiver) mux(hooks receiverTestHooks) {
 		hooks.MuxSelect()
 
 		select {
-		case <-r.l.forceClose:
-			// the call to r.Close() timed out waiting for the ack
-			r.l.doneErr = &LinkError{inner: fmt.Errorf(strLinkForciblyClosed, r.l.key.name)}
-			return
-
 		case q := <-r.l.rxQ.Wait():
 			// populated queue
 			fr := *q.Dequeue()

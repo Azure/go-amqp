@@ -62,7 +62,7 @@ func TestLinkFlowThatNeedsToReplenishCredits(t *testing.T) {
 		}
 
 		cancel()
-		close(l.l.forceClose)
+		closeTestLink(&l.l)
 		<-l.l.done
 	}
 }
@@ -77,7 +77,7 @@ func TestLinkFlowWithZeroCredits(t *testing.T) {
 			muxSem.OnLoop()
 		},
 	})
-	defer close(l.l.forceClose)
+	defer closeTestLink(&l.l)
 
 	err := l.IssueCredit(1)
 	require.Error(t, err, "issueCredit can only be used with receiver links using manual credit management")
@@ -112,7 +112,7 @@ func TestLinkFlowWithManualCreditor(t *testing.T) {
 	l.autoSendFlow = false
 	l.l.linkCredit = 1
 	go l.mux(receiverTestHooks{})
-	defer close(l.l.forceClose)
+	defer closeTestLink(&l.l)
 
 	require.NoError(t, l.IssueCredit(100))
 
@@ -133,7 +133,7 @@ func TestLinkFlowWithManualCreditorAndNoFlowNeeded(t *testing.T) {
 	l.autoSendFlow = false
 	l.l.linkCredit = 1
 	go l.mux(receiverTestHooks{})
-	defer close(l.l.forceClose)
+	defer closeTestLink(&l.l)
 
 	select {
 	case l.receiverReady <- struct{}{}:
@@ -188,9 +188,8 @@ func newTestLink(t *testing.T) *Receiver {
 				conn:    conn,
 				handles: bitmap.New(32),
 			},
-			rxQ:        queue.NewHolder(queue.New[frames.FrameBody](100)),
-			close:      make(chan struct{}),
-			forceClose: make(chan struct{}),
+			rxQ:   queue.NewHolder(queue.New[frames.FrameBody](100)),
+			close: make(chan struct{}),
 		},
 		autoSendFlow:  true,
 		inFlight:      inFlight{},
@@ -200,6 +199,13 @@ func newTestLink(t *testing.T) *Receiver {
 	l.messagesQ = queue.NewHolder(queue.New[Message](100))
 
 	return l
+}
+
+func closeTestLink(l *link) {
+	close(l.close)
+	q := l.rxQ.Acquire()
+	q.Enqueue(&frames.PerformDetach{Handle: l.handle, Closed: true})
+	l.rxQ.Release(q)
 }
 
 func TestNewSendingLink(t *testing.T) {

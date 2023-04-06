@@ -54,10 +54,12 @@ type Session struct {
 	linksByKey map[linkKey]*link // mapping of name+role link
 	handles    *bitmap.Bitmap    // allocated handles
 
+	abandonedLinksMu sync.Mutex
+	abandonedLinks   []*link
+
 	// used for gracefully closing session
-	close      chan struct{}
-	forceClose chan struct{}
-	closeOnce  sync.Once
+	close     chan struct{} // closed by calling Close(). it signals that the end performative should be sent
+	closeOnce sync.Once
 
 	// part of internal public surface area
 	done     chan struct{} // closed when the session has terminated (mux exited); DO NOT wait on this from within Session.mux() as it will never trigger!
@@ -78,7 +80,6 @@ func newSession(c *Conn, channel uint16, opts *SessionOptions) *Session {
 		linksMu:        sync.RWMutex{},
 		linksByKey:     make(map[linkKey]*link),
 		close:          make(chan struct{}),
-		forceClose:     make(chan struct{}),
 		done:           make(chan struct{}),
 		endSent:        make(chan struct{}),
 	}
@@ -167,25 +168,29 @@ func (s *Session) begin(ctx context.Context) error {
 //   - ctx controls waiting for the peer to acknowledge the session is closed
 //
 // If the context's deadline expires or is cancelled before the operation
-// completes, the application can be left in an unknown state, potentially
-// resulting in connection errors.
+// completes, an error is returned.  However, the operation will continue to
+// execute in the background. Subsequent calls will return a *SessionError
+// that contains the context's error message.
 func (s *Session) Close(ctx context.Context) error {
 	var ctxErr error
 	s.closeOnce.Do(func() {
 		close(s.close)
+
+		// once the mux has received the ack'ing end performative, the mux will
+		// exit which deletes the session and closes s.done.
 		select {
 		case <-s.done:
 			s.closeErr = s.doneErr
-		case <-ctx.Done():
-			close(s.forceClose)
 
-			// notify the caller that the close timed out/was cancelled
+		case <-ctx.Done():
+			// notify the caller that the close timed out/was cancelled.
+			// the mux will remain running and once the ack is received it will terminate.
 			ctxErr = ctx.Err()
 
-			// record that the session was forcibly closed.
+			// record that the close timed out/was cancelled.
 			// subsequent calls to Close() will return this
-			debug.Log(1, "TX (Session %p) session for channel %d was forcibly closed: %v", s, s.channel, ctxErr)
-			s.closeErr = &SessionError{inner: errSessionForciblyClosed}
+			debug.Log(1, "TX (Session %p) channel %d: %v", s, s.channel, ctxErr)
+			s.closeErr = &SessionError{inner: ctxErr}
 		}
 	})
 
@@ -219,8 +224,8 @@ func (s *Session) txFrame(p frames.FrameBody, done chan encoding.DeliveryState) 
 //   - opts contains optional values, pass nil to accept the defaults
 //
 // If the context's deadline expires or is cancelled before the operation
-// completes, the application can be left in an unknown state, potentially
-// resulting in connection errors.
+// completes, an error is returned. If the Receiver was successfully
+// created, it will be cleaned up in future calls to NewReceiver.
 func (s *Session) NewReceiver(ctx context.Context, source string, opts *ReceiverOptions) (*Receiver, error) {
 	r, err := newReceiver(source, s, opts)
 	if err != nil {
@@ -241,8 +246,8 @@ func (s *Session) NewReceiver(ctx context.Context, source string, opts *Receiver
 //   - opts contains optional values, pass nil to accept the defaults
 //
 // If the context's deadline expires or is cancelled before the operation
-// completes, the application can be left in an unknown state, potentially
-// resulting in connection errors.
+// completes, an error is returned. If the Sender was successfully
+// created, it will be cleaned up in future calls to NewSender.
 func (s *Session) NewSender(ctx context.Context, target string, opts *SenderOptions) (*Sender, error) {
 	l, err := newSender(target, s, opts)
 	if err != nil {
@@ -257,7 +262,6 @@ func (s *Session) NewSender(ctx context.Context, target string, opts *SenderOpti
 
 func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 	defer func() {
-		s.conn.deleteSession(s)
 		if s.doneErr == nil {
 			s.doneErr = &SessionError{}
 		} else if connErr := (&ConnError{}); !errors.As(s.doneErr, &connErr) {
@@ -337,11 +341,6 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 		// conn has completed, exit
 		case <-s.conn.done:
 			s.doneErr = s.conn.doneErr
-			return
-
-		case <-s.forceClose:
-			// the call to s.Close() timed out waiting for the ack
-			s.doneErr = errSessionForciblyClosed
 			return
 
 		case <-closed:
@@ -547,6 +546,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				// are safe to clean up its state.
 				delete(links, link.remoteHandle)
 				delete(deliveryIDByHandle, link.handle)
+				s.deallocateHandle(link)
 
 			case *frames.PerformEnd:
 				// there are two possibilities:
@@ -664,7 +664,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 	}
 }
 
-func (s *Session) allocateHandle(l *link) error {
+func (s *Session) allocateHandle(ctx context.Context, l *link) error {
 	s.linksMu.Lock()
 	defer s.linksMu.Unlock()
 
@@ -676,8 +676,11 @@ func (s *Session) allocateHandle(l *link) error {
 
 	next, ok := s.handles.Next()
 	if !ok {
+		if err := s.Close(ctx); err != nil {
+			return err
+		}
 		// handle numbers are zero-based, report the actual count
-		return fmt.Errorf("reached session handle max (%d)", s.handleMax+1)
+		return &SessionError{inner: fmt.Errorf("reached session handle max (%d)", s.handleMax+1)}
 	}
 
 	l.handle = next         // allocate handle to the link
@@ -694,6 +697,30 @@ func (s *Session) deallocateHandle(l *link) {
 	s.handles.Remove(l.handle)
 }
 
+func (s *Session) abandonLink(l *link) {
+	s.abandonedLinksMu.Lock()
+	defer s.abandonedLinksMu.Unlock()
+	s.abandonedLinks = append(s.abandonedLinks, l)
+}
+
+func (s *Session) freeAbandonedLinks() error {
+	s.abandonedLinksMu.Lock()
+	defer s.abandonedLinksMu.Unlock()
+
+	for _, l := range s.abandonedLinks {
+		dr := &frames.PerformDetach{
+			Handle: l.handle,
+			Closed: true,
+		}
+		if err := s.txFrame(dr, nil); err != nil {
+			return err
+		}
+	}
+
+	s.abandonedLinks = nil
+	return nil
+}
+
 func (s *Session) muxFrameToLink(l *link, fr frames.FrameBody) {
 	q := l.rxQ.Acquire()
 	q.Enqueue(fr)
@@ -704,5 +731,3 @@ func (s *Session) muxFrameToLink(l *link, fr frames.FrameBody) {
 // the address of this var is a sentinel value indicating
 // that a transfer frame is in need of a delivery ID
 var needsDeliveryID uint32
-
-var errSessionForciblyClosed = errors.New("the session was forcibly closed")

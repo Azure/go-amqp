@@ -190,8 +190,9 @@ func (s *Sender) Address() string {
 //   - ctx controls waiting for the peer to acknowledge the close
 //
 // If the context's deadline expires or is cancelled before the operation
-// completes, the application can be left in an unknown state, potentially
-// resulting in connection errors.
+// completes, an error is returned.  However, the operation will continue to
+// execute in the background. Subsequent calls will return a *LinkError
+// that contains the context's error message.
 func (s *Sender) Close(ctx context.Context) error {
 	return s.l.closeLink(ctx)
 }
@@ -296,7 +297,6 @@ func (s *Sender) attach(ctx context.Context) error {
 
 func (s *Sender) mux() {
 	defer func() {
-		s.l.session.deallocateHandle(&s.l)
 		close(s.l.done)
 	}()
 
@@ -322,11 +322,6 @@ Loop:
 		}
 
 		select {
-		case <-s.l.forceClose:
-			// the call to s.Close() timed out waiting for the ack
-			s.l.doneErr = &LinkError{inner: fmt.Errorf(strLinkForciblyClosed, s.l.key.name)}
-			return
-
 		// received frame
 		case q := <-s.l.rxQ.Wait():
 			// populated queue

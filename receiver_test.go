@@ -314,7 +314,7 @@ func TestReceiverCloseTimeout(t *testing.T) {
 	cancel()
 	var linkErr *LinkError
 	require.ErrorAs(t, err, &linkErr)
-	require.Contains(t, linkErr.Error(), "forcibly closed")
+	require.Contains(t, linkErr.Error(), context.DeadlineExceeded.Error())
 	require.NoError(t, client.Close())
 }
 

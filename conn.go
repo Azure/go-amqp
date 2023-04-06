@@ -151,6 +151,9 @@ type Conn struct {
 	sessionsByChannel   map[uint16]*Session
 	sessionsByChannelMu sync.RWMutex
 
+	abandonedSessionsMu sync.Mutex
+	abandonedSessions   []*Session
+
 	// connReader
 	rxBuf  buffer.Buffer // incoming bytes buffer
 	rxDone chan struct{} // closed when connReader exits
@@ -445,20 +448,40 @@ func (c *Conn) closeDuringStart() {
 //   - opts contains optional values, pass nil to accept the defaults
 //
 // If the context's deadline expires or is cancelled before the operation
-// completes, the application can be left in an unknown state, potentially
-// resulting in connection errors.
+// completes, an error is returned. If the Session was successfully
+// created, it will be cleaned up in future calls to NewSession.
 func (c *Conn) NewSession(ctx context.Context, opts *SessionOptions) (*Session, error) {
+	// clean up any abandoned sessions first
+	if err := c.freeAbandonedSessions(); err != nil {
+		return nil, err
+	}
+
 	session, err := c.newSession(opts)
 	if err != nil {
 		return nil, err
 	}
 
 	if err := session.begin(ctx); err != nil {
-		c.deleteSession(session)
+		c.abandonSession(session)
 		return nil, err
 	}
 
 	return session, nil
+}
+
+func (c *Conn) freeAbandonedSessions() error {
+	c.abandonedSessionsMu.Lock()
+	defer c.abandonedSessionsMu.Unlock()
+
+	for _, s := range c.abandonedSessions {
+		fr := frames.PerformEnd{}
+		if err := s.txFrame(&fr, nil); err != nil {
+			return err
+		}
+	}
+
+	c.abandonedSessions = nil
+	return nil
 }
 
 func (c *Conn) newSession(opts *SessionOptions) (*Session, error) {
@@ -469,7 +492,10 @@ func (c *Conn) newSession(opts *SessionOptions) (*Session, error) {
 	// note that channel always start at 0
 	channel, ok := c.channels.Next()
 	if !ok {
-		return nil, fmt.Errorf("reached connection channel max (%d)", c.channelMax)
+		if err := c.Close(); err != nil {
+			return nil, err
+		}
+		return nil, &ConnError{inner: fmt.Errorf("reached connection channel max (%d)", c.channelMax)}
 	}
 	session := newSession(c, uint16(channel), opts)
 	c.sessionsByChannel[session.channel] = session
@@ -483,6 +509,12 @@ func (c *Conn) deleteSession(s *Session) {
 
 	delete(c.sessionsByChannel, s.channel)
 	c.channels.Remove(uint32(s.channel))
+}
+
+func (c *Conn) abandonSession(s *Session) {
+	c.abandonedSessionsMu.Lock()
+	defer c.abandonedSessionsMu.Unlock()
+	c.abandonedSessions = append(c.abandonedSessions, s)
 }
 
 // connReader reads from the net.Conn, decodes frames, and either handles
@@ -557,6 +589,7 @@ func (c *Conn) connReader() {
 			// the ack (i.e. before passing it on to the session mux) on the session
 			// ending since the numbers are recycled.
 			delete(sessionsByRemoteChannel, fr.Channel)
+			c.deleteSession(session)
 
 		default:
 			// pass on performative to the correct session

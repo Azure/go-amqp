@@ -897,6 +897,7 @@ func TestClientNewSessionInvalidSecondResponseDifferentChannel(t *testing.T) {
 }
 
 func TestNewSessionTimedOut(t *testing.T) {
+	var sessionCount uint32
 	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
 		switch req.(type) {
 		case *fake.AMQPProto:
@@ -906,8 +907,15 @@ func TestNewSessionTimedOut(t *testing.T) {
 		case *frames.PerformClose:
 			return fake.PerformClose(nil)
 		case *frames.PerformBegin:
-			// swallow the frame so NewSession never gets an ack
-			return nil, nil
+			if sessionCount == 0 {
+				sessionCount++
+				// wait a bit so NewSession times out
+				time.Sleep(100 * time.Millisecond)
+				return fake.PerformBegin(0, remoteChannel)
+			}
+			return fake.PerformBegin(1, remoteChannel)
+		case *frames.PerformEnd:
+			return fake.PerformEnd(0, nil)
 		default:
 			return nil, fmt.Errorf("unhandled frame %T", req)
 		}
@@ -918,12 +926,26 @@ func TestNewSessionTimedOut(t *testing.T) {
 	client, err := NewConn(ctx, netConn, nil)
 	cancel()
 	require.NoError(t, err)
-	// fisrt session succeeds
-	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+
+	// fisrt session fails due to deadline exceeded
+	ctx, cancel = context.WithTimeout(context.Background(), 20*time.Millisecond)
 	session, err := client.NewSession(ctx, nil)
 	cancel()
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.Nil(t, session)
+
+	// should have one session to clean up
+	require.Len(t, client.abandonedSessions, 1)
+	require.Len(t, client.sessionsByChannel, 1)
+
+	// creating a new session cleans up the old one
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	session, err = client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+	require.NotNil(t, session)
+	require.Empty(t, client.abandonedSessions)
+	require.Len(t, client.sessionsByChannel, 1)
 }
 
 func TestNewSessionWriteError(t *testing.T) {

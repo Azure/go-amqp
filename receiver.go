@@ -250,7 +250,7 @@ func (r *Receiver) sendDisposition(ctx context.Context, first uint32, last *uint
 
 	select {
 	case r.txDisposition <- fr:
-		// frame was sent to our mux
+		debug.Log(2, "TX (Receiver %p): mux txDisposition %s", r, fr)
 		return nil
 	case <-r.l.done:
 		return r.l.doneErr
@@ -291,10 +291,9 @@ func (r *Receiver) messageDisposition(ctx context.Context, msg *Message, state e
 		//   - nil, meaning the peer accepted the message no problem
 		//   - an *Error, meaning the peer rejected the message with a provided error
 		//   - a non-AMQP error. this comes from calls to inFlight.clear() during mux unwind.
-		// the first two cases the message is settled, the last one it isn't.
+		// only for the first two cases is the message considered settled
 
-		var amqpErr *Error
-		if err == nil || errors.As(err, &amqpErr) {
+		if amqpErr := (&Error{}); err == nil || errors.As(err, &amqpErr) {
 			debug.Log(3, "RX (Receiver %p): delivery ID %d has been settled", r, msg.deliveryID)
 			// we've received confirmation of disposition
 			r.deleteUnsettled(msg)

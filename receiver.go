@@ -288,7 +288,7 @@ func (r *Receiver) messageDisposition(ctx context.Context, msg *Message, state e
 	select {
 	case err := <-wait:
 		// err has three possibilities
-		//   - nil, meaning the peer accepted the message no problem
+		//   - nil, meaning the peer acknowledged the settlement
 		//   - an *Error, meaning the peer rejected the message with a provided error
 		//   - a non-AMQP error. this comes from calls to inFlight.clear() during mux unwind.
 		// only for the first two cases is the message considered settled

@@ -488,7 +488,7 @@ func TestReceiveSuccessReceiverSettleModeFirst(t *testing.T) {
 	if c := r.l.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
-	muxSem.Release(0)
+	muxSem.Release(1)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	err = r.AcceptMessage(ctx, msg)
 	cancel()
@@ -564,7 +564,7 @@ func TestReceiveSuccessReceiverSettleModeSecondAccept(t *testing.T) {
 	if c := r.l.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
-	muxSem.Release(1)
+	muxSem.Release(2)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	err = r.AcceptMessage(ctx, msg)
 	cancel()
@@ -706,7 +706,7 @@ func TestReceiveSuccessReceiverSettleModeSecondReject(t *testing.T) {
 	if c := r.l.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
-	muxSem.Release(1)
+	muxSem.Release(2)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	err = r.RejectMessage(ctx, msg, nil)
 	cancel()
@@ -777,7 +777,7 @@ func TestReceiveSuccessReceiverSettleModeSecondRelease(t *testing.T) {
 	if c := r.l.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
-	muxSem.Release(1)
+	muxSem.Release(2)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	err = r.ReleaseMessage(ctx, msg)
 	cancel()
@@ -853,7 +853,7 @@ func TestReceiveSuccessReceiverSettleModeSecondModify(t *testing.T) {
 	if c := r.l.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
-	muxSem.Release(1)
+	muxSem.Release(2)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	err = r.ModifyMessage(ctx, msg, &ModifyMessageOptions{
 		UndeliverableHere: true,
@@ -973,7 +973,7 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 	if c := r.l.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
-	muxSem.Release(1)
+	muxSem.Release(2)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	err = r.AcceptMessage(ctx, msg)
 	cancel()

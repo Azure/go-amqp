@@ -61,6 +61,7 @@ type Session struct {
 
 	// part of internal public surface area
 	done     chan struct{} // closed when the session has terminated (mux exited); DO NOT wait on this from within Session.mux() as it will never trigger!
+	endSent  chan struct{} // closed when the end performative has been sent; once this is closed, links MUST NOT send any frames!
 	doneErr  error         // contains the mux error state; ONLY written to by the mux and MUST only be read from after done is closed!
 	closeErr error         // contains the error state returned from Close(); ONLY Close() reads/writes this!
 }
@@ -79,6 +80,7 @@ func newSession(c *Conn, channel uint16, opts *SessionOptions) *Session {
 		close:          make(chan struct{}),
 		forceClose:     make(chan struct{}),
 		done:           make(chan struct{}),
+		endSent:        make(chan struct{}),
 	}
 
 	if opts != nil {
@@ -299,6 +301,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 		closeInProgress = true
 		s.doneErr = e2
 		_ = s.txFrame(&frames.PerformEnd{Error: e1}, nil)
+		close(s.endSent)
 	}
 
 	for {
@@ -310,10 +313,15 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 			txTransfer = nil
 		}
 
+		tx := s.tx
 		closed := s.close
 		if closeInProgress {
 			// swap out channel so it no longer triggers
 			closed = nil
+
+			// once the end performative is sent, we're not allowed to send any frames
+			tx = nil
+			txTransfer = nil
 		}
 
 		// notes on client-side closing session
@@ -343,8 +351,8 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 			}
 			// session is being closed by the client
 			closeInProgress = true
-			fr := frames.PerformEnd{}
-			_ = s.txFrame(&fr, nil)
+			_ = s.txFrame(&frames.PerformEnd{}, nil)
+			close(s.endSent)
 
 		// incoming frame
 		case q := <-s.rxQ.Wait():
@@ -569,13 +577,6 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 			}
 
 		case fr := <-txTransfer:
-			if closeInProgress {
-				// now that the end performative has been sent we're
-				// not allowed to send any more frames.
-				debug.Log(1, "TX (Session %p): discarding transfer: %s\n", s, fr)
-				continue
-			}
-
 			// record current delivery ID
 			var deliveryID uint32
 			if fr.DeliveryID == &needsDeliveryID {
@@ -620,14 +621,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				remoteIncomingWindow--
 			}
 
-		case fr := <-s.tx:
-			if closeInProgress {
-				// now that the end performative has been sent we're
-				// not allowed to send any more frames.
-				debug.Log(1, "TX (Session %p): discarding frame: %s", s, fr)
-				continue
-			}
-
+		case fr := <-tx:
 			debug.Log(2, "TX (Session %p): %d, %s", s, s.channel, fr)
 			switch fr := fr.(type) {
 			case *frames.PerformDisposition:

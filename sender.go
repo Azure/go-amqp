@@ -314,6 +314,11 @@ Loop:
 		if s.l.closeInProgress {
 			// swap out channel so it no longer triggers
 			closed = nil
+
+			// disable sending once closing is in progress.
+			// this prevents races with mux shutdown and
+			// the peer sending disposition frames.
+			outgoingTransfers = nil
 		}
 
 		select {
@@ -360,16 +365,16 @@ Loop:
 				// a client-side close due to protocol error is in progress
 				continue
 			}
+
 			// sender is being closed by the client
 			s.l.closeInProgress = true
 			fr := &frames.PerformDetach{
 				Handle: s.l.handle,
 				Closed: true,
 			}
-			_ = s.l.session.txFrame(fr, nil)
+			_ = s.l.txFrame(fr)
 
 		case <-s.l.session.done:
-			// TODO: per spec, if the session has terminated, we're not allowed to send frames
 			s.l.doneErr = s.l.session.doneErr
 			return
 		}

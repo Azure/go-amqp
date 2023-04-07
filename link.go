@@ -131,7 +131,9 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 	// link-specific configuration of the attach frame
 	beforeAttach(attach)
 
-	_ = l.session.txFrame(attach, nil)
+	if err := l.txFrame(attach); err != nil {
+		return err
+	}
 
 	// wait for response
 	fr, err := l.waitForFrame(ctx)
@@ -179,7 +181,9 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 			Handle: l.handle,
 			Closed: true,
 		}
-		_ = l.session.txFrame(fr, nil)
+		if err := l.txFrame(fr); err != nil {
+			return err
+		}
 
 		if detach.Error == nil {
 			return fmt.Errorf("received detach with no error specified")
@@ -200,7 +204,9 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 			Handle: l.handle,
 			Closed: true,
 		}
-		_ = l.session.txFrame(dr, nil)
+		if err := l.txFrame(dr); err != nil {
+			return err
+		}
 		return err
 	}
 
@@ -260,7 +266,7 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 			Handle: l.handle,
 			Closed: true,
 		}
-		_ = l.session.txFrame(dr, nil)
+		_ = l.txFrame(dr)
 		return &LinkError{RemoteErr: fr.Error}
 
 	default:
@@ -322,7 +328,26 @@ func (l *link) closeWithError(cnd ErrCond, desc string) {
 	}
 	l.closeInProgress = true
 	l.doneErr = &LinkError{inner: fmt.Errorf("%s: %s", cnd, desc)}
-	_ = l.session.txFrame(dr, nil)
+	_ = l.txFrame(dr)
+}
+
+// txFrame sends the specified frame via the link's session.
+// you MUST call this instead of session.txFrame() to ensure
+// that frames are not sent during session shutdown.
+func (l *link) txFrame(fr frames.FrameBody) error {
+	// NOTE: there is no need to select on l.done as this is either
+	// called from a link's mux or before the mux has even started.
+	select {
+	case <-l.session.done:
+		return l.session.doneErr
+	case <-l.session.endSent:
+		// we swallow this to prevent the link's mux from terminating.
+		// l.session.done will soon close so this is temporary.
+		return nil
+	case l.session.tx <- fr:
+		debug.Log(2, "TX (link %p): mux frame to Session (%p): %s", l, l.session, fr)
+		return nil
+	}
 }
 
 const strLinkForciblyClosed = "link %s was forcibly closed"

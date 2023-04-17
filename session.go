@@ -76,7 +76,7 @@ func newSession(c *Conn, channel uint16, opts *SessionOptions) *Session {
 		txTransfer:     make(chan *frames.PerformTransfer),
 		incomingWindow: defaultWindow,
 		outgoingWindow: defaultWindow,
-		handleMax:      math.MaxUint32,
+		handleMax:      math.MaxUint32 - 1,
 		linksMu:        sync.RWMutex{},
 		linksByKey:     make(map[linkKey]*link),
 		close:          make(chan struct{}),

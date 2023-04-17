@@ -473,6 +473,8 @@ func (c *Conn) freeAbandonedSessions() error {
 	c.abandonedSessionsMu.Lock()
 	defer c.abandonedSessionsMu.Unlock()
 
+	debug.Log(3, "TX (Conn %p): cleaning up %d abandoned sessions", c, len(c.abandonedSessions))
+
 	for _, s := range c.abandonedSessions {
 		fr := frames.PerformEnd{}
 		if err := s.txFrame(&fr, nil); err != nil {

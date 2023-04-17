@@ -707,6 +707,8 @@ func (s *Session) freeAbandonedLinks() error {
 	s.abandonedLinksMu.Lock()
 	defer s.abandonedLinksMu.Unlock()
 
+	debug.Log(3, "TX (Session %p): cleaning up %d abandoned links", s, len(s.abandonedLinks))
+
 	for _, l := range s.abandonedLinks {
 		dr := &frames.PerformDetach{
 			Handle: l.handle,

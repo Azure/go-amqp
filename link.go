@@ -111,7 +111,7 @@ func (l *link) waitForFrame(ctx context.Context) (frames.FrameBody, error) {
 // attach sends the Attach performative to establish the link with its parent session.
 // this is automatically called by the new*Link constructors.
 func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAttach), afterAttach func(*frames.PerformAttach)) error {
-	if err := l.session.freeAbandonedLinks(); err != nil {
+	if err := l.session.freeAbandonedLinks(ctx); err != nil {
 		return err
 	}
 
@@ -134,7 +134,7 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 	// link-specific configuration of the attach frame
 	beforeAttach(attach)
 
-	if err := l.txFrame(attach); err != nil {
+	if err := l.txFrameAndWait(ctx, attach); err != nil {
 		return err
 	}
 
@@ -186,7 +186,7 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 			Handle: l.handle,
 			Closed: true,
 		}
-		if err := l.txFrame(fr); err != nil {
+		if err := l.txFrameAndWait(ctx, fr); err != nil {
 			return err
 		}
 
@@ -209,7 +209,7 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 			Handle: l.handle,
 			Closed: true,
 		}
-		if err := l.txFrame(dr); err != nil {
+		if err := l.txFrameAndWait(ctx, dr); err != nil {
 			return err
 		}
 		return err
@@ -271,7 +271,7 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 			Handle: l.handle,
 			Closed: true,
 		}
-		_ = l.txFrame(dr)
+		l.txFrame(context.Background(), dr, nil)
 		return &LinkError{RemoteErr: fr.Error}
 
 	default:
@@ -335,15 +335,36 @@ func (l *link) closeWithError(cnd ErrCond, desc string) {
 	}
 	l.closeInProgress = true
 	l.doneErr = &LinkError{inner: fmt.Errorf("%s: %s", cnd, desc)}
-	_ = l.txFrame(dr)
+	l.txFrame(context.Background(), dr, nil)
 }
 
 // txFrame sends the specified frame via the link's session.
 // you MUST call this instead of session.txFrame() to ensure
 // that frames are not sent during session shutdown.
-func (l *link) txFrame(fr frames.FrameBody) error {
+func (l *link) txFrame(ctx context.Context, fr frames.FrameBody, sent chan error) {
 	// NOTE: there is no need to select on l.done as this is either
 	// called from a link's mux or before the mux has even started.
+	select {
+	case <-l.session.done:
+		if sent != nil {
+			sent <- l.session.doneErr
+		}
+	case <-l.session.endSent:
+		// we swallow this to prevent the link's mux from terminating.
+		// l.session.done will soon close so this is temporary.
+		return
+	case l.session.tx <- frameBodyEnvelope{Ctx: ctx, FrameBody: fr, Sent: sent}:
+		debug.Log(2, "TX (link %p): mux frame to Session (%p): %s", l, l.session, fr)
+	}
+}
+
+// txFrame sends the specified frame via the link's session.
+// you MUST call this instead of session.txFrame() to ensure
+// that frames are not sent during session shutdown.
+func (l *link) txFrameAndWait(ctx context.Context, fr frames.FrameBody) error {
+	// NOTE: there is no need to select on l.done as this is either
+	// called from a link's mux or before the mux has even started.
+	sent := make(chan error, 1)
 	select {
 	case <-l.session.done:
 		return l.session.doneErr
@@ -351,8 +372,16 @@ func (l *link) txFrame(fr frames.FrameBody) error {
 		// we swallow this to prevent the link's mux from terminating.
 		// l.session.done will soon close so this is temporary.
 		return nil
-	case l.session.tx <- fr:
+	case l.session.tx <- frameBodyEnvelope{Ctx: ctx, FrameBody: fr, Sent: sent}:
 		debug.Log(2, "TX (link %p): mux frame to Session (%p): %s", l, l.session, fr)
-		return nil
+	}
+
+	select {
+	case err := <-sent:
+		return err
+	case <-l.done:
+		return l.doneErr
+	case <-l.session.done:
+		return l.session.doneErr
 	}
 }

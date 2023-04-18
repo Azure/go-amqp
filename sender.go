@@ -16,7 +16,7 @@ import (
 // Sender sends messages on a single AMQP link.
 type Sender struct {
 	l         link
-	transfers chan frames.PerformTransfer // sender uses to send transfer frames
+	transfers chan transferEnvelope // sender uses to send transfer frames
 
 	mu              sync.Mutex // protects buf and nextDeliveryTag
 	buf             buffer.Buffer
@@ -160,13 +160,25 @@ func (s *Sender) send(ctx context.Context, msg *Message, opts *SendOptions) (cha
 			fr.Done = make(chan encoding.DeliveryState, 1)
 		}
 
+		// NOTE: we MUST send a copy of fr here since we modify it post send
+
+		sent := make(chan error, 1)
 		select {
-		case s.transfers <- fr:
+		case s.transfers <- transferEnvelope{Ctx: ctx, Frame: fr, Sent: sent}:
 			// frame was sent to our mux
 		case <-s.l.done:
 			return nil, s.l.doneErr
 		case <-ctx.Done():
 			return nil, ctx.Err()
+		}
+
+		select {
+		case err := <-sent:
+			if err != nil {
+				return nil, err
+			}
+		case <-s.l.done:
+			return nil, s.l.doneErr
 		}
 
 		// clear values that are only required on first message
@@ -288,21 +300,27 @@ func (s *Sender) attach(ctx context.Context) error {
 		return err
 	}
 
-	s.transfers = make(chan frames.PerformTransfer)
-
-	go s.mux()
+	s.transfers = make(chan transferEnvelope)
 
 	return nil
 }
 
-func (s *Sender) mux() {
+type senderTestHooks struct {
+	MuxTransfer func()
+}
+
+func (s *Sender) mux(hooks senderTestHooks) {
+	if hooks.MuxTransfer == nil {
+		hooks.MuxTransfer = nop
+	}
+
 	defer func() {
 		close(s.l.done)
 	}()
 
 Loop:
 	for {
-		var outgoingTransfers chan frames.PerformTransfer
+		var outgoingTransfers chan transferEnvelope
 		if s.l.linkCredit > 0 {
 			debug.Log(1, "TX (Sender %p) (enable): target: %q, link credit: %d, deliveryCount: %d", s, s.l.target.Address, s.l.linkCredit, s.l.deliveryCount)
 			outgoingTransfers = s.transfers
@@ -337,12 +355,13 @@ Loop:
 			}
 
 		// send data
-		case tr := <-outgoingTransfers:
+		case env := <-outgoingTransfers:
+			hooks.MuxTransfer()
 			select {
-			case s.l.session.txTransfer <- &tr:
-				debug.Log(2, "TX (Sender %p): mux transfer to Session: %d, %s", s, s.l.session.channel, &tr)
+			case s.l.session.txTransfer <- env:
+				debug.Log(2, "TX (Sender %p): mux transfer to Session: %d, %s", s, s.l.session.channel, env.Frame)
 				// decrement link-credit after entire message transferred
-				if !tr.More {
+				if !env.Frame.More {
 					s.l.deliveryCount++
 					s.l.linkCredit--
 					// we are the sender and we keep track of the peer's link credit
@@ -367,7 +386,7 @@ Loop:
 				Handle: s.l.handle,
 				Closed: true,
 			}
-			_ = s.l.txFrame(fr)
+			s.l.txFrame(context.Background(), fr, nil)
 
 		case <-s.l.session.done:
 			s.l.doneErr = s.l.session.doneErr
@@ -412,7 +431,7 @@ func (s *Sender) muxHandleFrame(fr frames.FrameBody) error {
 		}
 
 		select {
-		case s.l.session.tx <- resp:
+		case s.l.session.tx <- frameBodyEnvelope{Ctx: context.Background(), FrameBody: resp}:
 			debug.Log(2, "TX (Sender %p): mux frame to Session (%p): %d, %s", s, s.l.session, s.l.session.channel, resp)
 		case <-s.l.close:
 			return nil
@@ -435,8 +454,10 @@ func (s *Sender) muxHandleFrame(fr frames.FrameBody) error {
 			Settled: true,
 		}
 
+		// TODO: the context used here should be the one associated with the original Send()
+
 		select {
-		case s.l.session.tx <- dr:
+		case s.l.session.tx <- frameBodyEnvelope{Ctx: context.Background(), FrameBody: dr}:
 			debug.Log(2, "TX (Sender %p): mux frame to Session (%p): %d, %s", s, s.l.session, s.l.session.channel, dr)
 		case <-s.l.close:
 			return nil

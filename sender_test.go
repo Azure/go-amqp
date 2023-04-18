@@ -11,6 +11,7 @@ import (
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/fake"
 	"github.com/Azure/go-amqp/internal/frames"
+	"github.com/Azure/go-amqp/internal/test"
 	"github.com/stretchr/testify/require"
 )
 
@@ -149,6 +150,58 @@ func TestSenderSendOnSessionClosed(t *testing.T) {
 	var amqpErr *Error
 	// there should be no inner error when closed on our side
 	require.False(t, errors.As(err, &amqpErr))
+	require.NoError(t, client.Close())
+}
+
+func TestSenderSendConcurrentSessionClosed(t *testing.T) {
+	muxSem := test.NewMuxSemaphore(0)
+
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
+	require.NoError(t, err)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := newSenderWithHooks(ctx, session, "target", nil, senderTestHooks{MuxTransfer: muxSem.OnLoop})
+	cancel()
+	require.NoError(t, err)
+	require.NotNil(t, snd)
+
+	sendInitialFlowFrame(t, 0, netConn, 0, 100)
+
+	sendErr := make(chan error)
+
+	go func() {
+		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+		err := snd.Send(ctx, NewMessage([]byte("failed")), nil)
+		cancel()
+		sendErr <- err
+	}()
+
+	muxSem.Wait()
+
+	// transfer was handed off to the sender's mux and it's now paused
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	require.NoError(t, session.Close(ctx))
+	cancel()
+
+	// resume the sender's mux
+	muxSem.Release(-1)
+
+	select {
+	case err := <-sendErr:
+		var sessionErr *SessionError
+		require.ErrorAs(t, err, &sessionErr)
+	case <-time.After(1 * time.Second):
+		t.Fatal("timed out waiting for send error")
+	}
+
 	require.NoError(t, client.Close())
 }
 

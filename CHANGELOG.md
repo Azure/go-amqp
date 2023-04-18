@@ -2,6 +2,10 @@
 
 ## 1.0.0 (Unreleased)
 
+### Features Added
+
+* Added `ConnOptions.WriteTimeout` to control the write deadline when writing to `net.Conn`.
+
 ### Bugs Fixed
 
 * Calling `Dial()` with a cancelled context doesn't create a connection.
@@ -15,6 +19,7 @@
 * Debug logging includes the address of the object that's writing a log entry.
 * Context expiration or cancellation when creating instances of `Session`, `Receiver`, and `Sender` no longer result in the potential for `Conn` to unexpectedly terminate.
 * Session channel and link handle exhaustion will now return `*ConnError` and `*SessionError` respectively, closing the respective `Conn` or `Session`.
+* If a `context.Context` contains a deadline/timeout, that value will be used as the write deadline when writing to `net.Conn`.
 
 ## 0.19.1 (2023-03-31)
 

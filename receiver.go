@@ -24,9 +24,9 @@ type Receiver struct {
 	l link
 
 	// message receiving
-	receiverReady chan struct{}                   // receiver sends on this when mux is paused to indicate it can handle more messages
-	messagesQ     *queue.Holder[Message]          // used to send completed messages to receiver
-	txDisposition chan *frames.PerformDisposition // used to funnel disposition frames through the mux
+	receiverReady chan struct{}          // receiver sends on this when mux is paused to indicate it can handle more messages
+	messagesQ     *queue.Holder[Message] // used to send completed messages to receiver
+	txDisposition chan frameBodyEnvelope // used to funnel disposition frames through the mux
 
 	unsettledMessages     map[string]struct{} // used to keep track of messages being handled downstream
 	unsettledMessagesLock sync.RWMutex        // lock to protect concurrent access to unsettledMessages
@@ -249,14 +249,21 @@ func (r *Receiver) sendDisposition(ctx context.Context, first uint32, last *uint
 		State:   state,
 	}
 
+	sent := make(chan error, 1)
 	select {
-	case r.txDisposition <- fr:
-		debug.Log(2, "TX (Receiver %p): mux txDisposition %s", r, fr)
-		return nil
 	case <-r.l.done:
 		return r.l.doneErr
 	case <-ctx.Done():
 		return ctx.Err()
+	case r.txDisposition <- frameBodyEnvelope{Ctx: ctx, FrameBody: fr, Sent: sent}:
+		debug.Log(2, "TX (Receiver %p): mux txDisposition %s", r, fr)
+	}
+
+	select {
+	case err := <-sent:
+		return err
+	case <-r.l.done:
+		return r.l.doneErr
 	}
 }
 
@@ -356,7 +363,7 @@ func newReceiver(source string, session *Session, opts *ReceiverOptions) (*Recei
 		l:             l,
 		autoSendFlow:  true,
 		receiverReady: make(chan struct{}, 1),
-		txDisposition: make(chan *frames.PerformDisposition),
+		txDisposition: make(chan frameBodyEnvelope),
 	}
 
 	r.messagesQ = queue.NewHolder(queue.New[Message](int(session.incomingWindow)))
@@ -574,8 +581,8 @@ func (r *Receiver) mux(hooks receiverTestHooks) {
 				return
 			}
 
-		case fr := <-txDisposition:
-			_ = r.l.txFrame(fr)
+		case env := <-txDisposition:
+			r.l.txFrame(env.Ctx, env.FrameBody, env.Sent)
 
 		case <-r.receiverReady:
 			continue
@@ -592,7 +599,7 @@ func (r *Receiver) mux(hooks receiverTestHooks) {
 				Handle: r.l.handle,
 				Closed: true,
 			}
-			_ = r.l.txFrame(fr)
+			r.l.txFrame(context.Background(), fr, nil)
 
 		case <-r.l.session.done:
 			r.l.doneErr = r.l.session.doneErr
@@ -627,7 +634,7 @@ func (r *Receiver) muxFlow(linkCredit uint32, drain bool) error {
 	}
 
 	select {
-	case r.l.session.tx <- fr:
+	case r.l.session.tx <- frameBodyEnvelope{Ctx: context.Background(), FrameBody: fr}:
 		debug.Log(2, "TX (Receiver %p): mux frame to Session (%p): %d, %s", r, r.l.session, r.l.session.channel, fr)
 		return nil
 	case <-r.l.close:
@@ -671,7 +678,7 @@ func (r *Receiver) muxHandleFrame(fr frames.FrameBody) error {
 		}
 
 		select {
-		case r.l.session.tx <- resp:
+		case r.l.session.tx <- frameBodyEnvelope{Ctx: context.Background(), FrameBody: resp}:
 			debug.Log(2, "TX (Receiver %p): mux frame to Session (%p): %d, %s", r, r.l.session, r.l.session.channel, resp)
 		case <-r.l.close:
 			return nil

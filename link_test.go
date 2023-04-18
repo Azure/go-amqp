@@ -46,7 +46,7 @@ func TestLinkFlowThatNeedsToReplenishCredits(t *testing.T) {
 			// with the correct value, a wrong frame, or the context expires.
 			select {
 			case txFrame := <-l.l.session.tx:
-				switch frame := txFrame.(type) {
+				switch frame := txFrame.FrameBody.(type) {
 				case *frames.PerformFlow:
 					require.False(t, frame.Drain)
 					// replenished credits: l.receiver.maxCredit-uint32(l.countUnsettled())
@@ -119,7 +119,7 @@ func TestLinkFlowWithManualCreditor(t *testing.T) {
 	// flow happens immmediately in 'mux'
 	txFrame := <-l.l.session.tx
 
-	switch frame := txFrame.(type) {
+	switch frame := txFrame.FrameBody.(type) {
 	case *frames.PerformFlow:
 		require.False(t, frame.Drain)
 		require.EqualValues(t, 100+1, *frame.LinkCredit)
@@ -183,7 +183,7 @@ func newTestLink(t *testing.T) *Receiver {
 			// debug(1, "FLOW Link Mux half: source: %s, inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s", l.source.Address, l.receiver.inFlight.len(), l.l.linkCredit, l.deliveryCount, len(l.messages), l.countUnsettled(), l.receiver.maxCredit, l.receiverSettleMode.String())
 			done: make(chan struct{}),
 			session: &Session{
-				tx:      make(chan frames.FrameBody, 100),
+				tx:      make(chan frameBodyEnvelope, 100),
 				done:    make(chan struct{}),
 				conn:    conn,
 				handles: bitmap.New(32),

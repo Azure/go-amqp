@@ -25,6 +25,7 @@ const (
 	defaultIdleTimeout  = 1 * time.Minute
 	defaultMaxFrameSize = 65536
 	defaultMaxSessions  = 65536
+	defaultWriteTimeout = 30 * time.Second
 )
 
 // ConnOptions contains the optional settings for configuring an AMQP connection.
@@ -73,6 +74,17 @@ type ConnOptions struct {
 	// providing a URL scheme of "amqps://" is sufficient.
 	TLSConfig *tls.Config
 
+	// WriteTimeout controls the write deadline when writing AMQP frames to the
+	// underlying net.Conn and no caller provided context.Context is available or
+	// the context contains no deadline (e.g. context.Background()).
+	// The timeout is set per write.
+	//
+	// Setting to a value less than zero means no timeout is set, so writes
+	// defer to the underlying behavior of net.Conn with no write deadline.
+	//
+	// Default: 30s
+	WriteTimeout time.Duration
+
 	// test hook
 	dialer dialer
 }
@@ -114,8 +126,9 @@ func NewConn(ctx context.Context, conn net.Conn, opts *ConnOptions) (*Conn, erro
 
 // Conn is an AMQP connection.
 type Conn struct {
-	net    net.Conn // underlying connection
-	dialer dialer   // used for testing purposes, it allows faking dialing TCP/TLS endpoints
+	net          net.Conn      // underlying connection
+	dialer       dialer        // used for testing purposes, it allows faking dialing TCP/TLS endpoints
+	writeTimeout time.Duration // controls write deadline in absense of a context
 
 	// TLS
 	tlsNegotiation bool        // negotiate TLS
@@ -160,10 +173,10 @@ type Conn struct {
 	rxErr  error         // contains last error reading from c.net; DO NOT TOUCH outside of connReader until rxDone has been closed!
 
 	// connWriter
-	txFrame chan frames.Frame // AMQP frames to be sent by connWriter
-	txBuf   buffer.Buffer     // buffer for marshaling frames before transmitting
-	txDone  chan struct{}     // closed when connWriter exits
-	txErr   error             // contains last error writing to c.net; DO NOT TOUCH outside of connWriter until txDone has been closed!
+	txFrame chan frameEnvelope // AMQP frames to be sent by connWriter
+	txBuf   buffer.Buffer      // buffer for marshaling frames before transmitting
+	txDone  chan struct{}      // closed when connWriter exits
+	txErr   error              // contains last error writing to c.net; DO NOT TOUCH outside of connWriter until txDone has been closed!
 }
 
 // used to abstract the underlying dialer for testing purposes
@@ -249,9 +262,10 @@ func newConn(netConn net.Conn, opts *ConnOptions) (*Conn, error) {
 		done:              make(chan struct{}),
 		rxtxExit:          make(chan struct{}),
 		rxDone:            make(chan struct{}),
-		txFrame:           make(chan frames.Frame),
+		txFrame:           make(chan frameEnvelope),
 		txDone:            make(chan struct{}),
 		sessionsByChannel: map[uint16]*Session{},
+		writeTimeout:      defaultWriteTimeout,
 	}
 
 	// apply options
@@ -259,6 +273,11 @@ func newConn(netConn net.Conn, opts *ConnOptions) (*Conn, error) {
 		opts = &ConnOptions{}
 	}
 
+	if opts.WriteTimeout > 0 {
+		c.writeTimeout = opts.WriteTimeout
+	} else if opts.WriteTimeout < 0 {
+		c.writeTimeout = 0
+	}
 	if opts.ContainerID != "" {
 		c.containerID = opts.ContainerID
 	}
@@ -427,7 +446,8 @@ func (c *Conn) close() {
 			// we experienced a peer-initiated close that contained an Error.  return it
 			c.doneErr = &ConnError{RemoteErr: amqpErr}
 		} else if c.txErr != nil {
-			c.doneErr = &ConnError{inner: c.txErr}
+			// c.txErr is already wrapped in a ConnError
+			c.doneErr = c.txErr
 		} else if c.rxErr != nil {
 			c.doneErr = &ConnError{inner: c.rxErr}
 		} else {
@@ -452,7 +472,7 @@ func (c *Conn) closeDuringStart() {
 // created, it will be cleaned up in future calls to NewSession.
 func (c *Conn) NewSession(ctx context.Context, opts *SessionOptions) (*Session, error) {
 	// clean up any abandoned sessions first
-	if err := c.freeAbandonedSessions(); err != nil {
+	if err := c.freeAbandonedSessions(ctx); err != nil {
 		return nil, err
 	}
 
@@ -469,7 +489,7 @@ func (c *Conn) NewSession(ctx context.Context, opts *SessionOptions) (*Session, 
 	return session, nil
 }
 
-func (c *Conn) freeAbandonedSessions() error {
+func (c *Conn) freeAbandonedSessions(ctx context.Context) error {
 	c.abandonedSessionsMu.Lock()
 	defer c.abandonedSessionsMu.Unlock()
 
@@ -477,7 +497,7 @@ func (c *Conn) freeAbandonedSessions() error {
 
 	for _, s := range c.abandonedSessions {
 		fr := frames.PerformEnd{}
-		if err := s.txFrame(&fr, nil); err != nil {
+		if err := s.txFrameAndWait(ctx, &fr); err != nil {
 			return err
 		}
 	}
@@ -691,6 +711,16 @@ func (c *Conn) readFrame() (frames.Frame, error) {
 	}
 }
 
+// frameEnvelope is used when sending a frame to connWriter to be written to net.Conn
+type frameEnvelope struct {
+	Ctx   context.Context
+	Frame frames.Frame
+
+	// optional channel that is closed on successful write to net.Conn or contains the write error
+	// NOTE: use a buffered channel of size 1 when populating
+	Sent chan error
+}
+
 func (c *Conn) connWriter() {
 	defer func() {
 		close(c.txDone)
@@ -722,17 +752,25 @@ func (c *Conn) connWriter() {
 
 		select {
 		// frame write request
-		case fr := <-c.txFrame:
-			debug.Log(1, "TX (connWriter %p): %s", c, fr)
-			err = c.writeFrame(fr)
-			if err == nil && fr.Done != nil {
-				close(fr.Done)
+		case env := <-c.txFrame:
+			timeout := c.getWriteTimeout(env.Ctx)
+			debug.Log(1, "TX (connWriter %p) timeout %s: %s", c, timeout, env.Frame)
+			err = c.writeFrame(timeout, env.Frame)
+			if env.Sent != nil {
+				if err == nil {
+					close(env.Sent)
+				} else {
+					env.Sent <- err
+				}
 			}
 
 		// keepalive timer
 		case <-keepalive:
 			debug.Log(3, "TX (connWriter %p): sending keep-alive frame", c)
-			_, err = c.net.Write(keepaliveFrame)
+			_ = c.net.SetWriteDeadline(time.Now().Add(c.writeTimeout))
+			if _, err = c.net.Write(keepaliveFrame); err != nil {
+				err = &ConnError{inner: err}
+			}
 			// It would be slightly more efficient in terms of network
 			// resources to reset the timer each time a frame is sent.
 			// However, keepalives are small (8 bytes) and the interval
@@ -752,7 +790,7 @@ func (c *Conn) connWriter() {
 				Body: &frames.PerformClose{},
 			}
 			debug.Log(1, "TX (connWriter %p): %s", c, fr)
-			c.txErr = c.writeFrame(fr)
+			c.txErr = c.writeFrame(c.writeTimeout, fr)
 			return
 		}
 	}
@@ -760,24 +798,36 @@ func (c *Conn) connWriter() {
 
 // writeFrame writes a frame to the network.
 // used externally by SASL only.
-func (c *Conn) writeFrame(fr frames.Frame) error {
+//   - timeout - the write deadline to set. zero means no deadline
+//
+// errors are wrapped in a ConnError as they can be returned to outside callers.
+func (c *Conn) writeFrame(timeout time.Duration, fr frames.Frame) error {
 	// writeFrame into txBuf
 	c.txBuf.Reset()
 	err := frames.Write(&c.txBuf, fr)
 	if err != nil {
-		return err
+		return &ConnError{inner: err}
 	}
 
 	// validate the frame isn't exceeding peer's max frame size
 	requiredFrameSize := c.txBuf.Len()
 	if uint64(requiredFrameSize) > uint64(c.peerMaxFrameSize) {
-		return fmt.Errorf("%T frame size %d larger than peer's max frame size %d", fr, requiredFrameSize, c.peerMaxFrameSize)
+		return &ConnError{inner: fmt.Errorf("%T frame size %d larger than peer's max frame size %d", fr, requiredFrameSize, c.peerMaxFrameSize)}
+	}
+
+	if timeout == 0 {
+		_ = c.net.SetWriteDeadline(time.Time{})
+	} else if timeout > 0 {
+		_ = c.net.SetWriteDeadline(time.Now().Add(timeout))
 	}
 
 	// write to network
 	n, err := c.net.Write(c.txBuf.Bytes())
 	if l := c.txBuf.Len(); n > 0 && n < l && err != nil {
 		debug.Log(1, "TX (writeFrame %p): wrote %d bytes less than len %d: %v", c, n, l, err)
+	}
+	if err != nil {
+		err = &ConnError{inner: err}
 	}
 	return err
 }
@@ -793,13 +843,17 @@ func (c *Conn) writeProtoHeader(pID protoID) error {
 var keepaliveFrame = []byte{0x00, 0x00, 0x00, 0x08, 0x02, 0x00, 0x00, 0x00}
 
 // SendFrame is used by sessions and links to send frames across the network.
-func (c *Conn) sendFrame(fr frames.Frame) error {
+//   - ctx is used to provide the write deadline
+//   - fr is the frame to write to net.Conn
+//   - sent is the optional channel that will contain the error if the write fails
+func (c *Conn) sendFrame(ctx context.Context, fr frames.Frame, sent chan error) {
 	select {
-	case c.txFrame <- fr:
+	case c.txFrame <- frameEnvelope{Ctx: ctx, Frame: fr, Sent: sent}:
 		debug.Log(2, "TX (Conn %p): mux frame to connWriter: %s", c, fr)
-		return nil
 	case <-c.done:
-		return c.doneErr
+		if sent != nil {
+			sent <- c.doneErr
+		}
 	}
 }
 
@@ -932,7 +986,7 @@ func (c *Conn) startTLS(ctx context.Context) (stateFunc, error) {
 }
 
 // openAMQP round trips the AMQP open performative
-func (c *Conn) openAMQP(context.Context) (stateFunc, error) {
+func (c *Conn) openAMQP(ctx context.Context) (stateFunc, error) {
 	// send open frame
 	open := &frames.PerformOpen{
 		ContainerID:  c.containerID,
@@ -948,7 +1002,7 @@ func (c *Conn) openAMQP(context.Context) (stateFunc, error) {
 		Channel: 0,
 	}
 	debug.Log(1, "TX (openAMQP %p): %s", c, fr)
-	err := c.writeFrame(fr)
+	err := c.writeFrame(c.getWriteTimeout(ctx), fr)
 	if err != nil {
 		return nil, err
 	}
@@ -1043,6 +1097,15 @@ func (c *Conn) readSingleFrame() (frames.Frame, error) {
 	}
 
 	return fr, nil
+}
+
+// getWriteTimeout returns the timeout as calculated from the context's deadline
+// or the default write timeout if the context has no deadline.
+func (c *Conn) getWriteTimeout(ctx context.Context) time.Duration {
+	if deadline, ok := ctx.Deadline(); ok {
+		return time.Until(deadline)
+	}
+	return c.writeTimeout
 }
 
 type protoHeader struct {

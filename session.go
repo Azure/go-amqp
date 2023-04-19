@@ -233,6 +233,8 @@ func (s *Session) txFrameAndWait(ctx context.Context, fr frames.FrameBody) error
 		return err
 	case <-s.conn.done:
 		return s.conn.doneErr
+	case <-s.done:
+		return s.doneErr
 	}
 }
 

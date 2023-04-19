@@ -251,12 +251,10 @@ func (r *Receiver) sendDisposition(ctx context.Context, first uint32, last *uint
 
 	sent := make(chan error, 1)
 	select {
-	case <-r.l.done:
-		return r.l.doneErr
-	case <-ctx.Done():
-		return ctx.Err()
 	case r.txDisposition <- frameBodyEnvelope{Ctx: ctx, FrameBody: fr, Sent: sent}:
 		debug.Log(2, "TX (Receiver %p): mux txDisposition %s", r, fr)
+	case <-r.l.done:
+		return r.l.doneErr
 	}
 
 	select {

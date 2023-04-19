@@ -168,8 +168,6 @@ func (s *Sender) send(ctx context.Context, msg *Message, opts *SendOptions) (cha
 			// frame was sent to our mux
 		case <-s.l.done:
 			return nil, s.l.doneErr
-		case <-ctx.Done():
-			return nil, ctx.Err()
 		}
 
 		select {

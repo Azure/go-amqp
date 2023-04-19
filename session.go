@@ -768,6 +768,7 @@ type transferEnvelope struct {
 	Frame frames.PerformTransfer
 
 	// Sent is *never* nil as we use this for confirmation of sending
+	// NOTE: use a buffered channel of size 1 when populating
 	Sent chan error
 }
 
@@ -779,6 +780,7 @@ type frameBodyEnvelope struct {
 	// Sent *can* be nil depending on what frame is being sent.
 	// e.g. sending a disposition frame frame a receiver's settlement
 	// APIs will have a non-nil channel vs sending a flow frame
+	// NOTE: use a buffered channel of size 1 when populating
 	Sent chan error
 }
 

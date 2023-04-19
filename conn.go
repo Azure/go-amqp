@@ -753,7 +753,15 @@ func (c *Conn) connWriter() {
 		select {
 		// frame write request
 		case env := <-c.txFrame:
-			timeout := c.getWriteTimeout(env.Ctx)
+			timeout, ctxErr := c.getWriteTimeout(env.Ctx)
+			if ctxErr != nil {
+				debug.Log(1, "TX (connWriter %p) deadline exceeded: %s", c, env.Frame)
+				if env.Sent != nil {
+					env.Sent <- ctxErr
+				}
+				continue
+			}
+
 			debug.Log(1, "TX (connWriter %p) timeout %s: %s", c, timeout, env.Frame)
 			err = c.writeFrame(timeout, env.Frame)
 			if env.Sent != nil {
@@ -1002,8 +1010,11 @@ func (c *Conn) openAMQP(ctx context.Context) (stateFunc, error) {
 		Channel: 0,
 	}
 	debug.Log(1, "TX (openAMQP %p): %s", c, fr)
-	err := c.writeFrame(c.getWriteTimeout(ctx), fr)
+	timeout, err := c.getWriteTimeout(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err = c.writeFrame(timeout, fr); err != nil {
 		return nil, err
 	}
 
@@ -1101,11 +1112,16 @@ func (c *Conn) readSingleFrame() (frames.Frame, error) {
 
 // getWriteTimeout returns the timeout as calculated from the context's deadline
 // or the default write timeout if the context has no deadline.
-func (c *Conn) getWriteTimeout(ctx context.Context) time.Duration {
+// if the context has timed out or was cancelled, an error is returned.
+func (c *Conn) getWriteTimeout(ctx context.Context) (time.Duration, error) {
 	if deadline, ok := ctx.Deadline(); ok {
-		return time.Until(deadline)
+		until := time.Until(deadline)
+		if until <= 0 {
+			return 0, context.DeadlineExceeded
+		}
+		return until, nil
 	}
-	return c.writeTimeout
+	return c.writeTimeout, nil
 }
 
 type protoHeader struct {

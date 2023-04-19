@@ -1387,4 +1387,76 @@ func TestReceiverConnWriterError(t *testing.T) {
 	require.Error(t, conn.Close())
 }
 
+func TestReceiveSuccessReceiverSettleModeSecondAcceptSlow(t *testing.T) {
+	muxSem := test.NewMuxSemaphore(2)
+
+	const linkHandle = 0
+	deliveryID := uint32(1)
+	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
+		b, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
+		if b != nil || err != nil {
+			return b, err
+		}
+		switch ff := req.(type) {
+		case *frames.PerformFlow:
+			if *ff.NextIncomingID == deliveryID {
+				// this is the first flow frame, send our payload
+				return fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
+			}
+			// ignore future flow frames as we have no response
+			return nil, nil
+		case *frames.PerformDisposition:
+			// delay so that waiting for the ack times out
+			time.Sleep(1 * time.Second)
+			return fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
+		default:
+			return nil, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+	conn := fake.NewNetConn(responder)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, conn, nil)
+	cancel()
+	require.NoError(t, err)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	r, err := newReceiverWithHooks(ctx, session, "source", &ReceiverOptions{
+		SettlementMode: ReceiverSettleModeSecond.Ptr(),
+	}, receiverTestHooks{MuxSelect: muxSem.OnLoop})
+	cancel()
+	require.NoError(t, err)
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+	msg, err := r.Receive(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+	if c := r.countUnsettled(); c != 1 {
+		t.Fatalf("unexpected unsettled count %d", c)
+	}
+	muxSem.Wait()
+	// link credit must be zero since we only started with 1
+	if c := r.l.linkCredit; c != 0 {
+		t.Fatalf("unexpected link credit %d", c)
+	}
+	muxSem.Release(1)
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+	err = r.AcceptMessage(ctx, msg)
+	cancel()
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	muxSem.Wait()
+	// even though we timed out waiting for the ack, the message should still be settled
+	if c := r.countUnsettled(); c != 0 {
+		t.Fatalf("unexpected unsettled count %d", c)
+	}
+	require.True(t, msg.settled)
+	// link credit should be back to 1
+	if c := r.l.linkCredit; c != 1 {
+		t.Fatalf("unexpected link credit %d", c)
+	}
+	muxSem.Release(-1)
+	require.NoError(t, client.Close())
+}
+
 // TODO: add unit tests for manual credit management

@@ -8,6 +8,7 @@
 * Context cancellation is properly honored in calls to `Dial()` and `NewConn()`.
 * Fixed potential race during `Conn.Close()`.
 * Disable sending frames when closing `Session`, `Sender`, and `Receiver`.
+* Don't leak in-flight messages when a message settlement API is cancelled or times out waiting for acknowledgement.
 
 ### Other Changes
 

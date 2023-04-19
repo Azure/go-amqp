@@ -168,6 +168,8 @@ func (s *Sender) send(ctx context.Context, msg *Message, opts *SendOptions) (cha
 			// frame was sent to our mux
 		case <-s.l.done:
 			return nil, s.l.doneErr
+		case <-ctx.Done():
+			return nil, &Error{Condition: ErrCondTransferLimitExceeded, Description: fmt.Sprintf("credit limit exceeded for sending link %s", s.l.key.name)}
 		}
 
 		select {

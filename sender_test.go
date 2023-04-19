@@ -721,9 +721,12 @@ func TestSenderSendTimeout(t *testing.T) {
 
 	// no credits have been issued so the send will time out
 	ctx, cancel = context.WithTimeout(context.Background(), 10*time.Millisecond)
-	require.Error(t, snd.Send(ctx, NewMessage([]byte("test")), nil))
+	err = snd.Send(ctx, NewMessage([]byte("test")), nil)
 	cancel()
 
+	var amqpErr *Error
+	require.ErrorAs(t, err, &amqpErr)
+	require.EqualValues(t, ErrCondTransferLimitExceeded, amqpErr.Condition)
 	require.NoError(t, client.Close())
 }
 

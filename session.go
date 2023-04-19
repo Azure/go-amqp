@@ -764,15 +764,20 @@ func (s *Session) muxFrameToLink(l *link, fr frames.FrameBody) {
 type transferEnvelope struct {
 	Ctx   context.Context
 	Frame frames.PerformTransfer
-	Sent  chan error
+
+	// Sent is *never* nil as we use this for confirmation of sending
+	Sent chan error
 }
 
 // frameBodyEnvelope is used by senders and receivers to send frames.
-// these frames come from the mux which is why there's no Sent channel.
 type frameBodyEnvelope struct {
 	Ctx       context.Context
 	FrameBody frames.FrameBody
-	Sent      chan error
+
+	// Sent *can* be nil depending on what frame is being sent.
+	// e.g. sending a disposition frame frame a receiver's settlement
+	// APIs will have a non-nil channel vs sending a flow frame
+	Sent chan error
 }
 
 // the address of this var is a sentinel value indicating

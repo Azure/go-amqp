@@ -452,8 +452,6 @@ func (s *Sender) muxHandleFrame(fr frames.FrameBody) error {
 			Settled: true,
 		}
 
-		// TODO: the context used here should be the one associated with the original Send()
-
 		select {
 		case s.l.session.tx <- frameBodyEnvelope{Ctx: context.Background(), FrameBody: dr}:
 			debug.Log(2, "TX (Sender %p): mux frame to Session (%p): %d, %s", s, s.l.session, s.l.session.channel, dr)

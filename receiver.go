@@ -310,6 +310,7 @@ func (r *Receiver) messageDisposition(ctx context.Context, msg *Message, state e
 
 	case <-ctx.Done():
 		// didn't receive the ack in the time allotted, leave message as unsettled
+		// TODO: if the ack arrives later, we need to remove the message from the unsettled map and reclaim the credit
 		return ctx.Err()
 	}
 }

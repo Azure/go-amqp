@@ -1440,7 +1440,7 @@ func TestReceiveSuccessReceiverSettleModeSecondAcceptSlow(t *testing.T) {
 	if c := r.l.linkCredit; c != 0 {
 		t.Fatalf("unexpected link credit %d", c)
 	}
-	muxSem.Release(1)
+	muxSem.Release(2)
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	err = r.AcceptMessage(ctx, msg)
 	cancel()

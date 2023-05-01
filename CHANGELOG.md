@@ -14,6 +14,7 @@
 * Disable sending frames when closing `Session`, `Sender`, and `Receiver`.
 * Don't leak in-flight messages when a message settlement API is cancelled or times out waiting for acknowledgement.
 * `Sender.Send()` will return an `*amqp.Error` with condition `amqp.ErrCondTransferLimitExceeded` when attempting to send a transfer on a link with no credit.
+* `Sender.Send()` will return an `*amqp.Error` with condition `amqp.ErrCondMessageSizeExceeded` if the message or delivery tag size exceeds the maximum allowed size for the link.
 
 ### Other Changes
 

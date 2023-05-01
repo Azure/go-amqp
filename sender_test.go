@@ -784,8 +784,28 @@ func TestSenderSendMsgTooBig(t *testing.T) {
 	sendInitialFlowFrame(t, 0, netConn, 0, 100)
 
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	require.Error(t, snd.Send(ctx, NewMessage([]byte("test message that's too big")), nil))
+	defer cancel()
+	err = snd.Send(ctx, NewMessage([]byte("test message that's too big")), nil)
+
+	var amqpErr *Error
+	require.ErrorAs(t, err, &amqpErr)
+	require.Equal(t, Error{
+		Condition:   ErrCondMessageSizeExceeded,
+		Description: "encoded message size exceeds max of 16",
+	}, *amqpErr)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	err = snd.Send(ctx, &Message{
+		DeliveryTag: []byte("this delivery tag is way bigger than it can be so we'll just return a distinguish amqp.Error"),
+	}, nil)
 	cancel()
+
+	require.ErrorAs(t, err, &amqpErr)
+	require.Equal(t, Error{
+		Condition:   ErrCondMessageSizeExceeded,
+		Description: "delivery tag is over the allowed 32 bytes, len: 92",
+	}, *amqpErr)
 
 	require.NoError(t, client.Close())
 }

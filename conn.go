@@ -89,7 +89,7 @@ type ConnOptions struct {
 	dialer dialer
 }
 
-// Dial connects to an AMQP server.
+// Dial connects to an AMQP broker.
 //
 // If the addr includes a scheme, it must be "amqp", "amqps", or "amqp+ssl".
 // If no port is provided, 5672 will be used for "amqp" and 5671 for "amqps" or "amqp+ssl".

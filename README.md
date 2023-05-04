@@ -24,6 +24,8 @@ go get github.com/Azure/go-amqp
 
 ### Connect to a broker
 
+Call [amqp.Dial()][godoc_dial] to connect to an AMQP broker. This creates an [*amqp.Conn][godoc_conn].
+
 ```go
 conn, err := amqp.Dial(context.TODO(), "amqp[s]://<host name of AMQP 1.0 broker>", nil)
 if err != nil {
@@ -33,7 +35,7 @@ if err != nil {
 
 ### Sending and receiving messages
 
-In order to send or receive messages, first create an [*amqp.Session][godoc_session] from the established connection.
+In order to send or receive messages, first create an [*amqp.Session][godoc_session] from the [*amqp.Conn][godoc_conn] by calling [Conn.NewSession()][godoc_conn_session].
 
 ```go
 session, err := conn.NewSession(context.TODO(), nil)
@@ -42,7 +44,7 @@ if err != nil {
 }
 ```
 
-Once the session has been created, create an [*amqp.Sender][godoc_sender] to send messages and/or an [*amqp.Receiver][godoc_receiver] to receive messages.
+Once the session has been created, create an [*amqp.Sender][godoc_sender] to send messages and/or an [*amqp.Receiver][godoc_receiver] to receive messages by calling [Session.NewSender()][godoc_session_sender] and/or [Session.NewReceiver()][godoc_session_receiver] respectively.
 
 ```go
 // create a new sender
@@ -174,10 +176,14 @@ contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additio
 [godoc_amqp]: https://pkg.go.dev/github.com/Azure/go-amqp
 [godoc_examples]: https://pkg.go.dev/github.com/Azure/go-amqp#pkg-examples
 [godoc_conn]: https://pkg.go.dev/github.com/Azure/go-amqp#Conn
+[godoc_conn_session]: https://pkg.go.dev/github.com/Azure/go-amqp#Conn.NewSession
+[godoc_dial]: https://pkg.go.dev/github.com/Azure/go-amqp#Dial
 [godoc_context]: https://pkg.go.dev/context#Context
 [godoc_message]: https://pkg.go.dev/github.com/Azure/go-amqp#Message
 [godoc_message_ctor]: https://pkg.go.dev/github.com/Azure/go-amqp#NewMessage
 [godoc_session]: https://pkg.go.dev/github.com/Azure/go-amqp#Session
+[godoc_session_sender]: https://pkg.go.dev/github.com/Azure/go-amqp#Session.NewSender
+[godoc_session_receiver]: https://pkg.go.dev/github.com/Azure/go-amqp#Session.NewReceiver
 [godoc_sender]: https://pkg.go.dev/github.com/Azure/go-amqp#Sender
 [godoc_sender_send]: https://pkg.go.dev/github.com/Azure/go-amqp#Sender.Send
 [godoc_receiver]: https://pkg.go.dev/github.com/Azure/go-amqp#Receiver

@@ -51,9 +51,7 @@ func Example() {
 	// continuously read messages
 	{
 		// create a receiver
-		receiver, err := session.NewReceiver(ctx, "/queue-name", &amqp.ReceiverOptions{
-			Credit: 10,
-		})
+		receiver, err := session.NewReceiver(ctx, "/queue-name", nil)
 		if err != nil {
 			log.Fatal("Creating receiver link:", err)
 		}

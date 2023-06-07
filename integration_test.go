@@ -1127,6 +1127,61 @@ func TestNewReceiverWithCancelledContext(t *testing.T) {
 	checkLeaks()
 }
 
+func TestMultipleSendersSharedSession(t *testing.T) {
+	if localBrokerAddr == "" {
+		t.Skip()
+	}
+
+	checkLeaks := leaktest.Check(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := amqp.Dial(ctx, localBrokerAddr, &amqp.ConnOptions{
+		SASLType: amqp.SASLTypeAnonymous(),
+	})
+	cancel()
+	require.NoError(t, err)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+
+	const msgSize = 1024 * 10
+	bigMsgData := make([]byte, msgSize)
+	for i := 0; i < msgSize; i++ {
+		bigMsgData[i] = byte(i % 256)
+	}
+
+	wg := &sync.WaitGroup{}
+	for senders := 0; senders < 100; senders++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for msgCount := 0; msgCount < 50; msgCount++ {
+				sender, err := session.NewSender(context.Background(), "TestMultipleSendersSharedSession", nil)
+				require.NoError(t, err)
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				err = sender.Send(ctx, amqp.NewMessage(bigMsgData), nil)
+				cancel()
+				if err != nil {
+					panic(err)
+				}
+				ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
+				err = sender.Close(ctx)
+				if err != nil {
+					panic(err)
+				}
+				cancel()
+				time.Sleep(time.Millisecond * 100)
+			}
+		}()
+	}
+
+	wg.Wait()
+	require.NoError(t, client.Close())
+	checkLeaks()
+}
+
 func repeatStrings(count int, strs ...string) []string {
 	var out []string
 	for i := 0; i < count; i += len(strs) {

@@ -28,10 +28,15 @@ type linkKey struct {
 
 // link contains the common state and methods for sending and receiving links
 type link struct {
-	key          linkKey // Name and direction
-	handle       uint32  // our handle
-	remoteHandle uint32  // remote's handle
-	dynamicAddr  bool    // request a dynamic link address from the server
+	key linkKey // Name and direction
+
+	// NOTE: outputHandle and inputHandle might not have the same value
+
+	// our handle
+	outputHandle uint32
+
+	// remote's handle
+	inputHandle uint32
 
 	// frames destined for this link are added to this queue by Session.muxFrameToLink
 	rxQ *queue.Holder[frames.FrameBody]
@@ -66,6 +71,7 @@ type link struct {
 	maxMessageSize     uint64
 
 	closeInProgress bool // indicates that the detach performative has been sent
+	dynamicAddr     bool // request a dynamic link address from the server
 }
 
 func newLink(s *Session, r encoding.Role) link {
@@ -122,7 +128,7 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 
 	attach := &frames.PerformAttach{
 		Name:               l.key.name,
-		Handle:             l.handle,
+		Handle:             l.outputHandle,
 		ReceiverSettleMode: l.receiverSettleMode,
 		SenderSettleMode:   l.senderSettleMode,
 		MaxMessageSize:     l.maxMessageSize,
@@ -183,7 +189,7 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 
 		// send return detach
 		fr = &frames.PerformDetach{
-			Handle: l.handle,
+			Handle: l.outputHandle,
 			Closed: true,
 		}
 		if err := l.txFrameAndWait(ctx, fr); err != nil {
@@ -206,7 +212,7 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 	if err := l.setSettleModes(resp); err != nil {
 		// close the link as there's a mismatch on requested/supported settlement modes
 		dr := &frames.PerformDetach{
-			Handle: l.handle,
+			Handle: l.outputHandle,
 			Closed: true,
 		}
 		if err := l.txFrameAndWait(ctx, dr); err != nil {
@@ -268,7 +274,7 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 		}
 
 		dr := &frames.PerformDetach{
-			Handle: l.handle,
+			Handle: l.outputHandle,
 			Closed: true,
 		}
 		l.txFrame(context.Background(), dr, nil)
@@ -329,7 +335,7 @@ func (l *link) closeWithError(cnd ErrCond, desc string) {
 	}
 
 	dr := &frames.PerformDetach{
-		Handle: l.handle,
+		Handle: l.outputHandle,
 		Closed: true,
 		Error:  amqpErr,
 	}

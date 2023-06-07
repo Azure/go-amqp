@@ -183,10 +183,10 @@ func newTestLink(t *testing.T) *Receiver {
 			// debug(1, "FLOW Link Mux half: source: %s, inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s", l.source.Address, l.receiver.inFlight.len(), l.l.linkCredit, l.deliveryCount, len(l.messages), l.countUnsettled(), l.receiver.maxCredit, l.receiverSettleMode.String())
 			done: make(chan struct{}),
 			session: &Session{
-				tx:      make(chan frameBodyEnvelope, 100),
-				done:    make(chan struct{}),
-				conn:    conn,
-				handles: bitmap.New(32),
+				tx:            make(chan frameBodyEnvelope, 100),
+				done:          make(chan struct{}),
+				conn:          conn,
+				outputHandles: bitmap.New(32),
 			},
 			rxQ:   queue.NewHolder(queue.New[frames.FrameBody](100)),
 			close: make(chan struct{}),
@@ -204,7 +204,7 @@ func newTestLink(t *testing.T) *Receiver {
 func closeTestLink(l *link) {
 	close(l.close)
 	q := l.rxQ.Acquire()
-	q.Enqueue(&frames.PerformDetach{Handle: l.handle, Closed: true})
+	q.Enqueue(&frames.PerformDetach{Handle: l.outputHandle, Closed: true})
 	l.rxQ.Release(q)
 }
 

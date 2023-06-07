@@ -1,5 +1,11 @@
 # Release History
 
+## 1.0.1 (Unreleased)
+
+### Bugs Fixed
+
+* Fixed an issue that could cause links to terminate with error "received disposition frame with unknown link handle X".
+
 ## 1.0.0 (2023-05-04)
 
 ### Features Added

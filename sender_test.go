@@ -1045,7 +1045,7 @@ func TestSenderFlowFrameWithEcho(t *testing.T) {
 
 	nextIncomingID := uint32(1)
 	b, err := fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformFlow{
-		Handle:         &sender.l.handle,
+		Handle:         &sender.l.outputHandle,
 		NextIncomingID: &nextIncomingID,
 		IncomingWindow: 100,
 		OutgoingWindow: 100,

@@ -142,7 +142,7 @@ func (s *Sender) send(ctx context.Context, msg *Message, opts *SendOptions) (cha
 	}
 
 	fr := frames.PerformTransfer{
-		Handle:        s.l.handle,
+		Handle:        s.l.outputHandle,
 		DeliveryID:    &needsDeliveryID,
 		DeliveryTag:   deliveryTag,
 		MessageFormat: &msg.Format,
@@ -170,7 +170,7 @@ func (s *Sender) send(ctx context.Context, msg *Message, opts *SendOptions) (cha
 
 		sent := make(chan error, 1)
 		select {
-		case s.transfers <- transferEnvelope{Ctx: ctx, Frame: fr, Sent: sent}:
+		case s.transfers <- transferEnvelope{Ctx: ctx, InputHandle: s.l.inputHandle, Frame: fr, Sent: sent}:
 			// frame was sent to our mux
 		case <-s.l.done:
 			return nil, s.l.doneErr
@@ -389,7 +389,7 @@ Loop:
 			// sender is being closed by the client
 			s.l.closeInProgress = true
 			fr := &frames.PerformDetach{
-				Handle: s.l.handle,
+				Handle: s.l.outputHandle,
 				Closed: true,
 			}
 			s.l.txFrame(context.Background(), fr, nil)
@@ -431,7 +431,7 @@ func (s *Sender) muxHandleFrame(fr frames.FrameBody) error {
 
 		// send flow
 		resp := &frames.PerformFlow{
-			Handle:        &s.l.handle,
+			Handle:        &s.l.outputHandle,
 			DeliveryCount: &deliveryCount,
 			LinkCredit:    &linkCredit, // max number of messages
 		}

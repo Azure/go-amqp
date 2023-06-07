@@ -595,7 +595,7 @@ func (r *Receiver) mux(hooks receiverTestHooks) {
 			// receiver is being closed by the client
 			r.l.closeInProgress = true
 			fr := &frames.PerformDetach{
-				Handle: r.l.handle,
+				Handle: r.l.outputHandle,
 				Closed: true,
 			}
 			r.l.txFrame(context.Background(), fr, nil)
@@ -615,7 +615,7 @@ func (r *Receiver) muxFlow(linkCredit uint32, drain bool) error {
 	)
 
 	fr := &frames.PerformFlow{
-		Handle:        &r.l.handle,
+		Handle:        &r.l.outputHandle,
 		DeliveryCount: &deliveryCount,
 		LinkCredit:    &linkCredit, // max number of messages,
 		Drain:         drain,
@@ -671,7 +671,7 @@ func (r *Receiver) muxHandleFrame(fr frames.FrameBody) error {
 
 		// send flow
 		resp := &frames.PerformFlow{
-			Handle:        &r.l.handle,
+			Handle:        &r.l.outputHandle,
 			DeliveryCount: &deliveryCount,
 			LinkCredit:    &linkCredit, // max number of messages
 		}

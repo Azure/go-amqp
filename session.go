@@ -523,6 +523,8 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 				s.muxFrameToLink(link, fr)
 
+				debug.Log(1, "RX (Session %p): link %s attached, input handle %d, output handle %d", s, link.key.name, link.inputHandle, link.outputHandle)
+
 			case *frames.PerformTransfer:
 				s.needFlowCount++
 				// "Upon receiving a transfer, the receiving endpoint will

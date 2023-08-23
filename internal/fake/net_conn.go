@@ -13,9 +13,10 @@ import (
 
 // NewNetConn creates a new instance of NetConn.
 // Responder is invoked by Write when a frame is received.
-// Return a nil slice/nil error to swallow the frame.
+// Return a zero-value Response/nil error to swallow the frame.
 // Return a non-nil error to simulate a write error.
-func NewNetConn(resp func(remoteChannel uint16, fr frames.FrameBody) ([]byte, error)) *NetConn {
+// NOTE: resp is called on a separate goroutine so it MUST NOT access any *testing.T etc
+func NewNetConn(resp func(remoteChannel uint16, fr frames.FrameBody) (Response, error)) *NetConn {
 	return &NetConn{
 		ReadErr:  make(chan error),
 		WriteErr: make(chan error, 1),
@@ -31,7 +32,7 @@ func NewNetConn(resp func(remoteChannel uint16, fr frames.FrameBody) ([]byte, er
 	}
 }
 
-// NetConn is a mock network connection that satisfies the net.Conn interface.
+// NetConn is a fake network connection that satisfies the net.Conn interface.
 type NetConn struct {
 	// OnClose is called from Close() before it returns.
 	// The value returned from OnClose is returned from Close().
@@ -47,7 +48,7 @@ type NetConn struct {
 	// Has a buffer of one so setting a pending error won't block.
 	WriteErr chan error
 
-	resp      func(uint16, frames.FrameBody) ([]byte, error)
+	resp      func(uint16, frames.FrameBody) (Response, error)
 	readDL    readTimer
 	readData  chan []byte
 	readClose chan struct{}
@@ -79,6 +80,16 @@ func (n *NetConn) SendMultiFrameTransfer(channel uint16, linkHandle, deliveryID 
 	return nil
 }
 
+// Response is the response returned from a responder function.
+type Response struct {
+	// Payload is the marshalled frame to send to Conn.connReader
+	Payload []byte
+
+	// WriteDelay is the duration to wait before writing Payload.
+	// Use this to introduce a delay when waiting for a response.
+	WriteDelay time.Duration
+}
+
 ///////////////////////////////////////////////////////
 // following methods are for the net.Conn interface
 ///////////////////////////////////////////////////////
@@ -100,7 +111,7 @@ func (n *NetConn) Read(b []byte) (int, error) {
 	case <-n.readClose:
 		return 0, net.ErrClosed
 	case <-n.readDL.C():
-		return 0, errors.New("mock connection read deadline exceeded")
+		return 0, errors.New("fake connection read deadline exceeded")
 	case rd := <-n.readData:
 		return copy(b, rd), nil
 	case err := <-n.ReadErr:
@@ -137,8 +148,14 @@ func (n *NetConn) Write(b []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	if resp != nil {
-		n.readData <- resp
+	if resp.Payload != nil {
+		go func(r Response) {
+			// any write delay MUST happen outside of NetConn.Write
+			// else all we do is stall Conn.connWriter() which doesn't
+			// actually simulate a delayed response to a frame.
+			time.Sleep(r.WriteDelay)
+			n.readData <- r.Payload
+		}(resp)
 	}
 	return len(b), nil
 }

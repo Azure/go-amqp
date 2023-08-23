@@ -13,20 +13,20 @@ import (
 )
 
 func BenchmarkSenderSendSSMUnsettled(b *testing.B) {
-	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
-		b, err := senderFrameHandler(0, SenderSettleModeUnsettled)(remoteChannel, req)
-		if b != nil || err != nil {
-			return b, err
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		resp, err := senderFrameHandler(0, SenderSettleModeUnsettled)(remoteChannel, req)
+		if resp.Payload != nil || err != nil {
+			return resp, err
 		}
 		switch tt := req.(type) {
 		case *frames.PerformFlow:
-			return nil, nil
+			return fake.Response{}, nil
 		case *frames.PerformDisposition:
-			return nil, nil
+			return fake.Response{}, nil
 		case *frames.PerformTransfer:
-			return fake.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, nil, &encoding.StateAccepted{})
+			return newResponse(fake.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, nil, &encoding.StateAccepted{}))
 		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
 	conn := fake.NewNetConn(responder)
@@ -58,20 +58,20 @@ func BenchmarkSenderSendSSMUnsettled(b *testing.B) {
 }
 
 func BenchmarkSenderSendSSMSettled(b *testing.B) {
-	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
-		b, err := senderFrameHandler(0, SenderSettleModeSettled)(remoteChannel, req)
-		if b != nil || err != nil {
-			return b, err
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		resp, err := senderFrameHandler(0, SenderSettleModeSettled)(remoteChannel, req)
+		if resp.Payload != nil || err != nil {
+			return resp, err
 		}
 		switch req.(type) {
 		case *frames.PerformFlow:
-			return nil, nil
+			return fake.Response{}, nil
 		case *frames.PerformDisposition:
-			return nil, nil
+			return fake.Response{}, nil
 		case *frames.PerformTransfer:
-			return nil, nil
+			return fake.Response{}, nil
 		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
 	conn := fake.NewNetConn(responder)
@@ -103,18 +103,18 @@ func BenchmarkSenderSendSSMSettled(b *testing.B) {
 }
 
 func BenchmarkReceiverReceiveRSMFirst(b *testing.B) {
-	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(0, ReceiverSettleModeFirst)(remoteChannel, req)
-		if b != nil || err != nil {
-			return b, err
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		resp, err := receiverFrameHandler(0, ReceiverSettleModeFirst)(remoteChannel, req)
+		if resp.Payload != nil || err != nil {
+			return resp, err
 		}
 		switch req.(type) {
 		case *frames.PerformFlow:
-			return nil, nil
+			return fake.Response{}, nil
 		case *frames.PerformDisposition:
-			return nil, nil
+			return fake.Response{}, nil
 		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
 	conn := fake.NewNetConn(responder)
@@ -154,18 +154,18 @@ func BenchmarkReceiverReceiveRSMFirst(b *testing.B) {
 }
 
 func BenchmarkReceiverReceiveRSMSecond(b *testing.B) {
-	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
-		if b != nil || err != nil {
-			return b, err
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		resp, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
+		if resp.Payload != nil || err != nil {
+			return resp, err
 		}
 		switch req.(type) {
 		case *frames.PerformFlow:
-			return nil, nil
+			return fake.Response{}, nil
 		case *frames.PerformDisposition:
-			return nil, nil
+			return fake.Response{}, nil
 		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
 	conn := fake.NewNetConn(responder)
@@ -205,18 +205,18 @@ func BenchmarkReceiverReceiveRSMSecond(b *testing.B) {
 }
 
 func BenchmarkReceiverSettleMessage(b *testing.B) {
-	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(0, ReceiverSettleModeFirst)(remoteChannel, req)
-		if b != nil || err != nil {
-			return b, err
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		resp, err := receiverFrameHandler(0, ReceiverSettleModeFirst)(remoteChannel, req)
+		if resp.Payload != nil || err != nil {
+			return resp, err
 		}
 		switch req.(type) {
 		case *frames.PerformFlow:
-			return nil, nil
+			return fake.Response{}, nil
 		case *frames.PerformDisposition:
-			return nil, nil
+			return fake.Response{}, nil
 		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
 	conn := fake.NewNetConn(responder)

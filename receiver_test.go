@@ -52,25 +52,25 @@ func TestReceiverInvalidOptions(t *testing.T) {
 
 func TestReceiverMethodsNoReceive(t *testing.T) {
 	const linkName = "test"
-	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
 		switch ff := req.(type) {
 		case *fake.AMQPProto:
-			return fake.ProtoHeader(fake.ProtoAMQP)
+			return newResponse(fake.ProtoHeader(fake.ProtoAMQP))
 		case *frames.PerformOpen:
-			return fake.PerformOpen("test")
+			return newResponse(fake.PerformOpen("test"))
 		case *frames.PerformBegin:
-			return fake.PerformBegin(0, remoteChannel)
+			return newResponse(fake.PerformBegin(0, remoteChannel))
 		case *frames.PerformAttach:
 			require.Equal(t, DurabilityUnsettledState, ff.Target.Durable)
 			require.Equal(t, ExpiryPolicyNever, ff.Target.ExpiryPolicy)
 			require.Equal(t, uint32(300), ff.Target.Timeout)
-			return fake.ReceiverAttach(0, linkName, 0, ReceiverSettleModeFirst, nil)
+			return newResponse(fake.ReceiverAttach(0, linkName, 0, ReceiverSettleModeFirst, nil))
 		case *frames.PerformFlow, *fake.KeepAlive:
-			return nil, nil
+			return fake.Response{}, nil
 		case *frames.PerformDetach:
-			return fake.PerformDetach(0, ff.Handle, nil)
+			return newResponse(fake.PerformDetach(0, ff.Handle, nil))
 		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
 	conn := fake.NewNetConn(responder)
@@ -265,28 +265,31 @@ func TestReceiverOnDetached(t *testing.T) {
 }
 
 func TestReceiverCloseTimeout(t *testing.T) {
-	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
 		switch tt := req.(type) {
 		case *fake.AMQPProto:
-			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
+			return newResponse(fake.ProtoHeader(fake.ProtoAMQP))
 		case *frames.PerformOpen:
-			return fake.PerformOpen("container")
+			return newResponse(fake.PerformOpen("container"))
 		case *frames.PerformBegin:
-			return fake.PerformBegin(0, remoteChannel)
+			return newResponse(fake.PerformBegin(0, remoteChannel))
 		case *frames.PerformEnd:
-			return fake.PerformEnd(0, nil)
+			return newResponse(fake.PerformEnd(0, nil))
 		case *frames.PerformAttach:
-			return fake.ReceiverAttach(0, tt.Name, tt.Handle, ReceiverSettleModeSecond, nil)
+			return newResponse(fake.ReceiverAttach(0, tt.Name, tt.Handle, ReceiverSettleModeSecond, nil))
 		case *frames.PerformDetach:
-			// sleep to trigger sender close timeout
-			time.Sleep(1 * time.Second)
-			return fake.PerformDetach(0, tt.Handle, nil)
+			b, err := fake.PerformDetach(0, tt.Handle, nil)
+			if err != nil {
+				return fake.Response{}, err
+			}
+			// include a write delay to trigger sender close timeout
+			return fake.Response{Payload: b, WriteDelay: 1 * time.Second}, nil
 		case *frames.PerformFlow, *fake.KeepAlive:
-			return nil, nil
+			return fake.Response{}, nil
 		case *frames.PerformClose:
-			return fake.PerformClose(nil)
+			return newResponse(fake.PerformClose(nil))
 		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
 	netConn := fake.NewNetConn(responder)
@@ -321,30 +324,30 @@ func TestReceiverCloseTimeout(t *testing.T) {
 func TestReceiveInvalidMessage(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
-	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
 		switch tt := req.(type) {
 		case *fake.AMQPProto:
-			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
+			return newResponse(fake.ProtoHeader(fake.ProtoAMQP))
 		case *frames.PerformOpen:
-			return fake.PerformOpen("container")
+			return newResponse(fake.PerformOpen("container"))
 		case *frames.PerformClose:
-			return fake.PerformClose(nil)
+			return newResponse(fake.PerformClose(nil))
 		case *frames.PerformBegin:
-			return fake.PerformBegin(0, remoteChannel)
+			return newResponse(fake.PerformBegin(0, remoteChannel))
 		case *frames.PerformEnd:
-			return fake.PerformEnd(0, nil)
+			return newResponse(fake.PerformEnd(0, nil))
 		case *frames.PerformAttach:
-			return fake.ReceiverAttach(0, tt.Name, 0, ReceiverSettleModeFirst, tt.Source.Filter)
+			return newResponse(fake.ReceiverAttach(0, tt.Name, 0, ReceiverSettleModeFirst, tt.Source.Filter))
 		case *frames.PerformDetach:
 			require.NotNil(t, tt.Error)
 			require.EqualValues(t, ErrCondNotAllowed, tt.Error.Condition)
-			return fake.PerformDetach(0, 0, nil)
+			return newResponse(fake.PerformDetach(0, 0, nil))
 		case *frames.PerformFlow, *fake.KeepAlive:
-			return nil, nil
+			return fake.Response{}, nil
 		case *frames.PerformDisposition:
-			return fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
+			return newResponse(fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{}))
 		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
 	conn := fake.NewNetConn(responder)
@@ -442,23 +445,23 @@ func TestReceiveSuccessReceiverSettleModeFirst(t *testing.T) {
 
 	const linkHandle = 0
 	deliveryID := uint32(1)
-	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(0, ReceiverSettleModeFirst)(remoteChannel, req)
-		if b != nil || err != nil {
-			return b, err
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		resp, err := receiverFrameHandler(0, ReceiverSettleModeFirst)(remoteChannel, req)
+		if resp.Payload != nil || err != nil {
+			return resp, err
 		}
 		switch ff := req.(type) {
 		case *frames.PerformFlow:
 			if *ff.NextIncomingID == deliveryID {
 				// this is the first flow frame, send our payload
-				return fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
+				return newResponse(fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello")))
 			}
 			// ignore future flow frames as we have no response
-			return nil, nil
+			return fake.Response{}, nil
 		case *frames.PerformDisposition:
-			return nil, nil
+			return fake.Response{}, nil
 		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
 	conn := fake.NewNetConn(responder)
@@ -515,26 +518,26 @@ func TestReceiveSuccessReceiverSettleModeSecondAccept(t *testing.T) {
 
 	const linkHandle = 0
 	deliveryID := uint32(1)
-	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
-		if b != nil || err != nil {
-			return b, err
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		resp, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
+		if resp.Payload != nil || err != nil {
+			return resp, err
 		}
 		switch ff := req.(type) {
 		case *frames.PerformFlow:
 			if *ff.NextIncomingID == deliveryID {
 				// this is the first flow frame, send our payload
-				return fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
+				return newResponse(fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello")))
 			}
 			// ignore future flow frames as we have no response
-			return nil, nil
+			return fake.Response{}, nil
 		case *frames.PerformDisposition:
 			if _, ok := ff.State.(*encoding.StateAccepted); !ok {
-				return nil, fmt.Errorf("unexpected State %T", ff.State)
+				return fake.Response{}, fmt.Errorf("unexpected State %T", ff.State)
 			}
-			return fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
+			return newResponse(fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{}))
 		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
 	conn := fake.NewNetConn(responder)
@@ -592,26 +595,26 @@ func TestReceiveSuccessReceiverSettleModeSecondAcceptOnClosedLink(t *testing.T) 
 
 	const linkHandle = 0
 	deliveryID := uint32(1)
-	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
-		if b != nil || err != nil {
-			return b, err
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		resp, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
+		if resp.Payload != nil || err != nil {
+			return resp, err
 		}
 		switch ff := req.(type) {
 		case *frames.PerformFlow:
 			if *ff.NextIncomingID == deliveryID {
 				// this is the first flow frame, send our payload
-				return fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
+				return newResponse(fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello")))
 			}
 			// ignore future flow frames as we have no response
-			return nil, nil
+			return fake.Response{}, nil
 		case *frames.PerformDisposition:
 			if _, ok := ff.State.(*encoding.StateAccepted); !ok {
-				return nil, fmt.Errorf("unexpected State %T", ff.State)
+				return fake.Response{}, fmt.Errorf("unexpected State %T", ff.State)
 			}
-			return fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
+			return newResponse(fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{}))
 		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
 	conn := fake.NewNetConn(responder)
@@ -657,26 +660,26 @@ func TestReceiveSuccessReceiverSettleModeSecondReject(t *testing.T) {
 
 	const linkHandle = 0
 	deliveryID := uint32(1)
-	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
-		if b != nil || err != nil {
-			return b, err
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		resp, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
+		if resp.Payload != nil || err != nil {
+			return resp, err
 		}
 		switch ff := req.(type) {
 		case *frames.PerformFlow:
 			if *ff.NextIncomingID == deliveryID {
 				// this is the first flow frame, send our payload
-				return fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
+				return newResponse(fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello")))
 			}
 			// ignore future flow frames as we have no response
-			return nil, nil
+			return fake.Response{}, nil
 		case *frames.PerformDisposition:
 			if _, ok := ff.State.(*encoding.StateRejected); !ok {
-				return nil, fmt.Errorf("unexpected State %T", ff.State)
+				return fake.Response{}, fmt.Errorf("unexpected State %T", ff.State)
 			}
-			return fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateRejected{})
+			return newResponse(fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateRejected{}))
 		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
 	conn := fake.NewNetConn(responder)
@@ -728,26 +731,26 @@ func TestReceiveSuccessReceiverSettleModeSecondRelease(t *testing.T) {
 
 	const linkHandle = 0
 	deliveryID := uint32(1)
-	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
-		if b != nil || err != nil {
-			return b, err
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		resp, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
+		if resp.Payload != nil || err != nil {
+			return resp, err
 		}
 		switch ff := req.(type) {
 		case *frames.PerformFlow:
 			if *ff.NextIncomingID == deliveryID {
 				// this is the first flow frame, send our payload
-				return fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
+				return newResponse(fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello")))
 			}
 			// ignore future flow frames as we have no response
-			return nil, nil
+			return fake.Response{}, nil
 		case *frames.PerformDisposition:
 			if _, ok := ff.State.(*encoding.StateReleased); !ok {
-				return nil, fmt.Errorf("unexpected State %T", ff.State)
+				return fake.Response{}, fmt.Errorf("unexpected State %T", ff.State)
 			}
-			return fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateReleased{})
+			return newResponse(fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateReleased{}))
 		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
 	conn := fake.NewNetConn(responder)
@@ -799,31 +802,31 @@ func TestReceiveSuccessReceiverSettleModeSecondModify(t *testing.T) {
 
 	const linkHandle = 0
 	deliveryID := uint32(1)
-	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
-		if b != nil || err != nil {
-			return b, err
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		resp, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
+		if resp.Payload != nil || err != nil {
+			return resp, err
 		}
 		switch ff := req.(type) {
 		case *frames.PerformFlow:
 			if *ff.NextIncomingID == deliveryID {
 				// this is the first flow frame, send our payload
-				return fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
+				return newResponse(fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello")))
 			}
 			// ignore future flow frames as we have no response
-			return nil, nil
+			return fake.Response{}, nil
 		case *frames.PerformDisposition:
 			var mod *encoding.StateModified
 			var ok bool
 			if mod, ok = ff.State.(*encoding.StateModified); !ok {
-				return nil, fmt.Errorf("unexpected State %T", ff.State)
+				return fake.Response{}, fmt.Errorf("unexpected State %T", ff.State)
 			}
 			if v := mod.MessageAnnotations["some"]; v != "value" {
-				return nil, fmt.Errorf("unexpected annotation value %v", v)
+				return fake.Response{}, fmt.Errorf("unexpected annotation value %v", v)
 			}
-			return fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateModified{})
+			return newResponse(fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateModified{}))
 		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
 	conn := fake.NewNetConn(responder)
@@ -915,21 +918,21 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 
 	const linkHandle = 0
 	deliveryID := uint32(1)
-	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
-		if b != nil || err != nil {
-			return b, err
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		resp, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
+		if resp.Payload != nil || err != nil {
+			return resp, err
 		}
 		switch ff := req.(type) {
 		case *frames.PerformFlow, *fake.KeepAlive:
-			return nil, nil
+			return fake.Response{}, nil
 		case *frames.PerformDisposition:
 			if _, ok := ff.State.(*encoding.StateAccepted); !ok {
-				return nil, fmt.Errorf("unexpected State %T", ff.State)
+				return fake.Response{}, fmt.Errorf("unexpected State %T", ff.State)
 			}
-			return fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
+			return newResponse(fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{}))
 		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
 	conn := fake.NewNetConn(responder)
@@ -994,30 +997,28 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 func TestReceiveInvalidMultiFrameMessage(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
-	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
 		switch tt := req.(type) {
 		case *fake.AMQPProto:
-			return []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}, nil
+			return newResponse(fake.ProtoHeader(fake.ProtoAMQP))
 		case *frames.PerformOpen:
-			return fake.PerformOpen("container")
+			return newResponse(fake.PerformOpen("container"))
 		case *frames.PerformClose:
-			return fake.PerformClose(nil)
+			return newResponse(fake.PerformClose(nil))
 		case *frames.PerformBegin:
-			return fake.PerformBegin(0, remoteChannel)
+			return newResponse(fake.PerformBegin(0, remoteChannel))
 		case *frames.PerformEnd:
-			return fake.PerformEnd(0, nil)
+			return newResponse(fake.PerformEnd(0, nil))
 		case *frames.PerformAttach:
-			return fake.ReceiverAttach(0, tt.Name, 0, ReceiverSettleModeSecond, tt.Source.Filter)
+			return newResponse(fake.ReceiverAttach(0, tt.Name, 0, ReceiverSettleModeSecond, tt.Source.Filter))
 		case *frames.PerformDetach:
-			require.NotNil(t, tt.Error)
-			require.EqualValues(t, ErrCondNotAllowed, tt.Error.Condition)
-			return fake.PerformDetach(0, 0, nil)
+			return newResponse(fake.PerformDetach(0, 0, nil))
 		case *frames.PerformFlow, *fake.KeepAlive:
-			return nil, nil
+			return fake.Response{}, nil
 		case *frames.PerformDisposition:
-			return fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
+			return newResponse(fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{}))
 		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
 	conn := fake.NewNetConn(responder)
@@ -1115,21 +1116,21 @@ func TestReceiveInvalidMultiFrameMessage(t *testing.T) {
 func TestReceiveMultiFrameMessageAborted(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
-	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
-		if b != nil || err != nil {
-			return b, err
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		resp, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
+		if resp.Payload != nil || err != nil {
+			return resp, err
 		}
 		switch ff := req.(type) {
 		case *frames.PerformFlow, *fake.KeepAlive:
-			return nil, nil
+			return fake.Response{}, nil
 		case *frames.PerformDisposition:
 			if _, ok := ff.State.(*encoding.StateAccepted); !ok {
-				return nil, fmt.Errorf("unexpected State %T", ff.State)
+				return fake.Response{}, fmt.Errorf("unexpected State %T", ff.State)
 			}
-			return fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
+			return newResponse(fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{}))
 		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
 	conn := fake.NewNetConn(responder)
@@ -1177,22 +1178,22 @@ func TestReceiveMultiFrameMessageAborted(t *testing.T) {
 func TestReceiveMessageTooBig(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)
-	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
-		if b != nil || err != nil {
-			return b, err
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		resp, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
+		if resp.Payload != nil || err != nil {
+			return resp, err
 		}
 		switch ff := req.(type) {
 		case *frames.PerformFlow:
 			if *ff.NextIncomingID == deliveryID {
 				// this is the first flow frame, send our payload
 				bigPayload := make([]byte, 256)
-				return fake.PerformTransfer(0, linkHandle, deliveryID, bigPayload)
+				return newResponse(fake.PerformTransfer(0, linkHandle, deliveryID, bigPayload))
 			}
 			// ignore future flow frames as we have no response
-			return nil, nil
+			return fake.Response{}, nil
 		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
 	conn := fake.NewNetConn(responder)
@@ -1226,21 +1227,21 @@ func TestReceiveSuccessAcceptFails(t *testing.T) {
 
 	const linkHandle = 0
 	deliveryID := uint32(1)
-	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
-		if b != nil || err != nil {
-			return b, err
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		resp, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
+		if resp.Payload != nil || err != nil {
+			return resp, err
 		}
 		switch ff := req.(type) {
 		case *frames.PerformFlow:
 			if *ff.NextIncomingID == deliveryID {
 				// this is the first flow frame, send our payload
-				return fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
+				return newResponse(fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello")))
 			}
 			// ignore future flow frames as we have no response
-			return nil, nil
+			return fake.Response{}, nil
 		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
 	conn := fake.NewNetConn(responder)
@@ -1392,25 +1393,28 @@ func TestReceiveSuccessReceiverSettleModeSecondAcceptSlow(t *testing.T) {
 
 	const linkHandle = 0
 	deliveryID := uint32(1)
-	responder := func(remoteChannel uint16, req frames.FrameBody) ([]byte, error) {
-		b, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
-		if b != nil || err != nil {
-			return b, err
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		resp, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
+		if resp.Payload != nil || err != nil {
+			return resp, err
 		}
 		switch ff := req.(type) {
 		case *frames.PerformFlow:
 			if *ff.NextIncomingID == deliveryID {
 				// this is the first flow frame, send our payload
-				return fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
+				return newResponse(fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello")))
 			}
 			// ignore future flow frames as we have no response
-			return nil, nil
+			return fake.Response{}, nil
 		case *frames.PerformDisposition:
-			// delay so that waiting for the ack times out
-			time.Sleep(1 * time.Second)
-			return fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
+			b, err := fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateAccepted{})
+			if err != nil {
+				return fake.Response{}, err
+			}
+			// include a write delay so that waiting for the ack times out
+			return fake.Response{Payload: b, WriteDelay: 1 * time.Second}, nil
 		default:
-			return nil, fmt.Errorf("unhandled frame %T", req)
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
 	conn := fake.NewNetConn(responder)

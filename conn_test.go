@@ -996,3 +996,30 @@ func TestNewSessionWriteError(t *testing.T) {
 		t.Fatal("unexpected ack")
 	}
 }
+
+func TestGetWriteTimeout(t *testing.T) {
+	conn, err := newConn(nil, nil)
+	require.NoError(t, err)
+	duration, err := conn.getWriteTimeout(context.Background())
+	require.NoError(t, err)
+	require.EqualValues(t, defaultWriteTimeout, duration)
+	ctx, cancel := context.WithCancel(context.Background())
+	duration, err = conn.getWriteTimeout(ctx)
+	require.NoError(t, err)
+	require.EqualValues(t, defaultWriteTimeout, duration)
+	cancel()
+	duration, err = conn.getWriteTimeout(ctx)
+	require.ErrorIs(t, err, context.Canceled)
+	require.Zero(t, duration)
+	const timeout = 10 * time.Millisecond
+	ctx, cancel = context.WithTimeout(context.Background(), timeout)
+	duration, err = conn.getWriteTimeout(ctx)
+	require.NoError(t, err)
+	require.EqualValues(t, timeout, duration)
+	// sleep until after the timeout expires
+	time.Sleep(2 * timeout)
+	duration, err = conn.getWriteTimeout(ctx)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Zero(t, duration)
+	cancel()
+}

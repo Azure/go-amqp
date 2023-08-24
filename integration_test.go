@@ -845,7 +845,10 @@ func TestNewSessionWithCancelledContext(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 
-	for times := 0; times < 100; times++ {
+	// we use an iteration greater than the max number of sessions to ensure
+	// that no begin performatives are being sent. if they are then the peer
+	// will reject the session with a different error.
+	for times := 0; times < 10000; times++ {
 		ctx, cancel = context.WithCancel(context.Background())
 		cancel()
 		session, err := client.NewSession(ctx, nil)

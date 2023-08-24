@@ -1,5 +1,11 @@
 # Release History
 
+## 1.0.2 (Unreleased)
+
+### Bugs Fixed
+
+* Fixed an issue that could cause frames to be sent even when the provided `context.Context` was cancelled.
+
 ## 1.0.1 (2023-06-08)
 
 ### Bugs Fixed

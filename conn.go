@@ -755,7 +755,7 @@ func (c *Conn) connWriter() {
 		case env := <-c.txFrame:
 			timeout, ctxErr := c.getWriteTimeout(env.Ctx)
 			if ctxErr != nil {
-				debug.Log(1, "TX (connWriter %p) deadline exceeded: %s", c, env.Frame)
+				debug.Log(1, "TX (connWriter %p) context cancelled or deadline exceeded: %s", c, env.Frame)
 				if env.Sent != nil {
 					env.Sent <- ctxErr
 				}
@@ -1114,6 +1114,11 @@ func (c *Conn) readSingleFrame() (frames.Frame, error) {
 // or the default write timeout if the context has no deadline.
 // if the context has timed out or was cancelled, an error is returned.
 func (c *Conn) getWriteTimeout(ctx context.Context) (time.Duration, error) {
+	if ctx.Err() != nil {
+		// if the context is already cancelled we can just bail.
+		return 0, ctx.Err()
+	}
+
 	if deadline, ok := ctx.Deadline(); ok {
 		until := time.Until(deadline)
 		if until <= 0 {

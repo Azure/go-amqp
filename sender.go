@@ -317,7 +317,7 @@ type senderTestHooks struct {
 
 func (s *Sender) mux(hooks senderTestHooks) {
 	if hooks.MuxTransfer == nil {
-		hooks.MuxTransfer = nop
+		hooks.MuxTransfer = nopHook
 	}
 
 	defer func() {

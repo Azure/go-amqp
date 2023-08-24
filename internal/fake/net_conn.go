@@ -17,7 +17,7 @@ import (
 // Return a non-nil error to simulate a write error.
 // NOTE: resp is called on a separate goroutine so it MUST NOT access any *testing.T etc
 func NewNetConn(resp func(remoteChannel uint16, fr frames.FrameBody) (Response, error)) *NetConn {
-	return &NetConn{
+	netConn := &NetConn{
 		ReadErr:  make(chan error),
 		WriteErr: make(chan error, 1),
 		resp:     resp,
@@ -26,10 +26,17 @@ func NewNetConn(resp func(remoteChannel uint16, fr frames.FrameBody) (Response, 
 		// here.  this means that sometimes writes can still happen but there's
 		// no reader to consume them.  we used a buffered channel to prevent these
 		// writes from blocking shutdown. the size was arbitrarily picked.
-		readData:  make(chan []byte, 10),
-		readClose: make(chan struct{}),
+		readData: make(chan []byte, 10),
+		// used to serialize writes so the frames are returned in their specified order.
+		// buffering is necessary because write() will sleep when a write delay was
+		// specified and we don't want to stall Write(). the size was arbitrarily picked.
+		writeResp: make(chan Response, 10),
+		close:     make(chan struct{}),
 		readDL:    newNopTimer(), // default, no deadline
 	}
+
+	go netConn.write()
+	return netConn
 }
 
 // NetConn is a fake network connection that satisfies the net.Conn interface.
@@ -51,7 +58,8 @@ type NetConn struct {
 	resp      func(uint16, frames.FrameBody) (Response, error)
 	readDL    readTimer
 	readData  chan []byte
-	readClose chan struct{}
+	writeResp chan Response
+	close     chan struct{}
 	closed    bool
 }
 
@@ -101,14 +109,14 @@ type Response struct {
 // deadline expires which will return an error.
 func (n *NetConn) Read(b []byte) (int, error) {
 	select {
-	case <-n.readClose:
+	case <-n.close:
 		return 0, net.ErrClosed
 	default:
 		// not closed yet
 	}
 
 	select {
-	case <-n.readClose:
+	case <-n.close:
 		return 0, net.ErrClosed
 	case <-n.readDL.C():
 		return 0, errors.New("fake connection read deadline exceeded")
@@ -127,7 +135,7 @@ func (n *NetConn) Read(b []byte) (int, error) {
 //  3. a nil slice and nil error indicating the frame should be ignored
 func (n *NetConn) Write(b []byte) (int, error) {
 	select {
-	case <-n.readClose:
+	case <-n.close:
 		return 0, net.ErrClosed
 	default:
 		// not closed yet
@@ -149,15 +157,32 @@ func (n *NetConn) Write(b []byte) (int, error) {
 		return 0, err
 	}
 	if resp.Payload != nil {
-		go func(r Response) {
+		select {
+		case n.writeResp <- resp:
+			// resp was sent to write()
+		default:
+			// this means we incorrectly sized writeResp.
+			// we do this to ensure that we never stall
+			// waiting to write to writeResp.
+			panic("writeResp full")
+		}
+	}
+	return len(b), nil
+}
+
+func (n *NetConn) write() {
+	for {
+		select {
+		case <-n.close:
+			return
+		case resp := <-n.writeResp:
 			// any write delay MUST happen outside of NetConn.Write
 			// else all we do is stall Conn.connWriter() which doesn't
 			// actually simulate a delayed response to a frame.
-			time.Sleep(r.WriteDelay)
-			n.readData <- r.Payload
-		}(resp)
+			time.Sleep(resp.WriteDelay)
+			n.readData <- resp.Payload
+		}
 	}
-	return len(b), nil
 }
 
 // Close is called by conn.close.
@@ -166,7 +191,7 @@ func (n *NetConn) Close() error {
 		return errors.New("double close")
 	}
 	n.closed = true
-	close(n.readClose)
+	close(n.close)
 	if n.OnClose != nil {
 		return n.OnClose()
 	}

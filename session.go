@@ -247,6 +247,11 @@ func (s *Session) txFrameAndWait(ctx context.Context, fr frames.FrameBody) error
 // completes, an error is returned. If the Receiver was successfully
 // created, it will be cleaned up in future calls to NewReceiver.
 func (s *Session) NewReceiver(ctx context.Context, source string, opts *ReceiverOptions) (*Receiver, error) {
+	return newReceiverForSession(ctx, s, source, opts, receiverTestHooks{})
+}
+
+// split out so tests can add hooks
+func newReceiverForSession(ctx context.Context, s *Session, source string, opts *ReceiverOptions, hooks receiverTestHooks) (*Receiver, error) {
 	r, err := newReceiver(source, s, opts)
 	if err != nil {
 		return nil, err
@@ -255,7 +260,7 @@ func (s *Session) NewReceiver(ctx context.Context, source string, opts *Receiver
 		return nil, err
 	}
 
-	go r.mux(receiverTestHooks{})
+	go r.mux(hooks)
 
 	return r, nil
 }
@@ -269,6 +274,11 @@ func (s *Session) NewReceiver(ctx context.Context, source string, opts *Receiver
 // completes, an error is returned. If the Sender was successfully
 // created, it will be cleaned up in future calls to NewSender.
 func (s *Session) NewSender(ctx context.Context, target string, opts *SenderOptions) (*Sender, error) {
+	return newSenderForSession(ctx, s, target, opts, senderTestHooks{})
+}
+
+// split out so tests can add hooks
+func newSenderForSession(ctx context.Context, s *Session, target string, opts *SenderOptions, hooks senderTestHooks) (*Sender, error) {
 	l, err := newSender(target, s, opts)
 	if err != nil {
 		return nil, err
@@ -277,7 +287,7 @@ func (s *Session) NewSender(ctx context.Context, target string, opts *SenderOpti
 		return nil, err
 	}
 
-	go l.mux(senderTestHooks{})
+	go l.mux(hooks)
 
 	return l, nil
 }

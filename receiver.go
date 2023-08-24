@@ -475,7 +475,7 @@ func (r *Receiver) attach(ctx context.Context) error {
 	return nil
 }
 
-func nop() {}
+func nopHook() {}
 
 type receiverTestHooks struct {
 	MuxStart  func()
@@ -484,10 +484,10 @@ type receiverTestHooks struct {
 
 func (r *Receiver) mux(hooks receiverTestHooks) {
 	if hooks.MuxSelect == nil {
-		hooks.MuxSelect = nop
+		hooks.MuxSelect = nopHook
 	}
 	if hooks.MuxStart == nil {
-		hooks.MuxStart = nop
+		hooks.MuxStart = nopHook
 	}
 
 	defer func() {

@@ -944,15 +944,8 @@ func TestNewSessionTimedOut(t *testing.T) {
 	require.Nil(t, session)
 
 	// should have one session to clean up
-	// TODO: sync with mux after abandoned session has been created
-	time.Sleep(100 * time.Millisecond)
 	require.Len(t, client.abandonedSessions, 1)
 	require.Len(t, client.sessionsByChannel, 1)
-
-	// we sleep here to wait for the begin performative to
-	// arrive, thus creating the now abandoned session.
-	// TODO: add test hooks to session mux to eliminate the sleep
-	time.Sleep(100 * time.Millisecond)
 
 	// creating a new session cleans up the old one
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -960,9 +953,6 @@ func TestNewSessionTimedOut(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, session)
-
-	// TODO: sync with mux after abandoned session has been cleaned up
-	time.Sleep(100 * time.Millisecond)
 	require.Empty(t, client.abandonedSessions)
 	require.Len(t, client.sessionsByChannel, 1)
 }

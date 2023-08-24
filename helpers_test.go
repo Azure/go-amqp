@@ -1,7 +1,6 @@
 package amqp
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/Azure/go-amqp/internal/encoding"
@@ -111,34 +110,4 @@ func receiverFrameHandlerNoUnhandled(channel uint16, rsm encoding.ReceiverSettle
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-}
-
-// this is the same API as Session.NewReceiver() but with support for adding test hooks
-func newReceiverWithHooks(ctx context.Context, s *Session, source string, opts *ReceiverOptions, hooks receiverTestHooks) (*Receiver, error) {
-	r, err := newReceiver(source, s, opts)
-	if err != nil {
-		return nil, err
-	}
-	if err = r.attach(ctx); err != nil {
-		return nil, err
-	}
-
-	go r.mux(hooks)
-
-	return r, nil
-}
-
-// this is the same API as Session.NewSender() but with support for adding test hooks
-func newSenderWithHooks(ctx context.Context, s *Session, target string, opts *SenderOptions, hooks senderTestHooks) (*Sender, error) {
-	r, err := newSender(target, s, opts)
-	if err != nil {
-		return nil, err
-	}
-	if err = r.attach(ctx); err != nil {
-		return nil, err
-	}
-
-	go r.mux(hooks)
-
-	return r, nil
 }

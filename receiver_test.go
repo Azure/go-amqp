@@ -474,7 +474,7 @@ func TestReceiveSuccessReceiverSettleModeFirst(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	r, err := newReceiverWithHooks(ctx, session, "source", &ReceiverOptions{
+	r, err := newReceiverForSession(ctx, session, "source", &ReceiverOptions{
 		SettlementMode: ReceiverSettleModeFirst.Ptr(),
 	}, receiverTestHooks{MuxSelect: muxSem.OnLoop})
 	cancel()
@@ -550,7 +550,7 @@ func TestReceiveSuccessReceiverSettleModeSecondAccept(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	r, err := newReceiverWithHooks(ctx, session, "source", &ReceiverOptions{
+	r, err := newReceiverForSession(ctx, session, "source", &ReceiverOptions{
 		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 	}, receiverTestHooks{MuxSelect: muxSem.OnLoop})
 	cancel()
@@ -627,7 +627,7 @@ func TestReceiveSuccessReceiverSettleModeSecondAcceptOnClosedLink(t *testing.T) 
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	r, err := newReceiverWithHooks(ctx, session, "source", &ReceiverOptions{
+	r, err := newReceiverForSession(ctx, session, "source", &ReceiverOptions{
 		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 	}, receiverTestHooks{MuxSelect: muxSem.OnLoop})
 	cancel()
@@ -692,7 +692,7 @@ func TestReceiveSuccessReceiverSettleModeSecondReject(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	r, err := newReceiverWithHooks(ctx, session, "source", &ReceiverOptions{
+	r, err := newReceiverForSession(ctx, session, "source", &ReceiverOptions{
 		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 	}, receiverTestHooks{MuxSelect: muxSem.OnLoop})
 	cancel()
@@ -763,7 +763,7 @@ func TestReceiveSuccessReceiverSettleModeSecondRelease(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	r, err := newReceiverWithHooks(ctx, session, "source", &ReceiverOptions{
+	r, err := newReceiverForSession(ctx, session, "source", &ReceiverOptions{
 		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 	}, receiverTestHooks{MuxSelect: muxSem.OnLoop})
 	cancel()
@@ -839,7 +839,7 @@ func TestReceiveSuccessReceiverSettleModeSecondModify(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	r, err := newReceiverWithHooks(ctx, session, "source", &ReceiverOptions{
+	r, err := newReceiverForSession(ctx, session, "source", &ReceiverOptions{
 		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 	}, receiverTestHooks{MuxSelect: muxSem.OnLoop})
 	cancel()
@@ -945,7 +945,7 @@ func TestReceiveMultiFrameMessageSuccess(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	r, err := newReceiverWithHooks(ctx, session, "source", &ReceiverOptions{
+	r, err := newReceiverForSession(ctx, session, "source", &ReceiverOptions{
 		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 	}, receiverTestHooks{MuxSelect: muxSem.OnLoop})
 	cancel()
@@ -1254,7 +1254,7 @@ func TestReceiveSuccessAcceptFails(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	r, err := newReceiverWithHooks(ctx, session, "source", &ReceiverOptions{
+	r, err := newReceiverForSession(ctx, session, "source", &ReceiverOptions{
 		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 	}, receiverTestHooks{MuxSelect: muxSem.OnLoop})
 	cancel()
@@ -1427,7 +1427,7 @@ func TestReceiveSuccessReceiverSettleModeSecondAcceptSlow(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	r, err := newReceiverWithHooks(ctx, session, "source", &ReceiverOptions{
+	r, err := newReceiverForSession(ctx, session, "source", &ReceiverOptions{
 		SettlementMode: ReceiverSettleModeSecond.Ptr(),
 	}, receiverTestHooks{MuxSelect: muxSem.OnLoop})
 	cancel()

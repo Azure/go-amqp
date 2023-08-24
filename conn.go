@@ -551,7 +551,7 @@ func (c *Conn) connReader() {
 	var err error
 	for {
 		if err != nil {
-			debug.Log(1, "RX (connReader %p): terminal error: %v", c, err)
+			debug.Log(0, "RX (connReader %p): terminal error: %v", c, err)
 			c.rxErr = err
 			return
 		}
@@ -562,7 +562,7 @@ func (c *Conn) connReader() {
 			continue
 		}
 
-		debug.Log(1, "RX (connReader %p): %s", c, fr)
+		debug.Log(0, "RX (connReader %p): %s", c, fr)
 
 		var (
 			session *Session
@@ -745,7 +745,7 @@ func (c *Conn) connWriter() {
 	var err error
 	for {
 		if err != nil {
-			debug.Log(1, "TX (connWriter %p): terminal error: %v", c, err)
+			debug.Log(0, "TX (connWriter %p): terminal error: %v", c, err)
 			c.txErr = err
 			return
 		}
@@ -762,7 +762,7 @@ func (c *Conn) connWriter() {
 				continue
 			}
 
-			debug.Log(1, "TX (connWriter %p) timeout %s: %s", c, timeout, env.Frame)
+			debug.Log(0, "TX (connWriter %p) timeout %s: %s", c, timeout, env.Frame)
 			err = c.writeFrame(timeout, env.Frame)
 			if env.Sent != nil {
 				if err == nil {

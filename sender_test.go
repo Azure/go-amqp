@@ -168,7 +168,7 @@ func TestSenderSendConcurrentSessionClosed(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	snd, err := newSenderWithHooks(ctx, session, "target", nil, senderTestHooks{MuxTransfer: muxSem.OnLoop})
+	snd, err := newSenderForSession(ctx, session, "target", nil, senderTestHooks{MuxTransfer: muxSem.OnLoop})
 	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, snd)
@@ -1123,15 +1123,8 @@ func TestNewSenderTimedOut(t *testing.T) {
 	require.Nil(t, snd)
 
 	// should have one sender to clean up
-	// TODO: sync with mux after abandoned link has been created
-	time.Sleep(100 * time.Millisecond)
 	require.Len(t, session.abandonedLinks, 1)
 	require.Len(t, session.linksByKey, 1)
-
-	// we sleep here to wait for the attach performative to
-	// arrive, thus creating the now abandoned link.
-	// TODO: add test hook to eliminate the sleep
-	time.Sleep(100 * time.Millisecond)
 
 	// creating a new sender cleans up the old one
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -1139,9 +1132,6 @@ func TestNewSenderTimedOut(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 	require.NotNil(t, snd)
-
-	// TODO: sync with mux after abandoned link has been cleaned up
-	time.Sleep(100 * time.Millisecond)
 	require.Empty(t, session.abandonedLinks)
 	require.Len(t, session.linksByKey, 1)
 }

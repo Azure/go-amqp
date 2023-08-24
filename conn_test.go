@@ -1015,7 +1015,7 @@ func TestGetWriteTimeout(t *testing.T) {
 	ctx, cancel = context.WithTimeout(context.Background(), timeout)
 	duration, err = conn.getWriteTimeout(ctx)
 	require.NoError(t, err)
-	require.EqualValues(t, timeout, duration)
+	require.InDelta(t, timeout, duration, float64(time.Millisecond))
 	// sleep until after the timeout expires
 	time.Sleep(2 * timeout)
 	duration, err = conn.getWriteTimeout(ctx)

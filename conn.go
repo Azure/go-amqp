@@ -755,7 +755,7 @@ func (c *Conn) connWriter() {
 		case env := <-c.txFrame:
 			timeout, ctxErr := c.getWriteTimeout(env.Ctx)
 			if ctxErr != nil {
-				debug.Log(1, "TX (connWriter %p) context cancelled or deadline exceeded: %s", c, env.Frame)
+				debug.Log(1, "TX (connWriter %p) getWriteTimeout: %s: %s", c, ctxErr.Error(), env.Frame)
 				if env.Sent != nil {
 					env.Sent <- ctxErr
 				}

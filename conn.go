@@ -111,6 +111,7 @@ func Dial(ctx context.Context, addr string, opts *ConnOptions) (*Conn, error) {
 }
 
 // NewConn establishes a new AMQP client connection over conn.
+// NOTE: [Conn] takes ownership of the provided [net.Conn] and will close it as required.
 // opts: pass nil to accept the default values.
 func NewConn(ctx context.Context, conn net.Conn, opts *ConnOptions) (*Conn, error) {
 	c, err := newConn(conn, opts)

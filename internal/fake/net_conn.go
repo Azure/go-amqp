@@ -98,6 +98,9 @@ type Response struct {
 	WriteDelay time.Duration
 }
 
+// ErrAlreadyClosed is returned by Close() if [NetConn] is already closed.
+var ErrAlreadyClosed = errors.New("fake already closed")
+
 ///////////////////////////////////////////////////////
 // following methods are for the net.Conn interface
 ///////////////////////////////////////////////////////
@@ -188,7 +191,7 @@ func (n *NetConn) write() {
 // Close is called by conn.close.
 func (n *NetConn) Close() error {
 	if n.closed {
-		return errors.New("double close")
+		return ErrAlreadyClosed
 	}
 	n.closed = true
 	close(n.close)

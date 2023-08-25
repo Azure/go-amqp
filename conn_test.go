@@ -283,7 +283,7 @@ func TestStart(t *testing.T) {
 				// verify that the conn was closed
 				err := netConn.Close()
 				require.ErrorIs(t, err, fake.ErrAlreadyClosed)
-			} else if !tt.fails {
+			} else {
 				require.NoError(t, err)
 				// verify that the conn wasn't closed
 				err := netConn.Close()

@@ -12,6 +12,7 @@ import (
 	"github.com/Azure/go-amqp/internal/fake"
 	"github.com/Azure/go-amqp/internal/frames"
 	"github.com/Azure/go-amqp/internal/test"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1308,4 +1309,61 @@ func TestSenderSendFails(t *testing.T) {
 	cancel()
 
 	require.ErrorAs(t, client.Close(), &connErr)
+}
+
+func TestSenderSendCancelled(t *testing.T) {
+	// selectSem allows three signals: flow frame from peer, sending the transfer frame, rollback
+	selectSem := test.NewMuxSemaphore(3)
+	// transferSem blocks before the transfer frame is send to the session mux
+	transferSem := test.NewMuxSemaphore(0)
+
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
+	require.NoError(t, err)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := newSenderForSession(ctx, session, "target", nil, senderTestHooks{
+		MuxSelect:   selectSem.OnLoop,
+		MuxTransfer: transferSem.OnLoop,
+	})
+	cancel()
+	require.NoError(t, err)
+	require.NotNil(t, snd)
+
+	const linkCredit = uint32(100)
+	sendInitialFlowFrame(t, 0, netConn, 0, linkCredit)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	sendErr := make(chan error)
+	go func() {
+		sendErr <- snd.Send(ctx, NewMessage([]byte("hello")), nil)
+	}()
+
+	transferSem.Wait()
+
+	// the sender's mux is now paused, cancel the context so the frame isn't written to net.Conn
+	cancel()
+
+	// close semaphore and resume mux
+	transferSem.Release(-1)
+
+	// wait for the send error
+	require.ErrorIs(t, <-sendErr, context.Canceled)
+
+	// wait for the mux to pause after receiving the rollback signal
+	selectSem.Wait()
+
+	// verify that the delivery count and link credit have been rolled back
+	assert.Zero(t, snd.l.deliveryCount)
+	assert.EqualValues(t, linkCredit, snd.l.linkCredit)
+
+	selectSem.Release(-1)
 }

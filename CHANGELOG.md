@@ -6,6 +6,7 @@
 
 * Fixed an issue that could cause frames to be sent even when the provided `context.Context` was cancelled.
 * Fixed a potential hang in `Sender.Send()` that could happen in rare circumstances.
+* Ensure that `Sender`'s delivery count and link credit are updated when a transfer fails to send due to context cancellation/timeout.
 
 ## 1.0.1 (2023-06-08)
 

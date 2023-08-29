@@ -21,6 +21,7 @@ type Sender struct {
 	mu              sync.Mutex // protects buf and nextDeliveryTag
 	buf             buffer.Buffer
 	nextDeliveryTag uint64
+	rollback        chan struct{}
 }
 
 // LinkName() is the name of the link used for this Sender.
@@ -185,6 +186,14 @@ func (s *Sender) send(ctx context.Context, msg *Message, opts *SendOptions) (cha
 		select {
 		case <-frameCtx.Done:
 			if frameCtx.Err != nil {
+				if !fr.More {
+					select {
+					case s.rollback <- struct{}{}:
+						// the write never happend so signal the mux to roll back the delivery count and link credit
+					case <-s.l.close:
+						// the link is going down
+					}
+				}
 				return nil, frameCtx.Err
 			}
 			// frame was written to the network
@@ -226,7 +235,8 @@ func newSender(target string, session *Session, opts *SenderOptions) (*Sender, e
 	l.target = &frames.Target{Address: target}
 	l.source = new(frames.Source)
 	s := &Sender{
-		l: l,
+		l:        l,
+		rollback: make(chan struct{}),
 	}
 
 	if opts == nil {
@@ -317,10 +327,14 @@ func (s *Sender) attach(ctx context.Context) error {
 }
 
 type senderTestHooks struct {
+	MuxSelect   func()
 	MuxTransfer func()
 }
 
 func (s *Sender) mux(hooks senderTestHooks) {
+	if hooks.MuxSelect == nil {
+		hooks.MuxSelect = nopHook
+	}
 	if hooks.MuxTransfer == nil {
 		hooks.MuxTransfer = nopHook
 	}
@@ -349,6 +363,8 @@ Loop:
 			// the peer sending disposition frames.
 			outgoingTransfers = nil
 		}
+
+		hooks.MuxSelect()
 
 		select {
 		// received frame
@@ -402,6 +418,11 @@ Loop:
 		case <-s.l.session.done:
 			s.l.doneErr = s.l.session.doneErr
 			return
+
+		case <-s.rollback:
+			s.l.deliveryCount--
+			s.l.linkCredit++
+			debug.Log(3, "TX (Sender %p): rollback link: %s, link credit: %d", s, s.l.key.name, s.l.linkCredit)
 		}
 	}
 }

@@ -169,9 +169,8 @@ func (s *Sender) send(ctx context.Context, msg *Message, opts *SendOptions) (cha
 		// NOTE: we MUST send a copy of fr here since we modify it post send
 
 		frameCtx := frameContext{
-			Ctx:       ctx,
-			CtxErrSem: make(chan struct{}),
-			Sent:      make(chan struct{}),
+			Ctx:  ctx,
+			Done: make(chan struct{}),
 		}
 
 		select {
@@ -184,9 +183,10 @@ func (s *Sender) send(ctx context.Context, msg *Message, opts *SendOptions) (cha
 		}
 
 		select {
-		case <-frameCtx.CtxErrSem:
-			return nil, frameCtx.CtxErr
-		case <-frameCtx.Sent:
+		case <-frameCtx.Done:
+			if frameCtx.CtxErr != nil {
+				return nil, frameCtx.CtxErr
+			}
 			// frame was written to the network
 		case <-s.l.done:
 			return nil, s.l.doneErr

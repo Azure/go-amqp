@@ -228,18 +228,15 @@ func (s *Session) txFrame(frameCtx *frameContext, fr frames.FrameBody) {
 //   - fr is the frame to write to net.Conn
 func (s *Session) txFrameAndWait(ctx context.Context, fr frames.FrameBody) error {
 	frameCtx := frameContext{
-		Ctx:       ctx,
-		CtxErrSem: make(chan struct{}),
-		Sent:      make(chan struct{}),
+		Ctx:  ctx,
+		Done: make(chan struct{}),
 	}
 
 	s.txFrame(&frameCtx, fr)
 
 	select {
-	case <-frameCtx.CtxErrSem:
+	case <-frameCtx.Done:
 		return frameCtx.CtxErr
-	case <-frameCtx.Sent:
-		return nil
 	case <-s.conn.done:
 		return s.conn.doneErr
 	case <-s.done:
@@ -666,10 +663,11 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 			s.txFrame(env.FrameCtx, fr)
 
 			select {
-			case <-env.FrameCtx.CtxErrSem:
-				// transfer wasn't sent, don't update state
-				continue
-			case <-env.FrameCtx.Sent:
+			case <-env.FrameCtx.Done:
+				if env.FrameCtx.CtxErr != nil {
+					// transfer wasn't sent, don't update state
+					continue
+				}
 				// transfer was written to the network
 			case <-s.conn.done:
 				// the write failed, Conn is going down

@@ -366,9 +366,8 @@ func (l *link) txFrame(frameCtx *frameContext, fr frames.FrameBody) {
 // that frames are not sent during session shutdown.
 func (l *link) txFrameAndWait(ctx context.Context, fr frames.FrameBody) error {
 	frameCtx := frameContext{
-		Ctx:       ctx,
-		CtxErrSem: make(chan struct{}),
-		Sent:      make(chan struct{}),
+		Ctx:  ctx,
+		Done: make(chan struct{}),
 	}
 
 	// NOTE: there is no need to select on l.done as this is either
@@ -386,10 +385,8 @@ func (l *link) txFrameAndWait(ctx context.Context, fr frames.FrameBody) error {
 	}
 
 	select {
-	case <-frameCtx.CtxErrSem:
+	case <-frameCtx.Done:
 		return frameCtx.CtxErr
-	case <-frameCtx.Sent:
-		return nil
 	case <-l.session.done:
 		return l.session.doneErr
 	}

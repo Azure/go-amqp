@@ -715,23 +715,17 @@ func (c *Conn) readFrame() (frames.Frame, error) {
 // frameContext is an extended context.Context used to track writes to the network.
 // this is required in order to remove ambiguities that can arise when simply waiting
 // on context.Context.Done() to be signaled.
-// CtxErrSem and Sent channels work together. Either they're both nil or both populated.
 type frameContext struct {
 	// Ctx contains the caller's context and is used to set the write deadline.
 	Ctx context.Context
 
-	// CtxErrSem is closed IFF the write never happened due to context cancellation/timeout.
+	// Done is closed when the frame was successfully written to net.Conn or Ctx was cancelled/timed out.
 	// Can be nil, but shouldn't be for callers that care about confirmation of sending.
-	CtxErrSem chan struct{}
+	Done chan struct{}
 
-	// CtxErr contains the context error.  MUST be set before closing CtxErrSem and ONLY read if CtxErrSem is closed.
+	// CtxErr contains the context error.  MUST be set before closing Done and ONLY read if Done is closed.
 	// ONLY Conn.connWriter may write to this field.
 	CtxErr error
-
-	// Sent is closed if the frame was successfully written to net.Conn.
-	// Can be nil, but shouldn't be for callers that care about confirmation of sending.
-	// NOTE: when selecting on this channel you MUST also select on Conn.done!
-	Sent chan struct{}
 }
 
 // frameEnvelope is used when sending a frame to connWriter to be written to net.Conn
@@ -775,18 +769,18 @@ func (c *Conn) connWriter() {
 			timeout, ctxErr := c.getWriteTimeout(env.FrameCtx.Ctx)
 			if ctxErr != nil {
 				debug.Log(1, "TX (connWriter %p) getWriteTimeout: %s: %s", c, ctxErr.Error(), env.Frame)
-				if env.FrameCtx.CtxErrSem != nil {
+				if env.FrameCtx.Done != nil {
 					// the error MUST be set before closing the channel
 					env.FrameCtx.CtxErr = ctxErr
-					close(env.FrameCtx.CtxErrSem)
+					close(env.FrameCtx.Done)
 				}
 				continue
 			}
 
 			debug.Log(0, "TX (connWriter %p) timeout %s: %s", c, timeout, env.Frame)
 			err = c.writeFrame(timeout, env.Frame)
-			if err == nil && env.FrameCtx.Sent != nil {
-				close(env.FrameCtx.Sent)
+			if err == nil && env.FrameCtx.Done != nil {
+				close(env.FrameCtx.Done)
 			}
 			// in the event of write failure, Conn will close and a
 			// *ConnError will be propagated to all of the sessions/link.

@@ -250,9 +250,8 @@ func (r *Receiver) sendDisposition(ctx context.Context, first uint32, last *uint
 	}
 
 	frameCtx := frameContext{
-		Ctx:       ctx,
-		CtxErrSem: make(chan struct{}),
-		Sent:      make(chan struct{}),
+		Ctx:  ctx,
+		Done: make(chan struct{}),
 	}
 
 	select {
@@ -263,10 +262,8 @@ func (r *Receiver) sendDisposition(ctx context.Context, first uint32, last *uint
 	}
 
 	select {
-	case <-frameCtx.CtxErrSem:
+	case <-frameCtx.Done:
 		return frameCtx.CtxErr
-	case <-frameCtx.Sent:
-		return nil
 	case <-r.l.done:
 		return r.l.doneErr
 	}

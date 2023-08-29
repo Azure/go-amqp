@@ -1260,3 +1260,52 @@ func TestSenderUnexpectedFrame(t *testing.T) {
 	require.ErrorContains(t, err, "unexpected frame *frames.PerformTransfer")
 	require.NoError(t, client.Close())
 }
+
+func TestSenderSendFails(t *testing.T) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		resp, err := senderFrameHandler(0, SenderSettleModeUnsettled)(remoteChannel, req)
+		if err != nil || resp.Payload != nil {
+			return resp, err
+		}
+		switch req.(type) {
+		case *frames.PerformTransfer:
+			return fake.Response{}, errors.New("send failed")
+		default:
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+	netConn := fake.NewNetConn(responder)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
+	require.NoError(t, err)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx, "target", nil)
+	cancel()
+	require.NoError(t, err)
+
+	const linkCredit = 100
+	sendInitialFlowFrame(t, 0, netConn, 0, linkCredit)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+	msg := NewMessage([]byte("test"))
+	connErr := &ConnError{}
+	require.ErrorAs(t, snd.Send(ctx, msg, nil), &connErr)
+	cancel()
+
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+	require.ErrorAs(t, session.Close(ctx), &connErr)
+	cancel()
+
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+	require.ErrorAs(t, snd.Close(ctx), &connErr)
+	cancel()
+
+	require.ErrorAs(t, client.Close(), &connErr)
+}

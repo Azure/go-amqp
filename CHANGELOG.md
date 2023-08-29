@@ -5,6 +5,7 @@
 ### Bugs Fixed
 
 * Fixed an issue that could cause frames to be sent even when the provided `context.Context` was cancelled.
+* Fixed a potential hang in `Sender.Send()` that could happen in rare circumstances.
 
 ## 1.0.1 (2023-06-08)
 

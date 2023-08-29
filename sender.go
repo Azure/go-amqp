@@ -168,9 +168,14 @@ func (s *Sender) send(ctx context.Context, msg *Message, opts *SendOptions) (cha
 
 		// NOTE: we MUST send a copy of fr here since we modify it post send
 
-		sent := make(chan error, 1)
+		frameCtx := frameContext{
+			Ctx:       ctx,
+			CtxErrSem: make(chan struct{}),
+			Sent:      make(chan struct{}),
+		}
+
 		select {
-		case s.transfers <- transferEnvelope{Ctx: ctx, InputHandle: s.l.inputHandle, Frame: fr, Sent: sent}:
+		case s.transfers <- transferEnvelope{FrameCtx: &frameCtx, InputHandle: s.l.inputHandle, Frame: fr}:
 			// frame was sent to our mux
 		case <-s.l.done:
 			return nil, s.l.doneErr
@@ -179,10 +184,10 @@ func (s *Sender) send(ctx context.Context, msg *Message, opts *SendOptions) (cha
 		}
 
 		select {
-		case err := <-sent:
-			if err != nil {
-				return nil, err
-			}
+		case <-frameCtx.CtxErrSem:
+			return nil, frameCtx.CtxErr
+		case <-frameCtx.Sent:
+			// frame was written to the network
 		case <-s.l.done:
 			return nil, s.l.doneErr
 		}
@@ -392,7 +397,7 @@ Loop:
 				Handle: s.l.outputHandle,
 				Closed: true,
 			}
-			s.l.txFrame(context.Background(), fr, nil)
+			s.l.txFrame(&frameContext{Ctx: context.Background()}, fr)
 
 		case <-s.l.session.done:
 			s.l.doneErr = s.l.session.doneErr
@@ -437,7 +442,7 @@ func (s *Sender) muxHandleFrame(fr frames.FrameBody) error {
 		}
 
 		select {
-		case s.l.session.tx <- frameBodyEnvelope{Ctx: context.Background(), FrameBody: resp}:
+		case s.l.session.tx <- frameBodyEnvelope{FrameCtx: &frameContext{Ctx: context.Background()}, FrameBody: resp}:
 			debug.Log(2, "TX (Sender %p): mux frame to Session (%p): %d, %s", s, s.l.session, s.l.session.channel, resp)
 		case <-s.l.close:
 			return nil
@@ -461,7 +466,7 @@ func (s *Sender) muxHandleFrame(fr frames.FrameBody) error {
 		}
 
 		select {
-		case s.l.session.tx <- frameBodyEnvelope{Ctx: context.Background(), FrameBody: dr}:
+		case s.l.session.tx <- frameBodyEnvelope{FrameCtx: &frameContext{Ctx: context.Background()}, FrameBody: dr}:
 			debug.Log(2, "TX (Sender %p): mux frame to Session (%p): %d, %s", s, s.l.session, s.l.session.channel, dr)
 		case <-s.l.close:
 			return nil

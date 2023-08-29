@@ -277,7 +277,7 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 			Handle: l.outputHandle,
 			Closed: true,
 		}
-		l.txFrame(context.Background(), dr, nil)
+		l.txFrame(&frameContext{Ctx: context.Background()}, dr)
 		return &LinkError{RemoteErr: fr.Error}
 
 	default:
@@ -341,25 +341,22 @@ func (l *link) closeWithError(cnd ErrCond, desc string) {
 	}
 	l.closeInProgress = true
 	l.doneErr = &LinkError{inner: fmt.Errorf("%s: %s", cnd, desc)}
-	l.txFrame(context.Background(), dr, nil)
+	l.txFrame(&frameContext{Ctx: context.Background()}, dr)
 }
 
 // txFrame sends the specified frame via the link's session.
 // you MUST call this instead of session.txFrame() to ensure
 // that frames are not sent during session shutdown.
-func (l *link) txFrame(ctx context.Context, fr frames.FrameBody, sent chan error) {
+func (l *link) txFrame(frameCtx *frameContext, fr frames.FrameBody) {
 	// NOTE: there is no need to select on l.done as this is either
 	// called from a link's mux or before the mux has even started.
 	select {
 	case <-l.session.done:
-		if sent != nil {
-			sent <- l.session.doneErr
-		}
+		// the link's session has terminated, let that propagate to the link's mux
 	case <-l.session.endSent:
 		// we swallow this to prevent the link's mux from terminating.
 		// l.session.done will soon close so this is temporary.
-		return
-	case l.session.tx <- frameBodyEnvelope{Ctx: ctx, FrameBody: fr, Sent: sent}:
+	case l.session.tx <- frameBodyEnvelope{FrameCtx: frameCtx, FrameBody: fr}:
 		debug.Log(2, "TX (link %p): mux frame to Session (%p): %s", l, l.session, fr)
 	}
 }
@@ -368,9 +365,15 @@ func (l *link) txFrame(ctx context.Context, fr frames.FrameBody, sent chan error
 // you MUST call this instead of session.txFrame() to ensure
 // that frames are not sent during session shutdown.
 func (l *link) txFrameAndWait(ctx context.Context, fr frames.FrameBody) error {
+	frameCtx := frameContext{
+		Ctx:       ctx,
+		CtxErrSem: make(chan struct{}),
+		Sent:      make(chan struct{}),
+	}
+
 	// NOTE: there is no need to select on l.done as this is either
 	// called from a link's mux or before the mux has even started.
-	sent := make(chan error, 1)
+
 	select {
 	case <-l.session.done:
 		return l.session.doneErr
@@ -378,15 +381,15 @@ func (l *link) txFrameAndWait(ctx context.Context, fr frames.FrameBody) error {
 		// we swallow this to prevent the link's mux from terminating.
 		// l.session.done will soon close so this is temporary.
 		return nil
-	case l.session.tx <- frameBodyEnvelope{Ctx: ctx, FrameBody: fr, Sent: sent}:
+	case l.session.tx <- frameBodyEnvelope{FrameCtx: &frameCtx, FrameBody: fr}:
 		debug.Log(2, "TX (link %p): mux frame to Session (%p): %s", l, l.session, fr)
 	}
 
 	select {
-	case err := <-sent:
-		return err
-	case <-l.done:
-		return l.doneErr
+	case <-frameCtx.CtxErrSem:
+		return frameCtx.CtxErr
+	case <-frameCtx.Sent:
+		return nil
 	case <-l.session.done:
 		return l.session.doneErr
 	}

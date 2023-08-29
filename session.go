@@ -211,26 +211,35 @@ func (s *Session) Close(ctx context.Context) error {
 // txFrame sends a frame to the connWriter.
 //   - ctx is used to provide the write deadline
 //   - fr is the frame to write to net.Conn
-//   - sent is the optional channel that will contain the error if the write fails
-func (s *Session) txFrame(ctx context.Context, fr frames.FrameBody, sent chan error) {
+func (s *Session) txFrame(frameCtx *frameContext, fr frames.FrameBody) {
 	debug.Log(2, "TX (Session %p) mux frame to Conn (%p): %s", s, s.conn, fr)
-	s.conn.sendFrame(ctx, frames.Frame{
-		Type:    frames.TypeAMQP,
-		Channel: s.channel,
-		Body:    fr,
-	}, sent)
+	s.conn.sendFrame(frameEnvelope{
+		FrameCtx: frameCtx,
+		Frame: frames.Frame{
+			Type:    frames.TypeAMQP,
+			Channel: s.channel,
+			Body:    fr,
+		},
+	})
 }
 
 // txFrameAndWait sends a frame to the connWriter and waits for the write to complete
 //   - ctx is used to provide the write deadline
 //   - fr is the frame to write to net.Conn
 func (s *Session) txFrameAndWait(ctx context.Context, fr frames.FrameBody) error {
-	sent := make(chan error, 1)
-	s.txFrame(ctx, fr, sent)
+	frameCtx := frameContext{
+		Ctx:       ctx,
+		CtxErrSem: make(chan struct{}),
+		Sent:      make(chan struct{}),
+	}
+
+	s.txFrame(&frameCtx, fr)
 
 	select {
-	case err := <-sent:
-		return err
+	case <-frameCtx.CtxErrSem:
+		return frameCtx.CtxErr
+	case <-frameCtx.Sent:
+		return nil
 	case <-s.conn.done:
 		return s.conn.doneErr
 	case <-s.done:
@@ -345,7 +354,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 		closeInProgress = true
 		s.doneErr = e2
-		s.txFrame(context.Background(), &frames.PerformEnd{Error: e1}, nil)
+		s.txFrame(&frameContext{Ctx: context.Background()}, &frames.PerformEnd{Error: e1})
 		close(s.endSent)
 	}
 
@@ -391,7 +400,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 			}
 			// session is being closed by the client
 			closeInProgress = true
-			s.txFrame(context.Background(), &frames.PerformEnd{}, nil)
+			s.txFrame(&frameContext{Ctx: context.Background()}, &frames.PerformEnd{})
 			close(s.endSent)
 
 		// incoming frame
@@ -506,7 +515,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 						NextOutgoingID: nextOutgoingID,
 						OutgoingWindow: s.outgoingWindow,
 					}
-					s.txFrame(context.Background(), resp, nil)
+					s.txFrame(&frameContext{Ctx: context.Background()}, resp)
 				}
 
 			case *frames.PerformAttach:
@@ -575,7 +584,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 						NextOutgoingID: nextOutgoingID,
 						OutgoingWindow: s.outgoingWindow,
 					}
-					s.txFrame(context.Background(), flow, nil)
+					s.txFrame(&frameContext{Ctx: context.Background()}, flow)
 				}
 
 			case *frames.PerformDetach:
@@ -613,7 +622,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				}
 
 				fr := frames.PerformEnd{}
-				s.txFrame(context.Background(), &fr, nil)
+				s.txFrame(&frameContext{Ctx: context.Background()}, &fr)
 
 				// per spec, when end is received, we're no longer allowed to receive frames
 				return
@@ -654,13 +663,17 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				delete(inputHandleFromDeliveryID, deliveryID)
 			}
 
-			s.txFrame(env.Ctx, fr, env.Sent)
-			if sendErr := <-env.Sent; sendErr != nil {
-				s.doneErr = sendErr
+			s.txFrame(env.FrameCtx, fr)
 
-				// put the error back as our sender will read from this channel
-				env.Sent <- sendErr
-				return
+			select {
+			case <-env.FrameCtx.CtxErrSem:
+				// transfer wasn't sent, don't update state
+				continue
+			case <-env.FrameCtx.Sent:
+				// transfer was written to the network
+			case <-s.conn.done:
+				// the write failed, Conn is going down
+				continue
 			}
 
 			// if not settled, add done chan to map
@@ -707,18 +720,18 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 						}
 					}
 				}
-				s.txFrame(env.Ctx, fr, env.Sent)
+				s.txFrame(env.FrameCtx, fr)
 			case *frames.PerformFlow:
 				niID := nextIncomingID
 				fr.NextIncomingID = &niID
 				fr.IncomingWindow = s.incomingWindow
 				fr.NextOutgoingID = nextOutgoingID
 				fr.OutgoingWindow = s.outgoingWindow
-				s.txFrame(context.Background(), fr, env.Sent)
+				s.txFrame(env.FrameCtx, fr)
 			case *frames.PerformTransfer:
 				panic("transfer frames must use txTransfer")
 			default:
-				s.txFrame(context.Background(), fr, env.Sent)
+				s.txFrame(env.FrameCtx, fr)
 			}
 		}
 	}
@@ -792,28 +805,18 @@ func (s *Session) muxFrameToLink(l *link, fr frames.FrameBody) {
 
 // transferEnvelope is used by senders to send transfer frames
 type transferEnvelope struct {
-	Ctx context.Context
+	FrameCtx *frameContext
 
 	// the link's remote handle
 	InputHandle uint32
 
 	Frame frames.PerformTransfer
-
-	// Sent is *never* nil as we use this for confirmation of sending
-	// NOTE: use a buffered channel of size 1 when populating
-	Sent chan error
 }
 
 // frameBodyEnvelope is used by senders and receivers to send frames.
 type frameBodyEnvelope struct {
-	Ctx       context.Context
+	FrameCtx  *frameContext
 	FrameBody frames.FrameBody
-
-	// Sent *can* be nil depending on what frame is being sent.
-	// e.g. sending a disposition frame frame a receiver's settlement
-	// APIs will have a non-nil channel vs sending a flow frame
-	// NOTE: use a buffered channel of size 1 when populating
-	Sent chan error
 }
 
 // the address of this var is a sentinel value indicating

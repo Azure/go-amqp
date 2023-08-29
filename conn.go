@@ -712,14 +712,32 @@ func (c *Conn) readFrame() (frames.Frame, error) {
 	}
 }
 
+// frameContext is an extended context.Context used to track writes to the network.
+// this is required in order to remove ambiguities that can arise when simply waiting
+// on context.Context.Done() to be signaled.
+// CtxErrSem and Sent channels work together. Either they're both nil or both populated.
+type frameContext struct {
+	// Ctx contains the caller's context and is used to set the write deadline.
+	Ctx context.Context
+
+	// CtxErrSem is closed IFF the write never happened due to context cancellation/timeout.
+	// Can be nil, but shouldn't be for callers that care about confirmation of sending.
+	CtxErrSem chan struct{}
+
+	// CtxErr contains the context error.  MUST be set before closing CtxErrSem and ONLY read if CtxErrSem is closed.
+	// ONLY Conn.connWriter may write to this field.
+	CtxErr error
+
+	// Sent is closed if the frame was successfully written to net.Conn.
+	// Can be nil, but shouldn't be for callers that care about confirmation of sending.
+	// NOTE: when selecting on this channel you MUST also select on Conn.done!
+	Sent chan struct{}
+}
+
 // frameEnvelope is used when sending a frame to connWriter to be written to net.Conn
 type frameEnvelope struct {
-	Ctx   context.Context
-	Frame frames.Frame
-
-	// optional channel that is closed on successful write to net.Conn or contains the write error
-	// NOTE: use a buffered channel of size 1 when populating
-	Sent chan error
+	FrameCtx *frameContext
+	Frame    frames.Frame
 }
 
 func (c *Conn) connWriter() {
@@ -754,24 +772,24 @@ func (c *Conn) connWriter() {
 		select {
 		// frame write request
 		case env := <-c.txFrame:
-			timeout, ctxErr := c.getWriteTimeout(env.Ctx)
+			timeout, ctxErr := c.getWriteTimeout(env.FrameCtx.Ctx)
 			if ctxErr != nil {
 				debug.Log(1, "TX (connWriter %p) getWriteTimeout: %s: %s", c, ctxErr.Error(), env.Frame)
-				if env.Sent != nil {
-					env.Sent <- ctxErr
+				if env.FrameCtx.CtxErrSem != nil {
+					// the error MUST be set before closing the channel
+					env.FrameCtx.CtxErr = ctxErr
+					close(env.FrameCtx.CtxErrSem)
 				}
 				continue
 			}
 
 			debug.Log(0, "TX (connWriter %p) timeout %s: %s", c, timeout, env.Frame)
 			err = c.writeFrame(timeout, env.Frame)
-			if env.Sent != nil {
-				if err == nil {
-					close(env.Sent)
-				} else {
-					env.Sent <- err
-				}
+			if err == nil && env.FrameCtx.Sent != nil {
+				close(env.FrameCtx.Sent)
 			}
+			// in the event of write failure, Conn will close and a
+			// *ConnError will be propagated to all of the sessions/link.
 
 		// keepalive timer
 		case <-keepalive:
@@ -852,17 +870,12 @@ func (c *Conn) writeProtoHeader(pID protoID) error {
 var keepaliveFrame = []byte{0x00, 0x00, 0x00, 0x08, 0x02, 0x00, 0x00, 0x00}
 
 // SendFrame is used by sessions and links to send frames across the network.
-//   - ctx is used to provide the write deadline
-//   - fr is the frame to write to net.Conn
-//   - sent is the optional channel that will contain the error if the write fails
-func (c *Conn) sendFrame(ctx context.Context, fr frames.Frame, sent chan error) {
+func (c *Conn) sendFrame(frameEnv frameEnvelope) {
 	select {
-	case c.txFrame <- frameEnvelope{Ctx: ctx, Frame: fr, Sent: sent}:
-		debug.Log(2, "TX (Conn %p): mux frame to connWriter: %s", c, fr)
+	case c.txFrame <- frameEnv:
+		debug.Log(2, "TX (Conn %p): mux frame to connWriter: %s", c, frameEnv.Frame)
 	case <-c.done:
-		if sent != nil {
-			sent <- c.doneErr
-		}
+		// Conn has closed
 	}
 }
 

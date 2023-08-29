@@ -189,7 +189,7 @@ func (s *Sender) send(ctx context.Context, msg *Message, opts *SendOptions) (cha
 				if !fr.More {
 					select {
 					case s.rollback <- struct{}{}:
-						// the write never happend so signal the mux to roll back the delivery count and link credit
+						// the write never happened so signal the mux to roll back the delivery count and link credit
 					case <-s.l.close:
 						// the link is going down
 					}

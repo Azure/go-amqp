@@ -236,7 +236,7 @@ func (s *Session) txFrameAndWait(ctx context.Context, fr frames.FrameBody) error
 
 	select {
 	case <-frameCtx.Done:
-		return frameCtx.CtxErr
+		return frameCtx.Err
 	case <-s.conn.done:
 		return s.conn.doneErr
 	case <-s.done:
@@ -664,7 +664,7 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 			select {
 			case <-env.FrameCtx.Done:
-				if env.FrameCtx.CtxErr != nil {
+				if env.FrameCtx.Err != nil {
 					// transfer wasn't sent, don't update state
 					continue
 				}

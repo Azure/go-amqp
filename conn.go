@@ -723,9 +723,9 @@ type frameContext struct {
 	// Can be nil, but shouldn't be for callers that care about confirmation of sending.
 	Done chan struct{}
 
-	// CtxErr contains the context error.  MUST be set before closing Done and ONLY read if Done is closed.
+	// Err contains the context error.  MUST be set before closing Done and ONLY read if Done is closed.
 	// ONLY Conn.connWriter may write to this field.
-	CtxErr error
+	Err error
 }
 
 // frameEnvelope is used when sending a frame to connWriter to be written to net.Conn
@@ -771,7 +771,7 @@ func (c *Conn) connWriter() {
 				debug.Log(1, "TX (connWriter %p) getWriteTimeout: %s: %s", c, ctxErr.Error(), env.Frame)
 				if env.FrameCtx.Done != nil {
 					// the error MUST be set before closing the channel
-					env.FrameCtx.CtxErr = ctxErr
+					env.FrameCtx.Err = ctxErr
 					close(env.FrameCtx.Done)
 				}
 				continue

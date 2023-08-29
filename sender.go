@@ -184,8 +184,8 @@ func (s *Sender) send(ctx context.Context, msg *Message, opts *SendOptions) (cha
 
 		select {
 		case <-frameCtx.Done:
-			if frameCtx.CtxErr != nil {
-				return nil, frameCtx.CtxErr
+			if frameCtx.Err != nil {
+				return nil, frameCtx.Err
 			}
 			// frame was written to the network
 		case <-s.l.done:

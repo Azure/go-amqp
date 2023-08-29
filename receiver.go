@@ -263,7 +263,7 @@ func (r *Receiver) sendDisposition(ctx context.Context, first uint32, last *uint
 
 	select {
 	case <-frameCtx.Done:
-		return frameCtx.CtxErr
+		return frameCtx.Err
 	case <-r.l.done:
 		return r.l.doneErr
 	}

@@ -386,7 +386,7 @@ func (l *link) txFrameAndWait(ctx context.Context, fr frames.FrameBody) error {
 
 	select {
 	case <-frameCtx.Done:
-		return frameCtx.CtxErr
+		return frameCtx.Err
 	case <-l.session.done:
 		return l.session.doneErr
 	}

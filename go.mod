@@ -5,6 +5,7 @@ go 1.18
 require (
 	github.com/fortytw2/leaktest v1.3.0
 	github.com/google/go-cmp v0.5.9
+	github.com/joho/godotenv v1.5.1
 	github.com/stretchr/testify v1.8.4
 )
 

@@ -67,6 +67,17 @@ func (b *Buffer) PeekByte() (byte, error) {
 	return b.b[b.i], nil
 }
 
+// Pos gets the current position, for use with [Buffer.ResetPos].
+func (b *Buffer) Pos() int {
+	return b.i
+}
+
+// ResetPos resets our internal offset to the location specified by 'i'.
+// NOTE: the only safe way to get 'i' is to use [Buffer.Pos].
+func (b *Buffer) ResetPos(i int) {
+	b.i = i
+}
+
 func (b *Buffer) ReadUint16() (uint16, error) {
 	if b.readCheck(2) {
 		return 0, io.EOF

@@ -82,9 +82,10 @@ const (
 	TypeCodeEnd         AMQPType = 0x17
 	TypeCodeClose       AMQPType = 0x18
 
-	TypeCodeSource AMQPType = 0x28
-	TypeCodeTarget AMQPType = 0x29
-	TypeCodeError  AMQPType = 0x1d
+	TypeCodeSource            AMQPType = 0x28
+	TypeCodeTarget            AMQPType = 0x29
+	TypeCodeCoordinatorTarget AMQPType = 0x30
+	TypeCodeError             AMQPType = 0x1d
 
 	TypeCodeMessageHeader         AMQPType = 0x70
 	TypeCodeDeliveryAnnotations   AMQPType = 0x71
@@ -101,6 +102,15 @@ const (
 	TypeCodeStateRejected AMQPType = 0x25
 	TypeCodeStateReleased AMQPType = 0x26
 	TypeCodeStateModified AMQPType = 0x27
+
+	// transactions
+
+	// we send this
+	TypeCodeTransactionDeclare AMQPType = 0x31
+	// and receive this as a Disposition result.
+	TypeCodeStateDeclared            AMQPType = 0x33
+	TypeCodeTransactionDischarge     AMQPType = 0x32
+	TypeCodeTransactionDeliveryState AMQPType = 0x34
 
 	TypeCodeSASLMechanism AMQPType = 0x40
 	TypeCodeSASLInit      AMQPType = 0x41
@@ -356,6 +366,31 @@ func (s *SASLCode) Unmarshal(r *buffer.Buffer) error {
 // TODO: http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transactions-v1.0-os.html#type-declared
 type DeliveryState interface {
 	deliveryState() // marker method
+}
+
+// http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transactions-v1.0-os.html#type-transactional-state
+type TransactionDeliveryState struct {
+	TransactionID any
+
+	// TODO: omit for now - we will need this later to be fully compliant, but we might also not need to "override"
+	// this.
+	Outcome DeliveryState
+}
+
+func (t *TransactionDeliveryState) deliveryState() {}
+
+func (t *TransactionDeliveryState) Marshal(wr *buffer.Buffer) error {
+	return MarshalComposite(wr, TypeCodeTransactionDeliveryState, []MarshalField{
+		{Value: t.TransactionID, Omit: t.TransactionID == nil},
+		// {Value: t.Outcome, Omit: t.Outcome == nil},
+	})
+}
+
+func (t *TransactionDeliveryState) Unmarshal(r *buffer.Buffer) error {
+	return UnmarshalComposite(r, TypeCodeTransactionDeliveryState, []UnmarshalField{
+		{Field: &t.TransactionID},
+		{Field: &t.Outcome},
+	}...)
 }
 
 type Unsettled map[string]DeliveryState
@@ -679,6 +714,20 @@ func (sr *StateReleased) Unmarshal(r *buffer.Buffer) error {
 
 func (sr *StateReleased) String() string {
 	return "Released"
+}
+
+type StateDeclared struct {
+	// TransactionID is the allocated transaction ID from the transaction coordinator.
+	TransactionID []byte
+}
+
+func (sd *StateDeclared) deliveryState() {}
+
+// <field name="txn-id" type="*" requires="txn-id" mandatory="true"/>
+func (sd *StateDeclared) Unmarshal(r *buffer.Buffer) error {
+	return UnmarshalComposite(r, TypeCodeStateDeclared,
+		UnmarshalField{Field: &sd.TransactionID, HandleNull: func() error { return errors.New("StateDeclared.TransactionID is required") }},
+	)
 }
 
 /*

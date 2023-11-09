@@ -298,6 +298,28 @@ func newSenderForSession(ctx context.Context, s *Session, target string, opts *S
 	return l, nil
 }
 
+// NewTransactionController creates a transaction controller, which can declare
+// and discharge transactions.
+func (s *Session) NewTransactionController(ctx context.Context, opts *TransactionControllerOptions) (*TransactionController, error) {
+	return newTransactionControllerForSession(ctx, s, opts, senderTestHooks{})
+}
+
+func newTransactionControllerForSession(ctx context.Context, s *Session, opts *TransactionControllerOptions, hooks senderTestHooks) (*TransactionController, error) {
+	sender, err := newTransactionControllerSender(s, opts)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if err := sender.attach(ctx); err != nil {
+		return nil, err
+	}
+
+	go sender.mux(hooks)
+
+	return &TransactionController{sender: sender}, nil
+}
+
 func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 	defer func() {
 		if s.doneErr == nil {

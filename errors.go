@@ -42,6 +42,12 @@ const (
 	ErrCondMessageSizeExceeded   ErrCond = "amqp:link:message-size-exceeded"
 	ErrCondStolen                ErrCond = "amqp:link:stolen"
 	ErrCondTransferLimitExceeded ErrCond = "amqp:link:transfer-limit-exceeded"
+
+	// Transaction related errors
+	// http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transactions-v1.0-os.html#type-transaction-error
+	ErrCondTransactionUnknownID ErrCond = "amqp:transaction:unknown-id"
+	ErrCondTransactionRollback  ErrCond = "amqp:transaction:rollback"
+	ErrCondTransactionTimeout   ErrCond = "amqp:transaction:timeout"
 )
 
 // Error is an AMQP error.

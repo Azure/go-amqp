@@ -308,6 +308,9 @@ type Target struct {
 	// the extension capabilities the sender supports/desires
 	//
 	// http://www.amqp.org/specification/1.0/target-capabilities
+	//
+	// If [TransactionsController] is set to true then these fields txn-capability symbols, as described here:
+	// http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transactions-v1.0-os.html#type-txn-capability
 	Capabilities encoding.MultiSymbol
 }
 
@@ -345,6 +348,37 @@ func (t Target) String() string {
 		t.Dynamic,
 		t.DynamicNodeProperties,
 		t.Capabilities,
+	)
+}
+
+// CoordinatorTarget configures target information for [amqp.TransactionController]s.
+//
+// <type name="coordinator" class="composite" source="list" provides="target">
+// <descriptor name="amqp:coordinator:list" code="0x00000000:0x00000030"/>
+// <field name="capabilities" type="symbol" requires="txn-capability" multiple="true"/>
+// </type>
+//
+// Spec: http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transactions-v1.0-os.html#type-coordinator
+type CoordinatorTarget struct {
+	// the extension capabilities the transaction coordinator supports/desires
+	//
+	// http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transactions-v1.0-os.html#type-txn-capability
+	Capabilities encoding.MultiSymbol
+}
+
+func (ct *CoordinatorTarget) Marshal(wr *buffer.Buffer) error {
+	return encoding.MarshalComposite(wr, encoding.TypeCodeCoordinatorTarget, []encoding.MarshalField{
+		{Value: ct.Capabilities, Omit: len(ct.Capabilities) == 0},
+	})
+}
+
+func (ct *CoordinatorTarget) Unmarshal(r *buffer.Buffer) error {
+	return encoding.UnmarshalComposite(r, encoding.TypeCodeCoordinatorTarget, encoding.UnmarshalField{Field: &ct.Capabilities})
+}
+
+func (ct CoordinatorTarget) String() string {
+	return fmt.Sprintf("Coordinator{Capabilities: %v}",
+		ct.Capabilities,
 	)
 }
 
@@ -637,7 +671,11 @@ type PerformAttach struct {
 	//
 	// If no target is specified on an incoming link, then there is no target currently
 	// attached to the link. A link with no target will never permit incoming messages.
-	Target *Target
+	//
+	// Target is one of two types:
+	// - [*frames.Target], for typical senders.
+	// - [*frames.CoordinatorTarget], for transaction controllers.
+	Target any
 
 	// unsettled delivery state
 	//
@@ -750,7 +788,7 @@ func (a *PerformAttach) Unmarshal(r *buffer.Buffer) error {
 		{Field: &a.SenderSettleMode},
 		{Field: &a.ReceiverSettleMode},
 		{Field: &a.Source},
-		{Field: &a.Target},
+		{Field: &a.Target, HandleUnmarshal: unmarshalTarget},
 		{Field: &a.Unsettled},
 		{Field: &a.IncompleteUnsettled},
 		{Field: &a.InitialDeliveryCount},
@@ -759,6 +797,46 @@ func (a *PerformAttach) Unmarshal(r *buffer.Buffer) error {
 		{Field: &a.DesiredCapabilities},
 		{Field: &a.Properties},
 	}...)
+}
+
+// unmarshalTarget handles unmarshalling the Target field of the ATTACH frame, which
+// can be of two types:
+// - Target, which we see if we are just using a Receiver or Sender or
+// - CoordinatorTarget, which we see if this Sender is being used as a transaction controller.
+func unmarshalTarget(r *buffer.Buffer, field any) error {
+	type_, _, err := encoding.PeekCompositeType(r)
+
+	if err != nil {
+		return err
+	}
+
+	var target any
+
+	switch type_ {
+	case encoding.TypeCodeTarget:
+		t2 := &Target{}
+		if err := t2.Unmarshal(r); err != nil {
+			return err
+		}
+		target = t2
+	case encoding.TypeCodeCoordinatorTarget:
+		t2 := &CoordinatorTarget{}
+		if err := t2.Unmarshal(r); err != nil {
+			return err
+		}
+		target = t2
+	default:
+		return fmt.Errorf("custom Target unmarshaller cannot handle typecode %d", type_)
+	}
+
+	fp, ok := field.(*any)
+
+	if !ok {
+		return errors.New("custom unmarshaller for Target passed with a field that is not *any")
+	}
+
+	*fp = target
+	return nil
 }
 
 /*

@@ -360,7 +360,8 @@ func (r *Receiver) countUnsettled() int {
 func newReceiver(source string, session *Session, opts *ReceiverOptions) (*Receiver, error) {
 	l := newLink(session, encoding.RoleReceiver)
 	l.source = &frames.Source{Address: source}
-	l.target = new(frames.Target)
+	target := new(frames.Target)
+	l.target = target
 	l.linkCredit = defaultLinkCredit
 	r := &Receiver{
 		l:             l,
@@ -376,8 +377,9 @@ func newReceiver(source string, session *Session, opts *ReceiverOptions) (*Recei
 	}
 
 	for _, v := range opts.Capabilities {
-		r.l.target.Capabilities = append(r.l.target.Capabilities, encoding.Symbol(v))
+		target.Capabilities = append(target.Capabilities, encoding.Symbol(v))
 	}
+
 	if opts.Credit > 0 {
 		r.l.linkCredit = uint32(opts.Credit)
 	} else if opts.Credit < 0 {
@@ -387,7 +389,9 @@ func newReceiver(source string, session *Session, opts *ReceiverOptions) (*Recei
 	if opts.Durability > DurabilityUnsettledState {
 		return nil, fmt.Errorf("invalid Durability %d", opts.Durability)
 	}
-	r.l.target.Durable = opts.Durability
+
+	target.Durable = opts.Durability
+
 	if opts.DynamicAddress {
 		r.l.source.Address = ""
 		r.l.dynamicAddr = opts.DynamicAddress
@@ -396,9 +400,9 @@ func newReceiver(source string, session *Session, opts *ReceiverOptions) (*Recei
 		if err := encoding.ValidateExpiryPolicy(opts.ExpiryPolicy); err != nil {
 			return nil, err
 		}
-		r.l.target.ExpiryPolicy = opts.ExpiryPolicy
+		target.ExpiryPolicy = opts.ExpiryPolicy
 	}
-	r.l.target.Timeout = opts.ExpiryTimeout
+	target.Timeout = opts.ExpiryTimeout
 	if opts.Filters != nil {
 		r.l.source.Filter = make(encoding.Filter)
 		for _, f := range opts.Filters {
@@ -432,7 +436,7 @@ func newReceiver(source string, session *Session, opts *ReceiverOptions) (*Recei
 		}
 		r.l.receiverSettleMode = opts.SettlementMode
 	}
-	r.l.target.Address = opts.TargetAddress
+	target.Address = opts.TargetAddress
 	for _, v := range opts.SourceCapabilities {
 		r.l.source.Capabilities = append(r.l.source.Capabilities, encoding.Symbol(v))
 	}
@@ -445,6 +449,7 @@ func newReceiver(source string, session *Session, opts *ReceiverOptions) (*Recei
 	if opts.SourceExpiryTimeout != 0 {
 		r.l.source.Timeout = opts.SourceExpiryTimeout
 	}
+
 	return r, nil
 }
 
@@ -457,7 +462,7 @@ func (r *Receiver) attach(ctx context.Context) error {
 			pa.Source = new(frames.Source)
 		}
 		pa.Source.Dynamic = r.l.dynamicAddr
-	}, func(pa *frames.PerformAttach) {
+	}, func(pa *frames.PerformAttach) *Error {
 		if r.l.source == nil {
 			r.l.source = new(frames.Source)
 		}
@@ -472,6 +477,7 @@ func (r *Receiver) attach(ctx context.Context) error {
 		if pa.Source != nil {
 			r.l.source.Filter = pa.Source.Filter
 		}
+		return nil
 	}); err != nil {
 		return err
 	}

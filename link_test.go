@@ -221,7 +221,10 @@ func TestNewSendingLink(t *testing.T) {
 		{
 			label: "default options",
 			validate: func(t *testing.T, l *Sender) {
-				require.Empty(t, l.l.target.Capabilities)
+				target := asTarget(l.l.target)
+				require.NotNil(t, target)
+
+				require.Empty(t, target.Capabilities)
 				require.Equal(t, DurabilityNone, l.l.source.Durable)
 				require.False(t, l.l.dynamicAddr)
 				require.Empty(t, l.l.source.ExpiryPolicy)
@@ -230,7 +233,7 @@ func TestNewSendingLink(t *testing.T) {
 				require.Empty(t, l.l.properties)
 				require.Nil(t, l.l.senderSettleMode)
 				require.Nil(t, l.l.receiverSettleMode)
-				require.Equal(t, targetAddr, l.l.target.Address)
+				require.Equal(t, targetAddr, target.Address)
 			},
 		},
 		{
@@ -249,6 +252,9 @@ func TestNewSendingLink(t *testing.T) {
 				SettlementMode:              SenderSettleModeSettled.Ptr(),
 			},
 			validate: func(t *testing.T, l *Sender) {
+				target := asTarget(l.l.target)
+				require.NotNil(t, target)
+
 				require.Equal(t, encoding.MultiSymbol{"foo", "bar"}, l.l.source.Capabilities)
 				require.Equal(t, DurabilityUnsettledState, l.l.source.Durable)
 				require.True(t, l.l.dynamicAddr)
@@ -262,7 +268,7 @@ func TestNewSendingLink(t *testing.T) {
 				require.Equal(t, SenderSettleModeSettled, *l.l.senderSettleMode)
 				require.NotNil(t, l.l.receiverSettleMode)
 				require.Equal(t, ReceiverSettleModeFirst, *l.l.receiverSettleMode)
-				require.Empty(t, l.l.target.Address)
+				require.Empty(t, target.Address)
 			},
 		},
 	}
@@ -299,12 +305,15 @@ func TestNewReceivingLink(t *testing.T) {
 			validate: func(t *testing.T, l *Receiver) {
 				//require.False(t, l.receiver.batching)
 				//require.Equal(t, defaultLinkBatchMaxAge, l.receiver.batchMaxAge)
-				require.Empty(t, l.l.target.Capabilities)
+				target := asTarget(l.l.target)
+				require.NotNil(t, target)
+
+				require.Empty(t, target.Capabilities)
 				//require.Equal(t, defaultLinkCredit, l.receiver.maxCredit)
-				require.Equal(t, DurabilityNone, l.l.target.Durable)
+				require.Equal(t, DurabilityNone, target.Durable)
 				require.False(t, l.l.dynamicAddr)
-				require.Empty(t, l.l.target.ExpiryPolicy)
-				require.Zero(t, l.l.target.Timeout)
+				require.Empty(t, target.ExpiryPolicy)
+				require.Zero(t, target.Timeout)
 				require.Empty(t, l.l.source.Filter)
 				//require.Nil(t, l.receiver.manualCreditor)
 				require.Zero(t, l.l.maxMessageSize)
@@ -342,12 +351,16 @@ func TestNewReceivingLink(t *testing.T) {
 			validate: func(t *testing.T, l *Receiver) {
 				//require.True(t, l.receiver.batching)
 				//require.Equal(t, 1*time.Minute, l.receiver.batchMaxAge)
-				require.Equal(t, encoding.MultiSymbol{"foo", "bar"}, l.l.target.Capabilities)
+
+				target := asTarget(l.l.target)
+				require.NotNil(t, target)
+
+				require.Equal(t, encoding.MultiSymbol{"foo", "bar"}, target.Capabilities)
 				//require.Equal(t, uint32(32), l.receiver.maxCredit)
-				require.Equal(t, DurabilityConfiguration, l.l.target.Durable)
+				require.Equal(t, DurabilityConfiguration, target.Durable)
 				require.True(t, l.l.dynamicAddr)
-				require.Equal(t, ExpiryPolicyNever, l.l.target.ExpiryPolicy)
-				require.Equal(t, uint32(3), l.l.target.Timeout)
+				require.Equal(t, ExpiryPolicyNever, target.ExpiryPolicy)
+				require.Equal(t, uint32(3), target.Timeout)
 				require.Equal(t, encoding.Filter{
 					selectorFilter: &encoding.DescribedType{
 						Descriptor: selectorFilterCode,

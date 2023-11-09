@@ -61,9 +61,12 @@ func TestReceiverMethodsNoReceive(t *testing.T) {
 		case *frames.PerformBegin:
 			return newResponse(fake.PerformBegin(0, remoteChannel))
 		case *frames.PerformAttach:
-			require.Equal(t, DurabilityUnsettledState, ff.Target.Durable)
-			require.Equal(t, ExpiryPolicyNever, ff.Target.ExpiryPolicy)
-			require.Equal(t, uint32(300), ff.Target.Timeout)
+			target := asTarget(ff.Target)
+			require.NotNil(t, target)
+
+			require.Equal(t, DurabilityUnsettledState, target.Durable)
+			require.Equal(t, ExpiryPolicyNever, target.ExpiryPolicy)
+			require.Equal(t, uint32(300), target.Timeout)
 			return newResponse(fake.ReceiverAttach(0, linkName, 0, ReceiverSettleModeFirst, nil))
 		case *frames.PerformFlow, *fake.KeepAlive:
 			return fake.Response{}, nil

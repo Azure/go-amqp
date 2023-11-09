@@ -196,6 +196,10 @@ func Unmarshal(r *buffer.Buffer, i any) error {
 			*t = new(StateRejected)
 		case TypeCodeStateReleased:
 			*t = new(StateReleased)
+		case TypeCodeStateDeclared:
+			*t = new(StateDeclared)
+		case TypeCodeTransactionDeliveryState:
+			*t = new(TransactionDeliveryState)
 		default:
 			return fmt.Errorf("unexpected type %d for deliveryState", type_)
 		}
@@ -233,7 +237,7 @@ func Unmarshal(r *buffer.Buffer, i any) error {
 // unmarshalComposite is a helper for use in a composite's unmarshal() function.
 //
 // The composite from r will be unmarshaled into zero or more fields. An error
-// will be returned if typ does not match the decoded type.
+// will be returned if type does not match the decoded type.
 func UnmarshalComposite(r *buffer.Buffer, type_ AMQPType, fields ...UnmarshalField) error {
 	cType, numFields, err := readCompositeHeader(r)
 	if err != nil {
@@ -264,7 +268,11 @@ func UnmarshalComposite(r *buffer.Buffer, type_ AMQPType, fields ...UnmarshalFie
 		}
 
 		// Unmarshal each of the received fields.
-		err = Unmarshal(r, field.Field)
+		if field.HandleUnmarshal != nil {
+			err = field.HandleUnmarshal(r, field.Field)
+		} else {
+			err = Unmarshal(r, field.Field)
+		}
 		if err != nil {
 			return fmt.Errorf("unmarshaling field %d: %v", i, err)
 		}
@@ -288,9 +296,15 @@ func UnmarshalComposite(r *buffer.Buffer, type_ AMQPType, fields ...UnmarshalFie
 // An optional nullHandler can be set. If the composite field being unmarshaled
 // is null and handleNull is not nil, nullHandler will be called.
 type UnmarshalField struct {
-	Field      any
-	HandleNull NullHandler
+	Field           any
+	HandleUnmarshal UnmarshalHandler
+	HandleNull      NullHandler
 }
+
+// UnmarshalHandler allows you to customize Unmarshalling independent of the type of a Field.
+// Ex: this is used when doing a PerformAttach frame, where the Target field can be of
+// type *Target _or_ *CoordinatorTarget (for transactions)
+type UnmarshalHandler func(r *buffer.Buffer, field any) error
 
 // nullHandler is a function to be called when a composite's field
 // is null.
@@ -304,6 +318,16 @@ func readType(r *buffer.Buffer) (AMQPType, error) {
 func peekType(r *buffer.Buffer) (AMQPType, error) {
 	n, err := r.PeekByte()
 	return AMQPType(n), err
+}
+
+func PeekCompositeType(r *buffer.Buffer) (AMQPType, int64, error) {
+	// we need to be a bit more flexible on reseting the position (and thus can't use PeekByte)
+	// because the composite header is variable-sized since we read a ulong (generically - any sized int)
+	// as part of the header extraction.
+	i := r.Pos()
+	defer func() { r.ResetPos(i) }()
+
+	return readCompositeHeader(r)
 }
 
 // readCompositeHeader reads and consumes the composite header from r.

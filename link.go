@@ -49,9 +49,14 @@ type link struct {
 	doneErr  error         // contains the mux error state; ONLY written to by the mux and MUST only be read from after done is closed!
 	closeErr error         // contains the error state returned from closeLink(); ONLY closeLink() reads/writes this!
 
-	session    *Session                // parent session
-	source     *frames.Source          // used for Receiver links
-	target     *frames.Target          // used for Sender links
+	session *Session       // parent session
+	source  *frames.Source // used for Receiver links
+
+	// target is of type:
+	// - *[frames.Target] - for typical Senders
+	// - *[frames.CoordinatorTarget] - for TransactionControllers
+	target any // used for Sender links
+
 	properties map[encoding.Symbol]any // additional properties sent upon link attach
 
 	// "The delivery-count is initialized by the sender when a link endpoint is created,
@@ -116,7 +121,7 @@ func (l *link) waitForFrame(ctx context.Context) (frames.FrameBody, error) {
 
 // attach sends the Attach performative to establish the link with its parent session.
 // this is automatically called by the new*Link constructors.
-func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAttach), afterAttach func(*frames.PerformAttach)) error {
+func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAttach), afterAttach func(*frames.PerformAttach) *Error) error {
 	if err := l.session.freeAbandonedLinks(ctx); err != nil {
 		return err
 	}
@@ -207,7 +212,17 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 	}
 
 	// link-specific configuration post attach
-	afterAttach(resp)
+	if err := afterAttach(resp); err != nil {
+		dr := &frames.PerformDetach{
+			Handle: l.outputHandle,
+			Closed: true,
+			Error:  err,
+		}
+		if err := l.txFrameAndWait(ctx, dr); err != nil {
+			return err
+		}
+		return err
+	}
 
 	if err := l.setSettleModes(resp); err != nil {
 		// close the link as there's a mismatch on requested/supported settlement modes

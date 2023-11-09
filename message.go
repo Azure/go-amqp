@@ -101,6 +101,10 @@ type Message struct {
 	// encryption details).
 	Footer Annotations
 
+	// TransactionID can be used by senders to ensure a message is included as part of a transaction, started with
+	// [TransactionController.Declare].
+	TransactionID []byte
+
 	deliveryID uint32 // used when sending disposition
 	settled    bool   // whether transfer was settled by sender
 }

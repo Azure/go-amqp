@@ -144,7 +144,7 @@ func (r *Receiver) Receive(ctx context.Context, opts *ReceiveOptions) (*Message,
 // If the context's deadline expires or is cancelled before the operation
 // completes, the message's disposition is in an unknown state.
 func (r *Receiver) AcceptMessage(ctx context.Context, msg *Message) error {
-	return r.messageDisposition(ctx, msg, &encoding.StateAccepted{})
+	return msg.rcv.messageDisposition(ctx, msg, &encoding.StateAccepted{})
 }
 
 // Reject notifies the server that the message is invalid.
@@ -155,7 +155,7 @@ func (r *Receiver) AcceptMessage(ctx context.Context, msg *Message) error {
 // If the context's deadline expires or is cancelled before the operation
 // completes, the message's disposition is in an unknown state.
 func (r *Receiver) RejectMessage(ctx context.Context, msg *Message, e *Error) error {
-	return r.messageDisposition(ctx, msg, &encoding.StateRejected{Error: e})
+	return msg.rcv.messageDisposition(ctx, msg, &encoding.StateRejected{Error: e})
 }
 
 // Release releases the message back to the server. The message may be redelivered to this or another consumer.
@@ -165,7 +165,7 @@ func (r *Receiver) RejectMessage(ctx context.Context, msg *Message, e *Error) er
 // If the context's deadline expires or is cancelled before the operation
 // completes, the message's disposition is in an unknown state.
 func (r *Receiver) ReleaseMessage(ctx context.Context, msg *Message) error {
-	return r.messageDisposition(ctx, msg, &encoding.StateReleased{})
+	return msg.rcv.messageDisposition(ctx, msg, &encoding.StateReleased{})
 }
 
 // Modify notifies the server that the message was not acted upon and should be modifed.
@@ -179,7 +179,7 @@ func (r *Receiver) ModifyMessage(ctx context.Context, msg *Message, options *Mod
 	if options == nil {
 		options = &ModifyMessageOptions{}
 	}
-	return r.messageDisposition(ctx,
+	return msg.rcv.messageDisposition(ctx,
 		msg, &encoding.StateModified{
 			DeliveryFailed:     options.DeliveryFailed,
 			UndeliverableHere:  options.UndeliverableHere,
@@ -809,6 +809,7 @@ func (r *Receiver) muxReceive(fr frames.PerformTransfer) {
 	// send to receiver
 	if !r.msg.settled {
 		r.addUnsettled(&r.msg)
+		r.msg.rcv = r
 		debug.Log(3, "RX (Receiver %p): add unsettled delivery ID %d", r, r.msg.deliveryID)
 	}
 

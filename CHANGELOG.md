@@ -1,5 +1,11 @@
 # Release History
 
+## 1.0.3 (2024-01-09)
+
+### Bugs Fixed
+
+* Fixed an issue that could cause a memory leak when settling messages across `Receiver` instances.
+
 ## 1.0.2 (2023-09-05)
 
 ### Bugs Fixed

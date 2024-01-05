@@ -300,6 +300,11 @@ func (m *Message) Unmarshal(r *buffer.Buffer) error {
 	return nil
 }
 
+func (m *Message) onSettlement() {
+	m.settled = true
+	m.rcv = nil
+}
+
 /*
 <type name="header" class="composite" source="list" provides="section">
     <descriptor name="amqp:header:list" code="0x00000000:0x00000070"/>

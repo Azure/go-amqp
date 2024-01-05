@@ -290,6 +290,7 @@ func (r *Receiver) messageDisposition(ctx context.Context, msg *Message, state e
 
 	if wait == nil {
 		// mode first, there will be no settlement ack
+		msg.onSettlement()
 		r.deleteUnsettled(msg)
 		r.onSettlement(1)
 		return nil
@@ -703,7 +704,7 @@ func (r *Receiver) muxHandleFrame(fr frames.FrameBody) error {
 		// removal from the in-flight map will also remove the message from the unsettled map
 		count := r.inFlight.remove(fr.First, fr.Last, dispositionError, func(msg *Message) {
 			r.deleteUnsettled(msg)
-			msg.settled = true
+			msg.onSettlement()
 		})
 		r.onSettlement(count)
 

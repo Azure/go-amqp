@@ -144,7 +144,6 @@ func (r *Receiver) Receive(ctx context.Context, opts *ReceiveOptions) (*Message,
 // If the context's deadline expires or is cancelled before the operation
 // completes, the message's disposition is in an unknown state.
 func (r *Receiver) AcceptMessage(ctx context.Context, msg *Message) error {
-	// we don't check msg.rcv for nil here, that's handled in messageDisposition()
 	return msg.rcv.messageDisposition(ctx, msg, &encoding.StateAccepted{})
 }
 
@@ -156,7 +155,6 @@ func (r *Receiver) AcceptMessage(ctx context.Context, msg *Message) error {
 // If the context's deadline expires or is cancelled before the operation
 // completes, the message's disposition is in an unknown state.
 func (r *Receiver) RejectMessage(ctx context.Context, msg *Message, e *Error) error {
-	// we don't check msg.rcv for nil here, that's handled in messageDisposition()
 	return msg.rcv.messageDisposition(ctx, msg, &encoding.StateRejected{Error: e})
 }
 
@@ -167,7 +165,6 @@ func (r *Receiver) RejectMessage(ctx context.Context, msg *Message, e *Error) er
 // If the context's deadline expires or is cancelled before the operation
 // completes, the message's disposition is in an unknown state.
 func (r *Receiver) ReleaseMessage(ctx context.Context, msg *Message) error {
-	// we don't check msg.rcv for nil here, that's handled in messageDisposition()
 	return msg.rcv.messageDisposition(ctx, msg, &encoding.StateReleased{})
 }
 
@@ -182,7 +179,6 @@ func (r *Receiver) ModifyMessage(ctx context.Context, msg *Message, options *Mod
 	if options == nil {
 		options = &ModifyMessageOptions{}
 	}
-	// we don't check msg.rcv for nil here, that's handled in messageDisposition()
 	return msg.rcv.messageDisposition(ctx,
 		msg, &encoding.StateModified{
 			DeliveryFailed:     options.DeliveryFailed,
@@ -277,9 +273,12 @@ func (r *Receiver) sendDisposition(ctx context.Context, first uint32, last *uint
 // this allows messages to be settled across Receiver instances.
 // note that only unsettled messsages will have their rcv field set.
 func (r *Receiver) messageDisposition(ctx context.Context, msg *Message, state encoding.DeliveryState) error {
+	// settling a message that's already settled (sender-settled or otherwise) will have a nil rcv.
+	// which means that r will be nil. you MUST NOT dereference r if msg.settled == true
 	if msg.settled {
 		return nil
 	}
+
 	debug.Assert(r != nil)
 
 	// NOTE: we MUST add to the in-flight map before sending the disposition. if not, it's possible

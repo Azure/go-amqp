@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/Azure/go-amqp/internal/buffer"
 	"github.com/Azure/go-amqp/internal/debug"
@@ -28,11 +29,13 @@ type Receiver struct {
 	messagesQ     *queue.Holder[Message] // used to send completed messages to receiver
 	txDisposition chan frameBodyEnvelope // used to funnel disposition frames through the mux
 
-	unsettledMessages     map[string]struct{} // used to keep track of messages being handled downstream
-	unsettledMessagesLock sync.RWMutex        // lock to protect concurrent access to unsettledMessages
-	msgBuf                buffer.Buffer       // buffered bytes for current message
-	more                  bool                // if true, buf contains a partial message
-	msg                   Message             // current message being decoded
+	// NOTE: this will need to be retooled if/when we need to support resuming links.
+	// at present, this is only used for debug tracing purposes so it's safe to change it to a count.
+	unsettledMessages int32 // count of unsettled messages for this receiver; MUST be atomically accessed
+
+	msgBuf buffer.Buffer // buffered bytes for current message
+	more   bool          // if true, buf contains a partial message
+	msg    Message       // current message being decoded
 
 	settlementCount   uint32     // the count of settled messages
 	settlementCountMu sync.Mutex // must be held when accessing settlementCount
@@ -298,7 +301,7 @@ func (r *Receiver) messageDisposition(ctx context.Context, msg *Message, state e
 	if wait == nil {
 		// mode first, there will be no settlement ack
 		msg.onSettlement()
-		r.deleteUnsettled(msg)
+		r.deleteUnsettled()
 		r.onSettlement(1)
 		return nil
 	}
@@ -346,23 +349,23 @@ func (r *Receiver) onSettlement(count uint32) {
 	}
 }
 
-func (r *Receiver) addUnsettled(msg *Message) {
-	r.unsettledMessagesLock.Lock()
-	r.unsettledMessages[string(msg.DeliveryTag)] = struct{}{}
-	r.unsettledMessagesLock.Unlock()
+// increments the count of unsettled messages.
+// this is only called from our mux.
+func (r *Receiver) addUnsettled() {
+	atomic.AddInt32(&r.unsettledMessages, 1)
 }
 
-func (r *Receiver) deleteUnsettled(msg *Message) {
-	r.unsettledMessagesLock.Lock()
-	delete(r.unsettledMessages, string(msg.DeliveryTag))
-	r.unsettledMessagesLock.Unlock()
+// decrements the count of unsettled messages.
+// this is called inside _or_ outside the mux.
+// it's called outside when RSM is mode first.
+func (r *Receiver) deleteUnsettled() {
+	atomic.AddInt32(&r.unsettledMessages, -1)
 }
 
-func (r *Receiver) countUnsettled() int {
-	r.unsettledMessagesLock.RLock()
-	count := len(r.unsettledMessages)
-	r.unsettledMessagesLock.RUnlock()
-	return count
+// returns the count of unsettled messages.
+// this is only called from our mux for diagnostic purposes.
+func (r *Receiver) countUnsettled() int32 {
+	return atomic.LoadInt32(&r.unsettledMessages)
 }
 
 func newReceiver(source string, session *Session, opts *ReceiverOptions) (*Receiver, error) {
@@ -475,7 +478,6 @@ func (r *Receiver) attach(ctx context.Context) error {
 		}
 		// deliveryCount is a sequence number, must initialize to sender's initial sequence number
 		r.l.deliveryCount = pa.InitialDeliveryCount
-		r.unsettledMessages = map[string]struct{}{}
 		// copy the received filter values
 		if pa.Source != nil {
 			r.l.source.Filter = pa.Source.Filter
@@ -710,7 +712,7 @@ func (r *Receiver) muxHandleFrame(fr frames.FrameBody) error {
 		}
 		// removal from the in-flight map will also remove the message from the unsettled map
 		count := r.inFlight.remove(fr.First, fr.Last, dispositionError, func(msg *Message) {
-			r.deleteUnsettled(msg)
+			r.deleteUnsettled()
 			msg.onSettlement()
 		})
 		r.onSettlement(count)
@@ -816,7 +818,7 @@ func (r *Receiver) muxReceive(fr frames.PerformTransfer) {
 
 	// send to receiver
 	if !r.msg.settled {
-		r.addUnsettled(&r.msg)
+		r.addUnsettled()
 		r.msg.rcv = r
 		debug.Log(3, "RX (Receiver %p): add unsettled delivery ID %d", r, r.msg.deliveryID)
 	}

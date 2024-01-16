@@ -33,7 +33,6 @@ func TestLinkFlowThatNeedsToReplenishCredits(t *testing.T) {
 
 		// we've consumed half of the maximum credit we're allowed to have - reflow!
 		l.l.linkCredit = 1
-		l.unsettledMessages = map[string]struct{}{}
 		close(waitForCredit)
 
 		l.onSettlement(1)
@@ -88,10 +87,7 @@ func TestLinkFlowWithZeroCredits(t *testing.T) {
 	require.EqualValues(t, 0, l.l.linkCredit, "No link credits have been added")
 
 	l.l.linkCredit = 0
-	l.unsettledMessages = map[string]struct{}{
-		"hello":  {},
-		"hello2": {},
-	}
+	l.unsettledMessages = 2
 
 	muxSem.Release(0)
 

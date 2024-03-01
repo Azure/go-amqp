@@ -663,13 +663,13 @@ func (c *Conn) readFrame() (frames.Frame, error) {
 			}
 		}
 
-		// read more if buf doesn't contain enough to parse the header
-		if c.rxBuf.Len() < frames.HeaderSize {
-			continue
-		}
-
 		// parse the header if a frame isn't in progress
 		if !frameInProgress {
+			// read more if buf doesn't contain enough to parse the header
+			if c.rxBuf.Len() < frames.HeaderSize {
+				continue
+			}
+
 			var err error
 			currentHeader, err = frames.ParseHeader(&c.rxBuf)
 			if err != nil {

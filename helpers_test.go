@@ -20,7 +20,7 @@ func sendInitialFlowFrame(t require.TestingT, channel uint16, netConn *fake.NetC
 	nextIncoming := uint32(0)
 	count := uint32(0)
 	available := uint32(0)
-	b, err := fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformFlow{
+	b, err := fake.EncodeFrame(frames.TypeAMQP, channel, &frames.PerformFlow{
 		NextIncomingID: &nextIncoming,
 		IncomingWindow: 1000000,
 		OutgoingWindow: 1000000,

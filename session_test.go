@@ -515,9 +515,9 @@ func TestSessionFlowFrameWithEcho(t *testing.T) {
 }
 
 func TestSessionInvalidAttachDeadlock(t *testing.T) {
-	var enqueueFrames func(string)
+	var enqueueFrames func()
 	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
-		switch tt := req.(type) {
+		switch req.(type) {
 		case *fake.AMQPProto:
 			return newResponse(fake.ProtoHeader(fake.ProtoAMQP))
 		case *frames.PerformOpen:
@@ -527,7 +527,7 @@ func TestSessionInvalidAttachDeadlock(t *testing.T) {
 		case *frames.PerformEnd:
 			return newResponse(fake.PerformEnd(0, nil))
 		case *frames.PerformAttach:
-			enqueueFrames(tt.Name)
+			enqueueFrames()
 			return fake.Response{}, nil
 		case *frames.PerformClose:
 			return newResponse(fake.PerformClose(nil))
@@ -547,7 +547,7 @@ func TestSessionInvalidAttachDeadlock(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 
-	enqueueFrames = func(n string) {
+	enqueueFrames = func() {
 		// send an invalid attach response
 		b, err := fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformAttach{
 			Name: "mismatched",

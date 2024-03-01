@@ -197,10 +197,6 @@ func TestIntegrationRoundTrip(t *testing.T) {
 							break
 						}
 						receiveCount++
-						if err != nil {
-							receiveErr.write(fmt.Errorf("error after %d receives: %+v", i, err))
-							break
-						}
 					}
 				}()
 

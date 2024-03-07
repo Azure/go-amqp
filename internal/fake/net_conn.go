@@ -98,7 +98,7 @@ type Response struct {
 	WriteDelay time.Duration
 
 	// ChunkSize is the size of chunks to split Payload into.
-	// The zero value means no chunks.
+	// A zero or negative value means no chunking.
 	ChunkSize int
 }
 
@@ -187,11 +187,12 @@ func (n *NetConn) write() {
 			// else all we do is stall Conn.connWriter() which doesn't
 			// actually simulate a delayed response to a frame.
 			time.Sleep(resp.WriteDelay)
-			remaining := resp.Payload
-			if resp.ChunkSize == 0 {
+			if resp.ChunkSize < 1 {
 				// send in one chunk
 				resp.ChunkSize = len(resp.Payload)
 			}
+
+			remaining := resp.Payload
 			for {
 				if l := len(remaining); l < resp.ChunkSize {
 					resp.ChunkSize = l

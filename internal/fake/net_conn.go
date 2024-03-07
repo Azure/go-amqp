@@ -96,6 +96,10 @@ type Response struct {
 	// WriteDelay is the duration to wait before writing Payload.
 	// Use this to introduce a delay when waiting for a response.
 	WriteDelay time.Duration
+
+	// ChunkSize is the size of chunks to split Payload into.
+	// The zero value means no chunks.
+	ChunkSize int
 }
 
 // ErrAlreadyClosed is returned by Close() if [NetConn] is already closed.
@@ -183,7 +187,22 @@ func (n *NetConn) write() {
 			// else all we do is stall Conn.connWriter() which doesn't
 			// actually simulate a delayed response to a frame.
 			time.Sleep(resp.WriteDelay)
-			n.readData <- resp.Payload
+			if resp.ChunkSize > 0 {
+				remaining := resp.Payload
+				for {
+					if l := len(remaining); l <= resp.ChunkSize {
+						resp.ChunkSize = l
+					}
+					chunk := remaining[:resp.ChunkSize]
+					n.readData <- chunk
+					remaining = remaining[resp.ChunkSize:]
+					if len(remaining) == 0 {
+						break
+					}
+				}
+			} else {
+				n.readData <- resp.Payload
+			}
 		}
 	}
 }

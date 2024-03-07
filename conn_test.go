@@ -1029,3 +1029,44 @@ func TestGetWriteTimeout(t *testing.T) {
 	require.Zero(t, duration)
 	cancel()
 }
+
+func TestConnSmallFrames(t *testing.T) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		switch req.(type) {
+		case *fake.AMQPProto:
+			return newResponse(fake.ProtoHeader(fake.ProtoAMQP))
+		case *frames.PerformOpen:
+			return newResponse(fake.PerformOpen("container"))
+		case *frames.PerformClose:
+			return newResponse(fake.PerformClose(nil))
+		case *frames.PerformBegin:
+			return newResponse(fake.PerformBegin(0, 0))
+		case *frames.PerformEnd:
+			body, err := fake.PerformEnd(0, nil)
+			if err != nil {
+				return fake.Response{}, err
+			}
+			return fake.Response{
+				Payload:   body,
+				ChunkSize: 8, // must be >= HeaderSize
+			}, nil
+		default:
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+
+	netConn := fake.NewNetConn(responder)
+	conn, err := newConn(netConn, nil)
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	require.NoError(t, conn.start(ctx))
+	cancel()
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := conn.NewSession(ctx, nil)
+	require.NoError(t, err)
+	cancel()
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	require.NoError(t, session.Close(ctx))
+	cancel()
+	require.NoError(t, conn.Close())
+}

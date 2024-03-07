@@ -187,21 +187,21 @@ func (n *NetConn) write() {
 			// else all we do is stall Conn.connWriter() which doesn't
 			// actually simulate a delayed response to a frame.
 			time.Sleep(resp.WriteDelay)
-			if resp.ChunkSize > 0 {
-				remaining := resp.Payload
-				for {
-					if l := len(remaining); l <= resp.ChunkSize {
-						resp.ChunkSize = l
-					}
-					chunk := remaining[:resp.ChunkSize]
-					n.readData <- chunk
-					remaining = remaining[resp.ChunkSize:]
-					if len(remaining) == 0 {
-						break
-					}
+			remaining := resp.Payload
+			if resp.ChunkSize == 0 {
+				// send in one chunk
+				resp.ChunkSize = len(resp.Payload)
+			}
+			for {
+				if l := len(remaining); l < resp.ChunkSize {
+					resp.ChunkSize = l
 				}
-			} else {
-				n.readData <- resp.Payload
+				chunk := remaining[:resp.ChunkSize]
+				n.readData <- chunk
+				remaining = remaining[resp.ChunkSize:]
+				if len(remaining) == 0 {
+					break
+				}
 			}
 		}
 	}

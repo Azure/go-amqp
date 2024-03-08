@@ -29,7 +29,7 @@ func BenchmarkSenderSendSSMUnsettled(b *testing.B) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	conn := fake.NewNetConn(responder)
+	conn := fake.NewNetConn(responder, fake.NetConnOptions{})
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -74,7 +74,7 @@ func BenchmarkSenderSendSSMSettled(b *testing.B) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	conn := fake.NewNetConn(responder)
+	conn := fake.NewNetConn(responder, fake.NetConnOptions{})
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -117,7 +117,7 @@ func BenchmarkReceiverReceiveRSMFirst(b *testing.B) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	conn := fake.NewNetConn(responder)
+	conn := fake.NewNetConn(responder, fake.NetConnOptions{})
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -168,7 +168,7 @@ func BenchmarkReceiverReceiveRSMSecond(b *testing.B) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	conn := fake.NewNetConn(responder)
+	conn := fake.NewNetConn(responder, fake.NetConnOptions{})
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()
@@ -219,7 +219,7 @@ func BenchmarkReceiverSettleMessage(b *testing.B) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	conn := fake.NewNetConn(responder)
+	conn := fake.NewNetConn(responder, fake.NetConnOptions{})
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, conn, nil)
 	cancel()

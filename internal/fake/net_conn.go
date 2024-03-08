@@ -11,15 +11,25 @@ import (
 	"github.com/Azure/go-amqp/internal/frames"
 )
 
+// NetConnOptions contains options when creating a NetConn.
+// Pass the zero-value to accept the default values.
+type NetConnOptions struct {
+	// ChunkSize is the size of chunks to split responses into.
+	// A zero or negative value means no chunking.
+	// The default value is zero.
+	ChunkSize int
+}
+
 // NewNetConn creates a new instance of NetConn.
 // Responder is invoked by Write when a frame is received.
 // Return a zero-value Response/nil error to swallow the frame.
 // Return a non-nil error to simulate a write error.
 // NOTE: resp is called on a separate goroutine so it MUST NOT access any *testing.T etc
-func NewNetConn(resp func(remoteChannel uint16, fr frames.FrameBody) (Response, error)) *NetConn {
+func NewNetConn(resp func(remoteChannel uint16, fr frames.FrameBody) (Response, error), opts NetConnOptions) *NetConn {
 	netConn := &NetConn{
 		ReadErr:  make(chan error),
 		WriteErr: make(chan error, 1),
+		opts:     opts,
 		resp:     resp,
 		// during shutdown, connReader can close before connWriter as they both
 		// both return on c.Done being closed, so there is some non-determinism
@@ -55,6 +65,7 @@ type NetConn struct {
 	// Has a buffer of one so setting a pending error won't block.
 	WriteErr chan error
 
+	opts      NetConnOptions
 	resp      func(uint16, frames.FrameBody) (Response, error)
 	readDL    readTimer
 	readData  chan []byte
@@ -99,6 +110,7 @@ type Response struct {
 
 	// ChunkSize is the size of chunks to split Payload into.
 	// A zero or negative value means no chunking.
+	// This value supercedes the NetConnOptions.ChunkSize.
 	ChunkSize int
 }
 
@@ -187,6 +199,11 @@ func (n *NetConn) write() {
 			// else all we do is stall Conn.connWriter() which doesn't
 			// actually simulate a delayed response to a frame.
 			time.Sleep(resp.WriteDelay)
+
+			if resp.ChunkSize < 1 {
+				// no chunk size for this response, fall back to options
+				resp.ChunkSize = n.opts.ChunkSize
+			}
 			if resp.ChunkSize < 1 {
 				// send in one chunk
 				resp.ChunkSize = len(resp.Payload)

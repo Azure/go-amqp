@@ -17,7 +17,7 @@ import (
 )
 
 func TestSenderInvalidOptions(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled), fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -62,7 +62,7 @@ func TestSenderMethodsNoSend(t *testing.T) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -96,7 +96,7 @@ func TestSenderMethodsNoSend(t *testing.T) {
 }
 
 func TestSenderSendOnClosed(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled), fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -124,7 +124,7 @@ func TestSenderSendOnClosed(t *testing.T) {
 }
 
 func TestSenderSendOnSessionClosed(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled), fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -157,7 +157,7 @@ func TestSenderSendOnSessionClosed(t *testing.T) {
 func TestSenderSendConcurrentSessionClosed(t *testing.T) {
 	muxSem := test.NewMuxSemaphore(0)
 
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled), fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -207,7 +207,7 @@ func TestSenderSendConcurrentSessionClosed(t *testing.T) {
 }
 
 func TestSenderSendOnConnClosed(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled), fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -235,7 +235,7 @@ func TestSenderSendOnConnClosed(t *testing.T) {
 }
 
 func TestSenderSendOnDetached(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled), fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -294,7 +294,7 @@ func TestSenderCloseTimeout(t *testing.T) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
 	cancel()
@@ -349,7 +349,7 @@ func TestSenderAttachError(t *testing.T) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
 	cancel()
@@ -398,7 +398,7 @@ func TestSenderAttachError(t *testing.T) {
 }
 
 func TestSenderSendMismatchedModes(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled), fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -445,7 +445,7 @@ func TestSenderSendSuccess(t *testing.T) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -492,7 +492,7 @@ func TestSenderSendSettled(t *testing.T) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -541,7 +541,9 @@ func TestSenderSendSettledModeMixed(t *testing.T) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{
+		ChunkSize: 8,
+	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -567,7 +569,7 @@ func TestSenderSendSettledModeMixed(t *testing.T) {
 }
 
 func TestSenderSendSettledError(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled), fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -626,7 +628,7 @@ func TestSenderSendRejectedNoDetach(t *testing.T) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -677,7 +679,7 @@ func TestSenderSendDetached(t *testing.T) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -707,7 +709,7 @@ func TestSenderSendDetached(t *testing.T) {
 }
 
 func TestSenderSendTimeout(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled), fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -773,7 +775,7 @@ func TestSenderSendMsgTooBig(t *testing.T) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -831,7 +833,7 @@ func TestSenderSendTagTooBig(t *testing.T) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -911,7 +913,9 @@ func TestSenderSendMultiTransfer(t *testing.T) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{
+		ChunkSize: 8,
+	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -944,7 +948,7 @@ func TestSenderSendMultiTransfer(t *testing.T) {
 }
 
 func TestSenderConnReaderError(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled), fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -979,7 +983,7 @@ func TestSenderConnReaderError(t *testing.T) {
 }
 
 func TestSenderConnWriterError(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled), fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -1038,7 +1042,7 @@ func TestSenderFlowFrameWithEcho(t *testing.T) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -1105,7 +1109,7 @@ func TestNewSenderTimedOut(t *testing.T) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -1156,7 +1160,7 @@ func TestNewSenderWriteError(t *testing.T) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -1209,7 +1213,7 @@ func TestNewSenderContextCancelled(t *testing.T) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -1227,7 +1231,7 @@ func TestNewSenderContextCancelled(t *testing.T) {
 }
 
 func TestSenderUnexpectedFrame(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled), fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -1275,7 +1279,7 @@ func TestSenderSendFails(t *testing.T) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -1317,7 +1321,7 @@ func TestSenderSendCancelled(t *testing.T) {
 	// transferSem blocks before the transfer frame is send to the session mux
 	transferSem := test.NewMuxSemaphore(0)
 
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled), fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)

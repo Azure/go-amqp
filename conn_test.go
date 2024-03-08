@@ -272,7 +272,7 @@ func TestStart(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			netConn := fake.NewNetConn(tt.responder)
+			netConn := fake.NewNetConn(tt.responder, fake.NetConnOptions{})
 			conn, err := newConn(netConn, nil)
 			require.NoError(t, err)
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -294,7 +294,7 @@ func TestStart(t *testing.T) {
 }
 
 func TestClose(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled), fake.NetConnOptions{})
 	conn, err := newConn(netConn, nil)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -302,7 +302,7 @@ func TestClose(t *testing.T) {
 	cancel()
 	require.NoError(t, conn.Close())
 	// with Close error
-	netConn = fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
+	netConn = fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled), fake.NetConnOptions{})
 	conn, err = newConn(netConn, nil)
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -331,7 +331,7 @@ func TestServerSideClose(t *testing.T) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 	conn, err := newConn(netConn, nil)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -346,7 +346,7 @@ func TestServerSideClose(t *testing.T) {
 
 	// with error
 	closeReceived = make(chan struct{})
-	netConn = fake.NewNetConn(responder)
+	netConn = fake.NewNetConn(responder, fake.NetConnOptions{})
 	conn, err = newConn(netConn, nil)
 	require.NoError(t, err)
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -384,7 +384,7 @@ func TestKeepAlives(t *testing.T) {
 		}
 	}
 
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 	conn, err := newConn(netConn, nil)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -426,7 +426,7 @@ func TestKeepAlivesIdleTimeout(t *testing.T) {
 
 	const idleTimeout = 100 * time.Millisecond
 
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 	conn, err := newConn(netConn, &ConnOptions{
 		IdleTimeout: idleTimeout,
 	})
@@ -453,7 +453,7 @@ func TestKeepAlivesIdleTimeout(t *testing.T) {
 }
 
 func TestConnReaderError(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled), fake.NetConnOptions{})
 	conn, err := newConn(netConn, nil)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -471,7 +471,7 @@ func TestConnReaderError(t *testing.T) {
 }
 
 func TestConnWriterError(t *testing.T) {
-	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled))
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled), fake.NetConnOptions{})
 	conn, err := newConn(netConn, nil)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -501,7 +501,7 @@ func TestConnWithZeroByteReads(t *testing.T) {
 		}
 	}
 
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 	netConn.SendFrame([]byte{})
 
 	conn, err := newConn(netConn, nil)
@@ -517,7 +517,7 @@ func TestConnNegotiationTimeout(t *testing.T) {
 		return fake.Response{}, nil
 	}
 
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 	conn, err := newConn(netConn, nil)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -530,7 +530,7 @@ type mockDialer struct {
 }
 
 func (m mockDialer) NetDialerDial(ctx context.Context, c *Conn, host, port string) error {
-	c.net = fake.NewNetConn(m.resp)
+	c.net = fake.NewNetConn(m.resp, fake.NetConnOptions{})
 	return nil
 }
 
@@ -640,7 +640,7 @@ func TestClientNewSession(t *testing.T) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -686,7 +686,7 @@ func TestClientMultipleSessions(t *testing.T) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -736,7 +736,7 @@ func TestClientTooManySessions(t *testing.T) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -777,7 +777,7 @@ func TestClientNewSessionMissingRemoteChannel(t *testing.T) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -807,7 +807,7 @@ func TestClientNewSessionInvalidInitialResponse(t *testing.T) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -843,7 +843,7 @@ func TestClientNewSessionInvalidSecondResponseSameChannel(t *testing.T) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -887,7 +887,7 @@ func TestClientNewSessionInvalidSecondResponseDifferentChannel(t *testing.T) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -935,7 +935,7 @@ func TestNewSessionTimedOut(t *testing.T) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -980,7 +980,7 @@ func TestNewSessionWriteError(t *testing.T) {
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	client, err := NewConn(ctx, netConn, nil)
@@ -1055,7 +1055,7 @@ func TestConnSmallFrames(t *testing.T) {
 		}
 	}
 
-	netConn := fake.NewNetConn(responder)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
 	conn, err := newConn(netConn, nil)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)

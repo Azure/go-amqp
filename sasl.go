@@ -3,6 +3,7 @@ package amqp
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/Azure/go-amqp/internal/debug"
 	"github.com/Azure/go-amqp/internal/encoding"
@@ -44,7 +45,10 @@ func SASLTypePlain(username, password string) SASLType {
 				Type: frames.TypeSASL,
 				Body: init,
 			}
-			debug.Log(1, "TX (ConnSASLPlain %p): %s", c, fr)
+			debug.Log(ctx, slog.LevelWarn, "TX (ConnSASLPlain)",
+				slog.String("conn_ptr", fmt.Sprintf("%p", c)),
+				slog.String("frame", fr.String()),
+			)
 			timeout, err := c.getWriteTimeout(ctx)
 			if err != nil {
 				return nil, err
@@ -78,7 +82,10 @@ func SASLTypeAnonymous() SASLType {
 				Type: frames.TypeSASL,
 				Body: init,
 			}
-			debug.Log(1, "TX (ConnSASLAnonymous %p): %s", c, fr)
+			debug.Log(ctx, slog.LevelWarn, "TX (ConnSASLAnonymous)",
+				slog.String("conn_ptr", fmt.Sprintf("%p", c)),
+				slog.String("frame", fr.String()),
+			)
 			timeout, err := c.getWriteTimeout(ctx)
 			if err != nil {
 				return nil, err
@@ -114,7 +121,10 @@ func SASLTypeExternal(resp string) SASLType {
 				Type: frames.TypeSASL,
 				Body: init,
 			}
-			debug.Log(1, "TX (ConnSASLExternal %p): %s", c, fr)
+			debug.Log(ctx, slog.LevelWarn, "TX (ConnSASLExternal)",
+				slog.String("conn_ptr", fmt.Sprintf("%p", c)),
+				slog.String("frame", fr.String()),
+			)
 			timeout, err := c.getWriteTimeout(ctx)
 			if err != nil {
 				return nil, err

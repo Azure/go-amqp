@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"net"
 	"net/url"
@@ -494,7 +495,10 @@ func (c *Conn) freeAbandonedSessions(ctx context.Context) error {
 	c.abandonedSessionsMu.Lock()
 	defer c.abandonedSessionsMu.Unlock()
 
-	debug.Log(3, "TX (Conn %p): cleaning up %d abandoned sessions", c, len(c.abandonedSessions))
+	debug.Log(ctx, slog.LevelDebug, "TX (Conn): cleaning up abandoned sessions",
+		slog.String("conn_ptr", fmt.Sprintf("%p", c)),
+		slog.Int("num_sessions", len(c.abandonedSessions)),
+	)
 
 	for _, s := range c.abandonedSessions {
 		fr := frames.PerformEnd{}
@@ -552,7 +556,10 @@ func (c *Conn) connReader() {
 	var err error
 	for {
 		if err != nil {
-			debug.Log(0, "RX (connReader %p): terminal error: %v", c, err)
+			debug.Log(context.Background(), slog.LevelError, "RX (connReader): terminal error",
+				slog.String("conn_ptr", fmt.Sprintf("%p", c)),
+				slog.String("error", err.Error()),
+			)
 			c.rxErr = err
 			return
 		}
@@ -563,7 +570,10 @@ func (c *Conn) connReader() {
 			continue
 		}
 
-		debug.Log(0, "RX (connReader %p): %s", c, fr)
+		debug.Log(context.Background(), slog.LevelInfo, "RX (connReader)",
+			slog.String("conn_ptr", fmt.Sprintf("%p", c)),
+			slog.String("frame", fr.String()),
+		)
 
 		var (
 			session *Session
@@ -626,7 +636,11 @@ func (c *Conn) connReader() {
 		q := session.rxQ.Acquire()
 		q.Enqueue(fr.Body)
 		session.rxQ.Release(q)
-		debug.Log(2, "RX (connReader %p): mux frame to Session (%p): %s", c, session, fr)
+		debug.Log(context.Background(), slog.LevelInfo, "RX (connReader): mux frame to Session",
+			slog.String("conn_ptr", fmt.Sprintf("%p", c)),
+			slog.String("session", fmt.Sprintf("%p", session)),
+			slog.String("frame", fr.String()),
+		)
 	}
 }
 
@@ -695,7 +709,9 @@ func (c *Conn) readFrame() (frames.Frame, error) {
 
 		// check if body is empty (keepalive)
 		if bodySize == 0 {
-			debug.Log(3, "RX (connReader %p): received keep-alive frame", c)
+			debug.Log(context.Background(), slog.LevelDebug, "RX (connReader): received keep-alive frame",
+				slog.String("conn_ptr", fmt.Sprintf("%p", c)),
+			)
 			continue
 		}
 
@@ -760,7 +776,10 @@ func (c *Conn) connWriter() {
 	var err error
 	for {
 		if err != nil {
-			debug.Log(0, "TX (connWriter %p): terminal error: %v", c, err)
+			debug.Log(context.Background(), slog.LevelError, "TX (connWriter): terminal error",
+				slog.String("conn_ptr", fmt.Sprintf("%p", c)),
+				slog.String("error", err.Error()),
+			)
 			c.txErr = err
 			return
 		}
@@ -770,7 +789,11 @@ func (c *Conn) connWriter() {
 		case env := <-c.txFrame:
 			timeout, ctxErr := c.getWriteTimeout(env.FrameCtx.Ctx)
 			if ctxErr != nil {
-				debug.Log(1, "TX (connWriter %p) getWriteTimeout: %s: %s", c, ctxErr.Error(), env.Frame)
+				debug.Log(context.Background(), slog.LevelWarn, "TX (connWriter) getWriteTimeout",
+					slog.String("conn_ptr", fmt.Sprintf("%p", c)),
+					slog.String("error", err.Error()),
+					slog.String("frame", env.Frame.String()),
+				)
 				if env.FrameCtx.Done != nil {
 					// the error MUST be set before closing the channel
 					env.FrameCtx.Err = ctxErr
@@ -779,7 +802,11 @@ func (c *Conn) connWriter() {
 				continue
 			}
 
-			debug.Log(0, "TX (connWriter %p) timeout %s: %s", c, timeout, env.Frame)
+			debug.Log(context.Background(), slog.LevelError, "TX (connWriter) timeout",
+				slog.String("conn_ptr", fmt.Sprintf("%p", c)),
+				slog.Duration("timeout", timeout),
+				slog.String("frame", env.Frame.String()),
+			)
 			err = c.writeFrame(timeout, env.Frame)
 			if err == nil && env.FrameCtx.Done != nil {
 				close(env.FrameCtx.Done)
@@ -789,7 +816,9 @@ func (c *Conn) connWriter() {
 
 		// keepalive timer
 		case <-keepalive:
-			debug.Log(3, "TX (connWriter %p): sending keep-alive frame", c)
+			debug.Log(context.Background(), slog.LevelDebug, "TX (connWriter): sending keep-alive frame",
+				slog.String("conn_ptr", fmt.Sprintf("%p", c)),
+			)
 			_ = c.net.SetWriteDeadline(time.Now().Add(c.writeTimeout))
 			if _, err = c.net.Write(keepaliveFrame); err != nil {
 				err = &ConnError{inner: err}
@@ -812,7 +841,10 @@ func (c *Conn) connWriter() {
 				Type: frames.TypeAMQP,
 				Body: &frames.PerformClose{},
 			}
-			debug.Log(1, "TX (connWriter %p): %s", c, fr)
+			debug.Log(context.Background(), slog.LevelWarn, "TX (connWriter)",
+				slog.String("conn_ptr", fmt.Sprintf("%p", c)),
+				slog.String("frame", fr.String()),
+			)
 			c.txErr = c.writeFrame(c.writeTimeout, fr)
 			return
 		}
@@ -847,7 +879,12 @@ func (c *Conn) writeFrame(timeout time.Duration, fr frames.Frame) error {
 	// write to network
 	n, err := c.net.Write(c.txBuf.Bytes())
 	if l := c.txBuf.Len(); n > 0 && n < l && err != nil {
-		debug.Log(1, "TX (writeFrame %p): wrote %d bytes less than len %d: %v", c, n, l, err)
+		debug.Log(context.Background(), slog.LevelWarn, "TX (writeFrame): wrote less bytes than len",
+			slog.String("conn_ptr", fmt.Sprintf("%p", c)),
+			slog.String("error", err.Error()),
+			slog.Int("num_leftover_bytes", n),
+			slog.Int("num_bytes", l),
+		)
 	}
 	if err != nil {
 		err = &ConnError{inner: err}
@@ -869,7 +906,10 @@ var keepaliveFrame = []byte{0x00, 0x00, 0x00, 0x08, 0x02, 0x00, 0x00, 0x00}
 func (c *Conn) sendFrame(frameEnv frameEnvelope) {
 	select {
 	case c.txFrame <- frameEnv:
-		debug.Log(2, "TX (Conn %p): mux frame to connWriter: %s", c, frameEnv.Frame)
+		debug.Log(context.Background(), slog.LevelInfo, "TX (Conn): mux frame to connWriter",
+			slog.String("conn_ptr", fmt.Sprintf("%p", c)),
+			slog.String("frame", frameEnv.Frame.String()),
+		)
 	case <-c.done:
 		// Conn has closed
 	}
@@ -1019,7 +1059,10 @@ func (c *Conn) openAMQP(ctx context.Context) (stateFunc, error) {
 		Body:    open,
 		Channel: 0,
 	}
-	debug.Log(1, "TX (openAMQP %p): %s", c, fr)
+	debug.Log(context.Background(), slog.LevelWarn, "TX (openAMQP)",
+		slog.String("conn_ptr", fmt.Sprintf("%p", c)),
+		slog.String("frame", fr.String()),
+	)
 	timeout, err := c.getWriteTimeout(ctx)
 	if err != nil {
 		return nil, err
@@ -1033,7 +1076,10 @@ func (c *Conn) openAMQP(ctx context.Context) (stateFunc, error) {
 	if err != nil {
 		return nil, err
 	}
-	debug.Log(1, "RX (openAMQP %p): %s", c, fr)
+	debug.Log(context.Background(), slog.LevelWarn, "RX (openAMQP)",
+		slog.String("conn_ptr", fmt.Sprintf("%p", c)),
+		slog.String("frame", fr.String()),
+	)
 	o, ok := fr.Body.(*frames.PerformOpen)
 	if !ok {
 		return nil, fmt.Errorf("openAMQP: unexpected frame type %T", fr.Body)
@@ -1063,7 +1109,10 @@ func (c *Conn) negotiateSASL(context.Context) (stateFunc, error) {
 	if err != nil {
 		return nil, err
 	}
-	debug.Log(1, "RX (negotiateSASL %p): %s", c, fr)
+	debug.Log(context.Background(), slog.LevelWarn, "RX (negotiateSASL)",
+		slog.String("conn_ptr", fmt.Sprintf("%p", c)),
+		slog.String("frame", fr.String()),
+	)
 	sm, ok := fr.Body.(*frames.SASLMechanisms)
 	if !ok {
 		return nil, fmt.Errorf("negotiateSASL: unexpected frame type %T", fr.Body)
@@ -1092,7 +1141,10 @@ func (c *Conn) saslOutcome(context.Context) (stateFunc, error) {
 	if err != nil {
 		return nil, err
 	}
-	debug.Log(1, "RX (saslOutcome %p): %s", c, fr)
+	debug.Log(context.Background(), slog.LevelWarn, "RX (saslOutcome)",
+		slog.String("conn_ptr", fmt.Sprintf("%p", c)),
+		slog.String("frame", fr.String()),
+	)
 	so, ok := fr.Body.(*frames.SASLOutcome)
 	if !ok {
 		return nil, fmt.Errorf("saslOutcome: unexpected frame type %T", fr.Body)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 
 	"github.com/Azure/go-amqp/internal/debug"
@@ -153,7 +154,10 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 
 	resp, ok := fr.(*frames.PerformAttach)
 	if !ok {
-		debug.Log(1, "RX (link %p): unexpected attach response frame %T", l, fr)
+		debug.Log(ctx, slog.LevelWarn, "RX (link): unexpected attach response frame",
+			slog.String("link_ptr", fmt.Sprintf("%p", l)),
+			slog.Any("frame_type", fmt.Sprintf("%T", fr)),
+		)
 		if err := l.session.conn.Close(); err != nil {
 			return err
 		}
@@ -281,7 +285,10 @@ func (l *link) muxHandleFrame(fr frames.FrameBody) error {
 		return &LinkError{RemoteErr: fr.Error}
 
 	default:
-		debug.Log(1, "RX (link %p): unexpected frame: %s", l, fr)
+		debug.Log(context.Background(), slog.LevelWarn, "RX (link): unexpected frame",
+			slog.String("link_ptr", fmt.Sprintf("%p", l)),
+			slog.Any("frame", fr),
+		)
 		l.closeWithError(ErrCondInternalError, fmt.Sprintf("link received unexpected frame %T", fr))
 		return nil
 	}
@@ -305,7 +312,11 @@ func (l *link) closeLink(ctx context.Context) error {
 
 			// record that the close timed out/was cancelled.
 			// subsequent calls to closeLink() will return this
-			debug.Log(1, "TX (link %p) closing %s: %v", l, l.key.name, ctxErr)
+			debug.Log(ctx, slog.LevelWarn, "TX (link) closing",
+				slog.String("link_ptr", fmt.Sprintf("%p", l)),
+				slog.String("key_name", l.key.name),
+				slog.String("error", ctxErr.Error()),
+			)
 			l.closeErr = &LinkError{inner: ctxErr}
 		}
 	})
@@ -330,7 +341,10 @@ func (l *link) closeLink(ctx context.Context) error {
 func (l *link) closeWithError(cnd ErrCond, desc string) {
 	amqpErr := &Error{Condition: cnd, Description: desc}
 	if l.closeInProgress {
-		debug.Log(3, "TX (link %p) close error already pending, discarding %v", l, amqpErr)
+		debug.Log(context.Background(), slog.LevelDebug, "TX (link) close error already pending, discarding",
+			slog.String("link_ptr", fmt.Sprintf("%p", l)),
+			slog.String("error", amqpErr.String()),
+		)
 		return
 	}
 
@@ -357,7 +371,11 @@ func (l *link) txFrame(frameCtx *frameContext, fr frames.FrameBody) {
 		// we swallow this to prevent the link's mux from terminating.
 		// l.session.done will soon close so this is temporary.
 	case l.session.tx <- frameBodyEnvelope{FrameCtx: frameCtx, FrameBody: fr}:
-		debug.Log(2, "TX (link %p): mux frame to Session (%p): %s", l, l.session, fr)
+		debug.Log(context.Background(), slog.LevelInfo, "TX (link): mux frame to Session",
+			slog.String("link_ptr", fmt.Sprintf("%p", l)),
+			slog.String("session_ptr", fmt.Sprintf("%p", l.session)),
+			slog.Any("frame", fr),
+		)
 	}
 }
 
@@ -381,7 +399,11 @@ func (l *link) txFrameAndWait(ctx context.Context, fr frames.FrameBody) error {
 		// l.session.done will soon close so this is temporary.
 		return nil
 	case l.session.tx <- frameBodyEnvelope{FrameCtx: &frameCtx, FrameBody: fr}:
-		debug.Log(2, "TX (link %p): mux frame to Session (%p): %s", l, l.session, fr)
+		debug.Log(ctx, slog.LevelInfo, "TX (link): mux frame to Session",
+			slog.String("link_ptr", fmt.Sprintf("%p", l)),
+			slog.String("session_ptr", fmt.Sprintf("%p", l.session)),
+			slog.Any("frame", fr),
+		)
 	}
 
 	select {

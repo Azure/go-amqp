@@ -791,7 +791,7 @@ func (c *Conn) connWriter() {
 			if ctxErr != nil {
 				debug.Log(context.Background(), slog.LevelWarn, "TX (connWriter) getWriteTimeout",
 					slog.String("conn_ptr", fmt.Sprintf("%p", c)),
-					slog.String("error", err.Error()),
+					slog.String("error", ctxErr.Error()),
 					slog.String("frame", env.Frame.String()),
 				)
 				if env.FrameCtx.Done != nil {

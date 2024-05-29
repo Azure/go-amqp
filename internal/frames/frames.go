@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/Azure/go-amqp/internal/buffer"
@@ -876,11 +877,40 @@ type PerformFlow struct {
 	// link state properties
 	// http://www.amqp.org/specification/1.0/link-state-properties
 	Properties map[encoding.Symbol]any
+
+	mu *sync.Mutex
+}
+
+func NewPerformFlow() *PerformFlow {
+	return &PerformFlow{
+		mu: &sync.Mutex{},
+	}
 }
 
 func (f *PerformFlow) frameBody() {}
 
+func (f *PerformFlow) Lock() {
+	if f.mu == nil {
+		f.mu = &sync.Mutex{}
+	}
+
+	f.mu.Lock()
+}
+
+func (f *PerformFlow) Unlock() {
+	if f.mu == nil {
+		f.mu = &sync.Mutex{}
+
+		return
+	}
+
+	f.mu.Unlock()
+}
+
 func (f *PerformFlow) String() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	return fmt.Sprintf("Flow{NextIncomingID: %s, IncomingWindow: %d, NextOutgoingID: %d, OutgoingWindow: %d, "+
 		"Handle: %s, DeliveryCount: %s, LinkCredit: %s, Available: %s, Drain: %t, Echo: %t, Properties: %+v}",
 		formatUint32Ptr(f.NextIncomingID),

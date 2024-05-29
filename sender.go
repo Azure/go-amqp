@@ -482,11 +482,10 @@ func (s *Sender) muxHandleFrame(fr frames.FrameBody) error {
 		)
 
 		// send flow
-		resp := &frames.PerformFlow{
-			Handle:        &s.l.outputHandle,
-			DeliveryCount: &deliveryCount,
-			LinkCredit:    &linkCredit, // max number of messages
-		}
+		resp := frames.NewPerformFlow()
+		resp.Handle = &s.l.outputHandle
+		resp.DeliveryCount = &deliveryCount
+		resp.LinkCredit = &linkCredit // max number of messages
 
 		select {
 		case s.l.session.tx <- frameBodyEnvelope{FrameCtx: &frameContext{Ctx: context.Background()}, FrameBody: resp}:

@@ -394,12 +394,13 @@ func TestSessionFlowDisablesTransfer(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 
-	b, err := fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformFlow{
-		NextIncomingID: &nextIncomingID,
-		IncomingWindow: 0,
-		OutgoingWindow: 100,
-		NextOutgoingID: 1,
-	})
+	frame := frames.NewPerformFlow()
+	frame.NextIncomingID = &nextIncomingID
+	frame.IncomingWindow = 0
+	frame.OutgoingWindow = 100
+	frame.NextOutgoingID = 1
+
+	b, err := fake.EncodeFrame(frames.TypeAMQP, 0, frame)
 	require.NoError(t, err)
 	netConn.SendFrame(b)
 

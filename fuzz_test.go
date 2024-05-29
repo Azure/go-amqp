@@ -108,7 +108,7 @@ func fuzzUnmarshal(data []byte) int {
 		new(*frames.PerformDisposition),
 		new(frames.PerformEnd),
 		new(*frames.PerformEnd),
-		new(frames.PerformFlow),
+		frames.NewPerformFlow(),
 		new(*frames.PerformFlow),
 		new(frames.PerformOpen),
 		new(*frames.PerformOpen),

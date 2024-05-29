@@ -680,12 +680,11 @@ func (r *Receiver) muxFlow(linkCredit uint32, drain bool) error {
 		deliveryCount = r.l.deliveryCount
 	)
 
-	fr := &frames.PerformFlow{
-		Handle:        &r.l.outputHandle,
-		DeliveryCount: &deliveryCount,
-		LinkCredit:    &linkCredit, // max number of messages,
-		Drain:         drain,
-	}
+	fr := frames.NewPerformFlow()
+	fr.Handle = &r.l.outputHandle
+	fr.DeliveryCount = &deliveryCount
+	fr.LinkCredit = &linkCredit // max number of messages
+	fr.Drain = drain
 
 	// Update credit. This must happen before entering loop below
 	// because incoming messages handled while waiting to transmit
@@ -704,7 +703,7 @@ func (r *Receiver) muxFlow(linkCredit uint32, drain bool) error {
 			slog.String("receiver_ptr", fmt.Sprintf("%p", r)),
 			slog.String("session_ptr", fmt.Sprintf("%p", r.l.session)),
 			slog.Uint64("channel", uint64(r.l.session.channel)),
-			slog.String("frame", fr.String()),
+			slog.Any("frame", fr),
 		)
 		return nil
 	case <-r.l.close:
@@ -746,11 +745,10 @@ func (r *Receiver) muxHandleFrame(fr frames.FrameBody) error {
 		)
 
 		// send flow
-		resp := &frames.PerformFlow{
-			Handle:        &r.l.outputHandle,
-			DeliveryCount: &deliveryCount,
-			LinkCredit:    &linkCredit, // max number of messages
-		}
+		resp := frames.NewPerformFlow()
+		resp.Handle = &r.l.outputHandle
+		resp.DeliveryCount = &deliveryCount
+		resp.LinkCredit = &linkCredit // max number of messages
 
 		select {
 		case r.l.session.tx <- frameBodyEnvelope{FrameCtx: &frameContext{Ctx: context.Background()}, FrameBody: resp}:

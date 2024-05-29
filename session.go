@@ -537,12 +537,12 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 				if body.Echo && !closeInProgress {
 					niID := nextIncomingID
-					resp := &frames.PerformFlow{
-						NextIncomingID: &niID,
-						IncomingWindow: s.incomingWindow,
-						NextOutgoingID: nextOutgoingID,
-						OutgoingWindow: s.outgoingWindow,
-					}
+					resp := frames.NewPerformFlow()
+					resp.NextIncomingID = &niID
+					resp.IncomingWindow = s.incomingWindow
+					resp.NextOutgoingID = nextOutgoingID
+					resp.OutgoingWindow = s.outgoingWindow
+
 					s.txFrame(&frameContext{Ctx: context.Background()}, resp)
 				}
 
@@ -620,12 +620,12 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 					)
 					s.needFlowCount = 0
 					nID := nextIncomingID
-					flow := &frames.PerformFlow{
-						NextIncomingID: &nID,
-						IncomingWindow: s.incomingWindow,
-						NextOutgoingID: nextOutgoingID,
-						OutgoingWindow: s.outgoingWindow,
-					}
+					flow := frames.NewPerformFlow()
+					flow.NextIncomingID = &nID
+					flow.IncomingWindow = s.incomingWindow
+					flow.NextOutgoingID = nextOutgoingID
+					flow.OutgoingWindow = s.outgoingWindow
+
 					s.txFrame(&frameContext{Ctx: context.Background()}, flow)
 				}
 
@@ -777,10 +777,14 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				s.txFrame(env.FrameCtx, fr)
 			case *frames.PerformFlow:
 				niID := nextIncomingID
+
+				fr.Lock()
 				fr.NextIncomingID = &niID
 				fr.IncomingWindow = s.incomingWindow
 				fr.NextOutgoingID = nextOutgoingID
 				fr.OutgoingWindow = s.outgoingWindow
+				fr.Unlock()
+
 				s.txFrame(env.FrameCtx, fr)
 			case *frames.PerformTransfer:
 				panic("transfer frames must use txTransfer")

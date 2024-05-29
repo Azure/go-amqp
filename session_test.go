@@ -438,7 +438,7 @@ func TestSessionInvalidFlowFrame(t *testing.T) {
 	require.NoError(t, err)
 
 	// NextIncomingID cannot be nil once the session has been established
-	b, err := fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformFlow{})
+	b, err := fake.EncodeFrame(frames.TypeAMQP, 0, frames.NewPerformFlow())
 	require.NoError(t, err)
 	netConn.SendFrame(b)
 
@@ -501,13 +501,14 @@ func TestSessionFlowFrameWithEcho(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 
-	b, err := fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformFlow{
-		NextIncomingID: &nextIncomingID,
-		IncomingWindow: 100,
-		OutgoingWindow: 100,
-		NextOutgoingID: nextOutgoingID,
-		Echo:           true,
-	})
+	f := frames.NewPerformFlow()
+	f.NextIncomingID = &nextIncomingID
+	f.IncomingWindow = 100
+	f.OutgoingWindow = 100
+	f.NextOutgoingID = nextOutgoingID
+	f.Echo = true
+
+	b, err := fake.EncodeFrame(frames.TypeAMQP, 0, f)
 	require.NoError(t, err)
 	netConn.SendFrame(b)
 

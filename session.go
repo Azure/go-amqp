@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"sync"
 
@@ -152,7 +153,10 @@ func (s *Session) begin(ctx context.Context) error {
 		// either swallow the frame or blow up in some other way, both causing this call to hang.
 		// deallocate session on error.  we can't call
 		// s.Close() as the session mux hasn't started yet.
-		debug.Log(1, "RX (Session %p): unexpected begin response frame %T", s, fr)
+		debug.Log(ctx, slog.LevelWarn, "RX (Session): unexpected begin response frame",
+			slog.String("session_ptr", fmt.Sprintf("%p", s)),
+			slog.String("frame_type", fmt.Sprintf("%T", fr)),
+		)
 		s.conn.deleteSession(s)
 		if err := s.conn.Close(); err != nil {
 			return err
@@ -191,7 +195,11 @@ func (s *Session) Close(ctx context.Context) error {
 
 			// record that the close timed out/was cancelled.
 			// subsequent calls to Close() will return this
-			debug.Log(1, "TX (Session %p) channel %d: %v", s, s.channel, ctxErr)
+			debug.Log(ctx, slog.LevelWarn, "TX (Session) channel error",
+				slog.String("session_ptr", fmt.Sprintf("%p", s)),
+				slog.Uint64("channel", uint64(s.channel)),
+				slog.String("error", ctxErr.Error()),
+			)
 			s.closeErr = &SessionError{inner: ctxErr}
 		}
 	})
@@ -212,7 +220,11 @@ func (s *Session) Close(ctx context.Context) error {
 //   - ctx is used to provide the write deadline
 //   - fr is the frame to write to net.Conn
 func (s *Session) txFrame(frameCtx *frameContext, fr frames.FrameBody) {
-	debug.Log(2, "TX (Session %p) mux frame to Conn (%p): %s", s, s.conn, fr)
+	debug.Log(context.Background(), slog.LevelInfo, "TX (Session) mux frame to Conn",
+		slog.String("session_ptr", fmt.Sprintf("%p", s)),
+		slog.String("conn_ptr", fmt.Sprintf("%p", s.conn)),
+		slog.Any("frame", fr),
+	)
 	s.conn.sendFrame(frameEnvelope{
 		FrameCtx: frameCtx,
 		Frame: frames.Frame{
@@ -345,7 +357,10 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 	closeWithError := func(e1 *Error, e2 error) {
 		if closeInProgress {
-			debug.Log(3, "TX (Session %p): close already pending, discarding %v", s, e1)
+			debug.Log(context.Background(), slog.LevelDebug, "TX (Session): close already pending, discarding",
+				slog.String("session_ptr", fmt.Sprintf("%p", s)),
+				slog.Any("error", e1.Error()),
+			)
 			return
 		}
 
@@ -359,8 +374,11 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 		txTransfer := s.txTransfer
 		// disable txTransfer if flow control windows have been exceeded
 		if remoteIncomingWindow == 0 || s.outgoingWindow == 0 {
-			debug.Log(1, "TX (Session %p): disabling txTransfer - window exceeded. remoteIncomingWindow: %d outgoingWindow: %d",
-				s, remoteIncomingWindow, s.outgoingWindow)
+			debug.Log(context.Background(), slog.LevelWarn, "TX (Session): disabling txTransfer - window exceeded",
+				slog.String("session_ptr", fmt.Sprintf("%p", s)),
+				slog.Uint64("remote_incoming_window", uint64(remoteIncomingWindow)),
+				slog.Uint64("outgoing_window", uint64(s.outgoingWindow)),
+			)
 			txTransfer = nil
 		}
 
@@ -404,7 +422,11 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 		case q := <-s.rxQ.Wait():
 			fr := *q.Dequeue()
 			s.rxQ.Release(q)
-			debug.Log(2, "RX (Session %p): %s", s, fr)
+			debug.Log(context.Background(), slog.LevelInfo, "RX (Session)",
+				slog.String("session_ptr", fmt.Sprintf("%p", s)),
+				slog.Any("frame", fr),
+
+				s, fr)
 
 			switch body := fr.(type) {
 			// Disposition frames can reference transfers from more than one
@@ -427,7 +449,11 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 					inputHandle, ok := handles[deliveryID]
 					if !ok {
-						debug.Log(2, "RX (Session %p): role %s: didn't find deliveryID %d in inputHandlesByDeliveryID map", s, body.Role, deliveryID)
+						debug.Log(context.Background(), slog.LevelInfo, "RX (Session): didn't find deliveryID in inputHandlesByDeliveryID map",
+							slog.String("session_ptr", fmt.Sprintf("%p", s)),
+							slog.String("role", body.Role.String()),
+							slog.Uint64("delivery_id", uint64(deliveryID)),
+						)
 						continue
 					}
 					delete(handles, deliveryID)
@@ -487,7 +513,12 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				// initial-outgoing-id(endpoint) + incoming-window(flow) - next-outgoing-id(endpoint)"
 				remoteIncomingWindow = body.IncomingWindow - nextOutgoingID
 				remoteIncomingWindow += *body.NextIncomingID
-				debug.Log(3, "RX (Session %p): flow - remoteOutgoingWindow: %d remoteIncomingWindow: %d nextOutgoingID: %d", s, remoteOutgoingWindow, remoteIncomingWindow, nextOutgoingID)
+				debug.Log(context.Background(), slog.LevelDebug, "RX (Session): flow",
+					slog.String("session_ptr", fmt.Sprintf("%p", s)),
+					slog.Uint64("remote_outgoing_window", uint64(remoteOutgoingWindow)),
+					slog.Uint64("remote_incoming_window", uint64(remoteIncomingWindow)),
+					slog.Uint64("next_outgoing_id", uint64(nextOutgoingID)),
+				)
 
 				// Send to link if handle is set
 				if body.Handle != nil {
@@ -506,12 +537,12 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 				if body.Echo && !closeInProgress {
 					niID := nextIncomingID
-					resp := &frames.PerformFlow{
-						NextIncomingID: &niID,
-						IncomingWindow: s.incomingWindow,
-						NextOutgoingID: nextOutgoingID,
-						OutgoingWindow: s.outgoingWindow,
-					}
+					resp := frames.NewPerformFlow()
+					resp.NextIncomingID = &niID
+					resp.IncomingWindow = s.incomingWindow
+					resp.NextOutgoingID = nextOutgoingID
+					resp.OutgoingWindow = s.outgoingWindow
+
 					s.txFrame(&frameContext{Ctx: context.Background()}, resp)
 				}
 
@@ -539,7 +570,12 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 				s.muxFrameToLink(link, fr)
 
-				debug.Log(1, "RX (Session %p): link %s attached, input handle %d, output handle %d", s, link.key.name, link.inputHandle, link.outputHandle)
+				debug.Log(context.Background(), slog.LevelWarn, "RX (Session): link attached",
+					slog.String("session_ptr", fmt.Sprintf("%p", s)),
+					slog.String("link", link.key.name),
+					slog.Uint64("input_handle", uint64(link.inputHandle)),
+					slog.Uint64("output_handle", uint64(link.outputHandle)),
+				)
 
 			case *frames.PerformTransfer:
 				s.needFlowCount++
@@ -566,21 +602,30 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 				// if this message is received unsettled and link rcv-settle-mode == second, add to handlesByRemoteDeliveryID
 				if !body.Settled && body.DeliveryID != nil && link.receiverSettleMode != nil && *link.receiverSettleMode == ReceiverSettleModeSecond {
-					debug.Log(1, "RX (Session %p): adding handle %d to inputHandleFromRemoteDeliveryID. remote delivery ID: %d", s, body.Handle, *body.DeliveryID)
+					debug.Log(context.Background(), slog.LevelWarn, "RX (Session): adding handle to inputHandleFromRemoteDeliveryID",
+						slog.String("session_ptr", fmt.Sprintf("%p", s)),
+						slog.Uint64("handle", uint64(body.Handle)),
+						slog.Uint64("remote_delivery_id", uint64(*body.DeliveryID)),
+					)
 					inputHandleFromRemoteDeliveryID[*body.DeliveryID] = body.Handle
 				}
 
 				// Update peer's outgoing window if half has been consumed.
 				if s.needFlowCount >= s.incomingWindow/2 && !closeInProgress {
-					debug.Log(3, "RX (Session %p): channel %d: flow - s.needFlowCount(%d) >= s.incomingWindow(%d)/2\n", s, s.channel, s.needFlowCount, s.incomingWindow)
+					debug.Log(context.Background(), slog.LevelDebug, "RX (Session): flow - s.needFlowCount >= s.incomingWindow / 2",
+						slog.String("session_ptr", fmt.Sprintf("%p", s)),
+						slog.Uint64("channel", uint64(s.channel)),
+						slog.Uint64("need_flow_count", uint64(s.needFlowCount)),
+						slog.Uint64("incoming_window", uint64(s.incomingWindow)),
+					)
 					s.needFlowCount = 0
 					nID := nextIncomingID
-					flow := &frames.PerformFlow{
-						NextIncomingID: &nID,
-						IncomingWindow: s.incomingWindow,
-						NextOutgoingID: nextOutgoingID,
-						OutgoingWindow: s.outgoingWindow,
-					}
+					flow := frames.NewPerformFlow()
+					flow.NextIncomingID = &nID
+					flow.IncomingWindow = s.incomingWindow
+					flow.NextOutgoingID = nextOutgoingID
+					flow.OutgoingWindow = s.outgoingWindow
+
 					s.txFrame(&frameContext{Ctx: context.Background()}, flow)
 				}
 
@@ -625,7 +670,10 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				return
 
 			default:
-				debug.Log(1, "RX (Session %p): unexpected frame: %s\n", s, body)
+				debug.Log(context.Background(), slog.LevelWarn, "RX (Session): unexpected frame",
+					slog.String("session_ptr", fmt.Sprintf("%p", s)),
+					slog.Any("frame", body),
+				)
 				closeWithError(&Error{
 					Condition:   ErrCondInternalError,
 					Description: "session received unexpected frame",
@@ -652,7 +700,11 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 			}
 
 			// log after the delivery ID has been assigned
-			debug.Log(2, "TX (Session %p): %d, %s", s, s.channel, fr)
+			debug.Log(context.Background(), slog.LevelInfo, "TX (Session)",
+				slog.String("session_ptr", fmt.Sprintf("%p", s)),
+				slog.Uint64("channel", uint64(s.channel)),
+				slog.String("frame", fr.String()),
+			)
 
 			// frame has been sender-settled, remove from map.
 			// this should only come into play for multi-frame transfers.
@@ -693,7 +745,11 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 		case env := <-tx:
 			fr := env.FrameBody
-			debug.Log(2, "TX (Session %p): %d, %s", s, s.channel, fr)
+			debug.Log(context.Background(), slog.LevelInfo, "TX (Session)",
+				slog.String("session_ptr", fmt.Sprintf("%p", s)),
+				slog.Uint64("channel", uint64(s.channel)),
+				slog.Any("frame", fr),
+			)
 			switch fr := env.FrameBody.(type) {
 			case *frames.PerformDisposition:
 				if fr.Settled && fr.Role == encoding.RoleSender {
@@ -721,10 +777,14 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				s.txFrame(env.FrameCtx, fr)
 			case *frames.PerformFlow:
 				niID := nextIncomingID
+
+				fr.Lock()
 				fr.NextIncomingID = &niID
 				fr.IncomingWindow = s.incomingWindow
 				fr.NextOutgoingID = nextOutgoingID
 				fr.OutgoingWindow = s.outgoingWindow
+				fr.Unlock()
+
 				s.txFrame(env.FrameCtx, fr)
 			case *frames.PerformTransfer:
 				panic("transfer frames must use txTransfer")
@@ -778,7 +838,10 @@ func (s *Session) freeAbandonedLinks(ctx context.Context) error {
 	s.abandonedLinksMu.Lock()
 	defer s.abandonedLinksMu.Unlock()
 
-	debug.Log(3, "TX (Session %p): cleaning up %d abandoned links", s, len(s.abandonedLinks))
+	debug.Log(ctx, slog.LevelDebug, "TX (Session): cleaning up abandoned links",
+		slog.String("session_ptr", fmt.Sprintf("%p", s)),
+		slog.Int("num_abandoned_links", len(s.abandonedLinks)),
+	)
 
 	for _, l := range s.abandonedLinks {
 		dr := &frames.PerformDetach{
@@ -798,7 +861,12 @@ func (s *Session) muxFrameToLink(l *link, fr frames.FrameBody) {
 	q := l.rxQ.Acquire()
 	q.Enqueue(fr)
 	l.rxQ.Release(q)
-	debug.Log(2, "RX (Session %p): mux frame to link (%p): %s, %s", s, l, l.key.name, fr)
+	debug.Log(context.Background(), slog.LevelInfo, "RX (Session): mux frame to link",
+		slog.String("session_ptr", fmt.Sprintf("%p", s)),
+		slog.String("link_ptr", fmt.Sprintf("%p", l)),
+		slog.String("link", l.key.name),
+		slog.Any("frame", fr),
+	)
 }
 
 // transferEnvelope is used by senders to send transfer frames

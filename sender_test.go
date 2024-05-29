@@ -1060,15 +1060,16 @@ func TestSenderFlowFrameWithEcho(t *testing.T) {
 	require.NoError(t, err)
 
 	nextIncomingID := uint32(1)
-	b, err := fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformFlow{
-		Handle:         &sender.l.outputHandle,
-		NextIncomingID: &nextIncomingID,
-		IncomingWindow: 100,
-		OutgoingWindow: 100,
-		NextOutgoingID: 1,
-		LinkCredit:     &linkCredit,
-		Echo:           true,
-	})
+	f := frames.NewPerformFlow()
+	f.Handle = &sender.l.outputHandle
+	f.NextIncomingID = &nextIncomingID
+	f.IncomingWindow = 100
+	f.OutgoingWindow = 100
+	f.NextOutgoingID = 1
+	f.LinkCredit = &linkCredit
+	f.Echo = true
+
+	b, err := fake.EncodeFrame(frames.TypeAMQP, 0, f)
 	require.NoError(t, err)
 	netConn.SendFrame(b)
 

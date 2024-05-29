@@ -88,7 +88,7 @@ func ParseBody(r *buffer.Buffer) (FrameBody, error) {
 		err := t.Unmarshal(r)
 		return t, err
 	case encoding.TypeCodeFlow:
-		t := new(PerformFlow)
+		t := NewPerformFlow()
 		err := t.Unmarshal(r)
 		return t, err
 	case encoding.TypeCodeTransfer:

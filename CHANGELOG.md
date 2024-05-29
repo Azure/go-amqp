@@ -1,5 +1,12 @@
 # Release History
 
+
+## 1.0.6 (2023-05-25)
+
+### Features Added
+
+* Added support for configurable debug logs, using `log/slog`
+
 ## 1.0.5 (2024-03-04)
 
 ### Bugs Fixed

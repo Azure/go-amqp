@@ -1,5 +1,11 @@
 # Release History
 
+## 1.0.5 (TBD)
+
+### Features Added
+
+* ConnError, SessionError and LinkError now work with errors.As(), making it easier to write generalized error handling code that wants to deal with *amqp.Error's.
+
 ## 1.0.5 (2024-03-04)
 
 ### Bugs Fixed

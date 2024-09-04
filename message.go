@@ -89,7 +89,8 @@ type Message struct {
 
 	// Value payload.
 	// An amqp-value section contains a single AMQP value.
-	Value any
+	Value        any
+	valueSection bool
 
 	// Sequence will contain AMQP sequence sections from the body of the message.
 	// An amqp-sequence section contains an AMQP sequence.
@@ -117,6 +118,17 @@ type Message struct {
 func NewMessage(data []byte) *Message {
 	return &Message{
 		Data: [][]byte{data},
+	}
+}
+
+// NewMessageWithValue returns a *Message with the Value field set.
+// valueSection is set to true so even if the Value field is nil,
+// the AMQPValue section will be written as NullValue
+// that's a simplification of what the .NET AMQP parser does with sections
+func NewMessageWithValue(value any) *Message {
+	return &Message{
+		valueSection: true,
+		Value:        value,
 	}
 }
 
@@ -176,6 +188,7 @@ func (m *Message) Marshal(wr *buffer.Buffer) error {
 	}
 
 	for _, data := range m.Data {
+
 		encoding.WriteDescriptor(wr, encoding.TypeCodeApplicationData)
 		err := encoding.WriteBinary(wr, data)
 		if err != nil {
@@ -183,7 +196,7 @@ func (m *Message) Marshal(wr *buffer.Buffer) error {
 		}
 	}
 
-	if m.Value != nil {
+	if m.Value != nil || m.valueSection {
 		encoding.WriteDescriptor(wr, encoding.TypeCodeAMQPValue)
 		err := encoding.Marshal(wr, m.Value)
 		if err != nil {

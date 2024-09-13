@@ -1200,7 +1200,7 @@ func TestSenderNullValue(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	sender, err := session.NewSender(ctx, "TestSenderNilMessage", &amqp.SenderOptions{
+	sender, err := session.NewSender(ctx, "TestSenderNullValue", &amqp.SenderOptions{
 		SettlementMode:              amqp.SenderSettleModeUnsettled.Ptr(),
 		RequestedReceiverSettleMode: amqp.ReceiverSettleModeSecond.Ptr(),
 	})
@@ -1213,7 +1213,7 @@ func TestSenderNullValue(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
-	receiver, err := session.NewReceiver(ctx, "TestSenderNilMessage", &amqp.ReceiverOptions{
+	receiver, err := session.NewReceiver(ctx, "TestSenderNullValue", &amqp.ReceiverOptions{
 		SettlementMode: amqp.ReceiverSettleModeSecond.Ptr(),
 	})
 	cancel()

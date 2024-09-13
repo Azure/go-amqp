@@ -6,6 +6,10 @@
 
 * Added type `Null` used to send an AMQP `null` message value.
 
+### Bugs Fixed
+
+* Calling `NewMessage` with a `nil` value encodes the application data as `null` instead of `vbin8`.
+
 ## 1.1.0 (2024-08-20)
 
 ### Features Added

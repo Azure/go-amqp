@@ -383,6 +383,12 @@ func WriteBinary(wr *buffer.Buffer, bin []byte) error {
 	l := len(bin)
 
 	switch {
+	case l == 0:
+		wr.Append([]byte{
+			byte(TypeCodeNull),
+		})
+		return nil
+
 	// List8
 	case l < 256:
 		wr.Append([]byte{

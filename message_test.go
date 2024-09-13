@@ -55,6 +55,32 @@ func TestMessageNull(t *testing.T) {
 	require.Equal(t, []byte{0, 0x53, 0x77, 0x40}, b)
 }
 
+func TestMessageMarshalBinary_Null(t *testing.T) {
+	msg := NewMessage(nil)
+	b, err := msg.MarshalBinary()
+	require.NoError(t, err)
+	require.NotNil(t, b)
+	require.Equal(t, []byte{0, 0x53, 0x75, 0x40}, b)
+
+	msg = &Message{
+		Data: [][]byte{
+			{12},
+			nil,
+			{34},
+			nil,
+		},
+	}
+	b, err = msg.MarshalBinary()
+	require.NoError(t, err)
+	require.NotNil(t, b)
+	require.Equal(t, []byte{
+		0, 0x53, 0x75, 0xa0, 0x1, 0xc, // first data chunk with value 12
+		0, 0x53, 0x75, 0x40, // second data chunk with nil
+		0, 0x53, 0x75, 0xa0, 0x1, 0x22, // third data chunk with value 34
+		0, 0x53, 0x75, 0x40, // fourth data chunk with nil
+	}, b)
+}
+
 func TestMessageUnmarshaling(t *testing.T) {
 	for _, tt := range exampleEncodedMessages {
 		t.Run(tt.label, func(t *testing.T) {

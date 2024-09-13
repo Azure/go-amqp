@@ -45,6 +45,16 @@ var exampleEncodedMessages = []struct {
 	},
 }
 
+func TestMessageNull(t *testing.T) {
+	msg := &Message{
+		Value: Null{},
+	}
+	b, err := msg.MarshalBinary()
+	require.NoError(t, err)
+	require.NotNil(t, b)
+	require.Equal(t, []byte{0, 0x53, 0x77, 0x40}, b)
+}
+
 func TestMessageUnmarshaling(t *testing.T) {
 	for _, tt := range exampleEncodedMessages {
 		t.Run(tt.label, func(t *testing.T) {

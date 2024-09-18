@@ -1,5 +1,11 @@
 # Release History
 
+## 1.2.0 (Unreleased)
+
+### Features Added
+
+* Added type `Null` used to send an AMQP `null` message value.
+
 ## 1.1.0 (2024-08-20)
 
 ### Features Added

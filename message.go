@@ -89,6 +89,7 @@ type Message struct {
 
 	// Value payload.
 	// An amqp-value section contains a single AMQP value.
+	// To send an AMQP null, populate with a [Null].
 	Value any
 
 	// Sequence will contain AMQP sequence sections from the body of the message.
@@ -118,6 +119,17 @@ func NewMessage(data []byte) *Message {
 	return &Message{
 		Data: [][]byte{data},
 	}
+}
+
+// Null is an AMQP null.
+// Typically used in [Message.Value] to send a null.
+//
+// https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-types-v1.0-os.html#type-null
+type Null struct{}
+
+func (n Null) Marshal(wr *buffer.Buffer) error {
+	wr.AppendByte(byte(encoding.TypeCodeNull))
+	return nil
 }
 
 // GetData returns the first []byte from the Data field

@@ -87,12 +87,6 @@ type ConnOptions struct {
 
 	// test hook
 	dialer dialer
-
-	// Channel to send close events to the user
-	// the event will be sent when the connection is closed correctly or by an error
-	// the event will contain the error and the connection
-	// if the channel is nil, the events will not be sent
-	ChCloseEvent chan *CloseEvent
 }
 
 // Dial connects to an AMQP broker.
@@ -129,11 +123,6 @@ func NewConn(ctx context.Context, conn net.Conn, opts *ConnOptions) (*Conn, erro
 		return nil, err
 	}
 	return c, nil
-}
-
-type CloseEvent struct {
-	Err        error
-	Connection *Conn
 }
 
 // Conn is an AMQP connection.
@@ -189,8 +178,6 @@ type Conn struct {
 	txBuf   buffer.Buffer      // buffer for marshaling frames before transmitting
 	txDone  chan struct{}      // closed when connWriter exits
 	txErr   error              // contains last error writing to c.net; DO NOT TOUCH outside of connWriter until txDone has been closed!
-
-	chCloseEvent chan *CloseEvent // channel to send close events to the user
 }
 
 // used to abstract the underlying dialer for testing purposes
@@ -328,9 +315,6 @@ func newConn(netConn net.Conn, opts *ConnOptions) (*Conn, error) {
 	if opts.dialer != nil {
 		c.dialer = opts.dialer
 	}
-	if opts.ChCloseEvent != nil {
-		c.chCloseEvent = opts.ChCloseEvent
-	}
 	return c, nil
 }
 
@@ -433,6 +417,15 @@ func (c *Conn) Close() error {
 	// there was an error during shut-down or connReader/connWriter
 	// experienced a terminal error
 	return c.doneErr
+}
+
+func (c *Conn) Done() <-chan error {
+	ch := make(chan error, 1)
+	go func() {
+		<-c.done
+		ch <- c.doneErr
+	}()
+	return ch
 }
 
 // close is called once, either from Close() or when connReader/connWriter exits
@@ -570,9 +563,6 @@ func (c *Conn) connReader() {
 		if err != nil {
 			debug.Log(0, "RX (connReader %p): terminal error: %v", c, err)
 			c.rxErr = err
-			if c.chCloseEvent != nil {
-				c.chCloseEvent <- &CloseEvent{Err: err, Connection: c}
-			}
 			return
 		}
 

@@ -333,9 +333,22 @@ func (c *Conn) initTLSConfig() {
 // start establishes the connection and begins multiplexing network IO.
 // It is an error to call Start() on a connection that's been closed.
 func (c *Conn) start(ctx context.Context) (err error) {
+	// only start connWriter and connReader if there was no error
+	// NOTE: this MUST be the first defer in this scope so that the
+	//       defer for the interruptor goroutine executes first
+	defer func() {
+		if err == nil {
+			// we can't create the channel bitmap until the connection has been established.
+			// this is because our peer can tell us the max channels they support.
+			c.channels = bitmap.New(uint32(c.channelMax))
+
+			go c.connWriter()
+			go c.connReader()
+		}
+	}()
+
 	// if the context has a deadline or is cancellable, start the interruptor goroutine.
 	// this will close the underlying net.Conn in response to the context.
-
 	if ctx.Done() != nil {
 		done := make(chan struct{})
 		interruptRes := make(chan error, 1)
@@ -360,15 +373,8 @@ func (c *Conn) start(ctx context.Context) (err error) {
 	}
 
 	if err = c.startImpl(ctx); err != nil {
-		return err
+		return
 	}
-
-	// we can't create the channel bitmap until the connection has been established.
-	// this is because our peer can tell us the max channels they support.
-	c.channels = bitmap.New(uint32(c.channelMax))
-
-	go c.connWriter()
-	go c.connReader()
 
 	return
 }

@@ -6,6 +6,10 @@
 
 * Added type `Null` used to send an AMQP `null` message value.
 
+### Bugs Fixed
+
+* Fixed a rare race in `Conn.start` that could cause goroutines to be leaked if the provided context was canceld/expired.
+
 ## 1.1.0 (2024-08-20)
 
 ### Features Added

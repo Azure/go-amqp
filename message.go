@@ -340,7 +340,7 @@ type MessageHeader struct {
 
 func (h *MessageHeader) Marshal(wr *buffer.Buffer) error {
 	return encoding.MarshalComposite(wr, encoding.TypeCodeMessageHeader, []encoding.MarshalField{
-		{Value: &h.Durable, Omit: !h.Durable},
+		{Value: &h.Durable},
 		{Value: &h.Priority, Omit: h.Priority == 4},
 		{Value: (*encoding.Milliseconds)(&h.TTL), Omit: h.TTL == 0},
 		{Value: &h.FirstAcquirer, Omit: !h.FirstAcquirer},

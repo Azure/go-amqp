@@ -149,8 +149,9 @@ type Conn struct {
 	containerID  string                  // set explicitly or randomly generated
 
 	// peer settings
-	peerIdleTimeout  time.Duration // maximum period between sending frames
-	peerMaxFrameSize uint32        // maximum frame size peer will accept
+	peerIdleTimeout  time.Duration  // maximum period between sending frames
+	peerMaxFrameSize uint32         // maximum frame size peer will accept
+	peerProperties   map[string]any // properties returned by the peer
 
 	// conn state
 	done    chan struct{} // indicates the connection has terminated
@@ -494,6 +495,12 @@ func (c *Conn) NewSession(ctx context.Context, opts *SessionOptions) (*Session, 
 	}
 
 	return session, nil
+}
+
+// Properties returns the peer's connection properties.
+// Returns nil if the peer didn't send any properties.
+func (c *Conn) Properties() map[string]any {
+	return c.peerProperties
 }
 
 func (c *Conn) freeAbandonedSessions(ctx context.Context) error {
@@ -1055,6 +1062,13 @@ func (c *Conn) openAMQP(ctx context.Context) (stateFunc, error) {
 	}
 	if o.ChannelMax < c.channelMax {
 		c.channelMax = o.ChannelMax
+	}
+
+	if len(o.Properties) > 0 {
+		c.peerProperties = map[string]any{}
+		for k, v := range o.Properties {
+			c.peerProperties[string(k)] = v
+		}
 	}
 
 	// connection established, exit state machine

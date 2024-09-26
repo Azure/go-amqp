@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"reflect"
 	"testing"
 	"time"
@@ -89,6 +90,7 @@ func TestSenderMethodsNoSend(t *testing.T) {
 	require.NotNil(t, snd)
 	require.Equal(t, linkAddr, snd.Address())
 	require.Equal(t, linkName, snd.LinkName())
+	require.Nil(t, snd.Properties())
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	require.NoError(t, snd.Close(ctx))
 	cancel()
@@ -1370,4 +1372,66 @@ func TestSenderSendCancelled(t *testing.T) {
 	assert.EqualValues(t, linkCredit, snd.l.linkCredit)
 
 	selectSem.Release(-1)
+}
+
+func TestSenderProperties(t *testing.T) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		switch tt := req.(type) {
+		case *fake.AMQPProto:
+			return newResponse(fake.ProtoHeader(fake.ProtoAMQP))
+		case *frames.PerformOpen:
+			return newResponse(fake.PerformOpen("container"))
+		case *frames.PerformBegin:
+			return newResponse(fake.PerformBegin(0, remoteChannel))
+		case *frames.PerformEnd:
+			return newResponse(fake.PerformEnd(0, nil))
+		case *frames.PerformAttach:
+			b, err := fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformAttach{
+				Name:   tt.Name,
+				Handle: 0,
+				Role:   encoding.RoleReceiver,
+				Target: &frames.Target{
+					Address:      "test",
+					Durable:      encoding.DurabilityNone,
+					ExpiryPolicy: encoding.ExpirySessionEnd,
+				},
+				SenderSettleMode: SenderSettleModeUnsettled.Ptr(),
+				MaxMessageSize:   math.MaxUint32,
+				Properties: map[encoding.Symbol]any{
+					"SenderProperty1": 123,
+					"SenderProperty2": "something",
+				},
+			})
+			return newResponse(b, err)
+		case *frames.PerformDetach:
+			return newResponse(fake.PerformDetach(0, 0, nil))
+		case *frames.PerformClose:
+			return newResponse(fake.PerformClose(nil))
+		default:
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
+	require.NoError(t, err)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx, "thetarget", nil)
+	cancel()
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{
+		"SenderProperty1": int64(123),
+		"SenderProperty2": "something",
+	}, snd.Properties())
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+	require.NoError(t, snd.Close(ctx))
+	cancel()
+	require.NoError(t, client.Close())
 }

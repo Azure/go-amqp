@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -95,6 +96,7 @@ func TestReceiverMethodsNoReceive(t *testing.T) {
 	require.Equal(t, sourceAddr, r.Address())
 	require.Equal(t, linkName, r.LinkName())
 	require.Nil(t, r.LinkSourceFilterValue("nofilter"))
+	require.Nil(t, r.Properties())
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	require.NoError(t, r.Close(ctx))
 	cancel()
@@ -1465,6 +1467,65 @@ func TestReceiveSuccessReceiverSettleModeSecondAcceptSlow(t *testing.T) {
 	}
 	muxSem.Release(-1)
 	require.NoError(t, client.Close())
+}
+
+func TestReceiverProperties(t *testing.T) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		switch ff := req.(type) {
+		case *fake.AMQPProto:
+			return newResponse(fake.ProtoHeader(fake.ProtoAMQP))
+		case *frames.PerformOpen:
+			return newResponse(fake.PerformOpen("test"))
+		case *frames.PerformBegin:
+			return newResponse(fake.PerformBegin(0, remoteChannel))
+		case *frames.PerformAttach:
+			b, err := fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformAttach{
+				Name:   ff.Name,
+				Handle: 0,
+				Role:   encoding.RoleSender,
+				Source: &frames.Source{
+					Address:      "test",
+					Durable:      encoding.DurabilityNone,
+					ExpiryPolicy: encoding.ExpirySessionEnd,
+				},
+				ReceiverSettleMode: ReceiverSettleModeFirst.Ptr(),
+				MaxMessageSize:     math.MaxUint32,
+				Properties: map[encoding.Symbol]any{
+					"ReceiverProperty1": "something",
+					"ReceiverProperty2": 456,
+				},
+			})
+			return newResponse(b, err)
+		case *frames.PerformFlow, *fake.KeepAlive:
+			return fake.Response{}, nil
+		case *frames.PerformDetach:
+			return newResponse(fake.PerformDetach(0, ff.Handle, nil))
+		case *frames.PerformClose:
+			return newResponse(fake.PerformClose(nil))
+		case *frames.PerformEnd:
+			return newResponse(fake.PerformEnd(0, nil))
+		default:
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+	conn := fake.NewNetConn(responder, fake.NetConnOptions{})
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, conn, nil)
+	cancel()
+	require.NoError(t, err)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	r, err := session.NewReceiver(ctx, "thesource", nil)
+	cancel()
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{
+		"ReceiverProperty1": "something",
+		"ReceiverProperty2": int64(456),
+	}, r.Properties())
+	require.NoError(t, conn.Close())
 }
 
 // TODO: add unit tests for manual credit management

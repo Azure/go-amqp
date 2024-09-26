@@ -5,6 +5,7 @@
 ### Features Added
 
 * Added type `Null` used to send an AMQP `null` message value.
+* Added method `Properties` to `Conn`, `Session`, `Receiver`, and `Sender` which contains the peer's respective properties.
 
 ### Bugs Fixed
 

@@ -426,6 +426,15 @@ func (c *Conn) Close() error {
 	return c.doneErr
 }
 
+func (c *Conn) Done() <-chan error {
+	ch := make(chan error, 1)
+	go func() {
+		<-c.done
+		ch <- c.doneErr
+	}()
+	return ch
+}
+
 // close is called once, either from Close() or when connReader/connWriter exits
 func (c *Conn) close() {
 	c.closeOnce.Do(func() {

@@ -5,6 +5,15 @@
 ### Features Added
 
 * Added type `Null` used to send an AMQP `null` message value.
+* Added method `Properties` to `Conn`, `Session`, `Receiver`, and `Sender` which contains the peer's respective properties.
+
+### Bugs Fixed
+
+* Fixed a rare race in `Conn.start` that could cause goroutines to be leaked if the provided context was canceld/expired.
+
+### Other Changes
+
+* The field `MessageHeader.Durable` is not omitted when it's `false`.
 
 ## 1.1.0 (2024-08-20)
 

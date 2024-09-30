@@ -149,8 +149,9 @@ type Conn struct {
 	containerID  string                  // set explicitly or randomly generated
 
 	// peer settings
-	peerIdleTimeout  time.Duration // maximum period between sending frames
-	peerMaxFrameSize uint32        // maximum frame size peer will accept
+	peerIdleTimeout  time.Duration  // maximum period between sending frames
+	peerMaxFrameSize uint32         // maximum frame size peer will accept
+	peerProperties   map[string]any // properties returned by the peer
 
 	// conn state
 	done    chan struct{} // indicates the connection has terminated
@@ -333,9 +334,22 @@ func (c *Conn) initTLSConfig() {
 // start establishes the connection and begins multiplexing network IO.
 // It is an error to call Start() on a connection that's been closed.
 func (c *Conn) start(ctx context.Context) (err error) {
+	// only start connWriter and connReader if there was no error
+	// NOTE: this MUST be the first defer in this scope so that the
+	//       defer for the interruptor goroutine executes first
+	defer func() {
+		if err == nil {
+			// we can't create the channel bitmap until the connection has been established.
+			// this is because our peer can tell us the max channels they support.
+			c.channels = bitmap.New(uint32(c.channelMax))
+
+			go c.connWriter()
+			go c.connReader()
+		}
+	}()
+
 	// if the context has a deadline or is cancellable, start the interruptor goroutine.
 	// this will close the underlying net.Conn in response to the context.
-
 	if ctx.Done() != nil {
 		done := make(chan struct{})
 		interruptRes := make(chan error, 1)
@@ -360,15 +374,8 @@ func (c *Conn) start(ctx context.Context) (err error) {
 	}
 
 	if err = c.startImpl(ctx); err != nil {
-		return err
+		return
 	}
-
-	// we can't create the channel bitmap until the connection has been established.
-	// this is because our peer can tell us the max channels they support.
-	c.channels = bitmap.New(uint32(c.channelMax))
-
-	go c.connWriter()
-	go c.connReader()
 
 	return
 }
@@ -497,6 +504,12 @@ func (c *Conn) NewSession(ctx context.Context, opts *SessionOptions) (*Session, 
 	}
 
 	return session, nil
+}
+
+// Properties returns the peer's connection properties.
+// Returns nil if the peer didn't send any properties.
+func (c *Conn) Properties() map[string]any {
+	return c.peerProperties
 }
 
 func (c *Conn) freeAbandonedSessions(ctx context.Context) error {
@@ -1058,6 +1071,13 @@ func (c *Conn) openAMQP(ctx context.Context) (stateFunc, error) {
 	}
 	if o.ChannelMax < c.channelMax {
 		c.channelMax = o.ChannelMax
+	}
+
+	if len(o.Properties) > 0 {
+		c.peerProperties = map[string]any{}
+		for k, v := range o.Properties {
+			c.peerProperties[string(k)] = v
+		}
 	}
 
 	// connection established, exit state machine

@@ -3,6 +3,7 @@ package amqp
 import (
 	"context"
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -54,6 +55,7 @@ func TestSessionClose(t *testing.T) {
 		require.NoErrorf(t, err, "iteration %d", i)
 		require.Equalf(t, uint16(0), session.channel, "iteration %d", i)
 		require.Equalf(t, channelNum-1, session.remoteChannel, "iteration %d", i)
+		require.Nil(t, session.Properties())
 		ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 		err = session.Close(ctx)
 		cancel()
@@ -661,4 +663,54 @@ func TestSessionReceiveDetachrNoHandle(t *testing.T) {
 	require.ErrorAs(t, session.Close(ctx), &sessionErr)
 	require.Contains(t, sessionErr.Error(), "detach frame with unknown link handle")
 	cancel()
+}
+
+func TestSessionProperties(t *testing.T) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		switch req.(type) {
+		case *fake.AMQPProto:
+			return newResponse(fake.ProtoHeader(fake.ProtoAMQP))
+		case *frames.PerformOpen:
+			return newResponse(fake.PerformOpen("container"))
+		case *frames.PerformBegin:
+			b, err := fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformBegin{
+				RemoteChannel:  &remoteChannel,
+				NextOutgoingID: 1,
+				IncomingWindow: 5000,
+				OutgoingWindow: 1000,
+				HandleMax:      math.MaxInt16,
+				Properties: map[encoding.Symbol]any{
+					"SessionProperty1": 3.14159,
+					"SessionProperty2": 998877,
+				},
+			})
+			return newResponse(b, err)
+		case *frames.PerformEnd:
+			return newResponse(fake.PerformEnd(0, nil))
+		case *frames.PerformClose:
+			return newResponse(fake.PerformClose(nil))
+		default:
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
+	require.NoError(t, err)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{
+		"SessionProperty1": 3.14159,
+		"SessionProperty2": int64(998877),
+	}, session.Properties())
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	err = session.Close(ctx)
+	cancel()
+	require.NoError(t, err)
+	require.NoError(t, client.Close())
 }

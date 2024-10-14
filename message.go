@@ -510,3 +510,6 @@ type Annotations = encoding.Annotations
 
 // UUID is a 128 bit identifier as defined in RFC 4122.
 type UUID = encoding.UUID
+
+// Symbol is an AMQP symbolic string.
+type Symbol = encoding.Symbol

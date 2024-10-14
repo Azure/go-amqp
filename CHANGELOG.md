@@ -1,5 +1,11 @@
 # Release History
 
+## 1.3.0 (Unreleased)
+
+### Features Added
+
+* encoding.Symbol was exposed as a public type `Symbol`.
+
 ## 1.2.0 (2024-09-30)
 
 ### Features Added

@@ -247,8 +247,9 @@ func ExampleConn_Done() {
 		errors.As(closedErr, &connErr)
 
 		if connErr.RemoteErr != nil {
-			// this indicates that the peer closed the connection.
-			// the RemoteErr will contain info explaining why
+			// the peer closed the connection and provided an error explaining why.
+			// note that the peer MAY send an error when closing the connection but
+			// is not required to.
 		} else {
 			// the connection encountered a fatal error or there was
 			// an error during client-side shutdown. this is for

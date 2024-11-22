@@ -408,8 +408,8 @@ func (c *Conn) startImpl(ctx context.Context) error {
 // Close closes the connection.
 //
 // Returns nil if there were no errors during shutdown,
-// or a *ConnError. This is for diagnostic purposes as
-// the connection is still closed.
+// or a *ConnError. This error is not actionable and is
+// purely for diagnostic purposes.
 //
 // The error returned by subsequent calls to Close is
 // idempotent, so the same value will always be returned.
@@ -431,12 +431,16 @@ func (c *Conn) Done() <-chan struct{} {
 }
 
 // If Done is not yet closed, Err returns nil.
-// If Done is closed, Err returns nil or an error explaining why.
+// If Done is closed, Err returns nil or a *ConnError explaining why.
 // A nil error indicates that [Close] was called and there
 // were no errors during shutdown.
 //
-// See the doc comments for [Close] which explains the
-// types of error values that can be returned.
+// A *ConnError indicates one of three things
+//   - there was an error during shutdown from a client-side call to [Close]. the
+//     error is not actionable and is purely for diagnostic purposes.
+//   - a fatal error was encountered that caused [Conn] to close
+//   - the peer closed the connection. [ConnError.RemoteErr] MAY contain an error
+//     from the peer indicating why it closed the connection
 func (c *Conn) Err() error {
 	select {
 	case <-c.done:

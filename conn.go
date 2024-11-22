@@ -406,6 +406,12 @@ func (c *Conn) startImpl(ctx context.Context) error {
 }
 
 // Close closes the connection.
+//
+// Returns nil if there were no errors during shutdown,
+// or a *ConnError.
+//
+// The error returned by subsequent calls to Close is
+// idempotent, so the same value will always be returned.
 func (c *Conn) Close() error {
 	c.close()
 
@@ -415,15 +421,28 @@ func (c *Conn) Close() error {
 	<-c.txDone
 	<-c.rxDone
 
-	var connErr *ConnError
-	if errors.As(c.doneErr, &connErr) && connErr.RemoteErr == nil && connErr.inner == nil {
-		// an empty ConnectionError means the connection was closed by the caller
+	return c.closedErr()
+}
+
+// Done returns a channel that's closed when Conn is closed.
+func (c *Conn) Done() <-chan struct{} {
+	return c.done
+}
+
+// If Done is not yet closed, Err returns nil.
+// If Done is closed, Err returns nil or an error explaining why.
+// A nil error indicates that [Close] was called and there
+// were no errors during shutdown.
+//
+// See the doc comments for [Close] which explains the
+// types of error values that can be returned.
+func (c *Conn) Err() error {
+	select {
+	case <-c.done:
+		return c.closedErr()
+	default:
 		return nil
 	}
-
-	// there was an error during shut-down or connReader/connWriter
-	// experienced a terminal error
-	return c.doneErr
 }
 
 // close is called once, either from Close() or when connReader/connWriter exits
@@ -469,6 +488,19 @@ func (c *Conn) closeDuringStart() {
 	c.closeOnce.Do(func() {
 		c.net.Close()
 	})
+}
+
+// returns the error indicating why Conn has closed
+func (c *Conn) closedErr() error {
+	// an empty ConnError means the connection was closed by the caller
+	var connErr *ConnError
+	if errors.As(c.doneErr, &connErr) && connErr.RemoteErr == nil && connErr.inner == nil {
+		return nil
+	}
+
+	// there was an error during shut-down or connReader/connWriter
+	// experienced a terminal error
+	return c.doneErr
 }
 
 // NewSession starts a new session on the connection.

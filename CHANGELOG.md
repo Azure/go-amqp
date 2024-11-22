@@ -6,6 +6,9 @@
 
 * Added type `Null` used to send an AMQP `null` message value.
 * Added method `Properties` to `Conn`, `Session`, `Receiver`, and `Sender` which contains the peer's respective properties.
+* Added methods `Done` and `Err` to `Conn`
+  * `Done` returns a channel that's closed when `Conn` has closed.
+  * `Err` explains why `Conn` was closed.
 
 ### Bugs Fixed
 

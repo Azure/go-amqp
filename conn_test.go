@@ -302,6 +302,13 @@ func TestClose(t *testing.T) {
 	cancel()
 	require.Nil(t, conn.Properties())
 	require.NoError(t, conn.Close())
+	select {
+	case <-conn.Done():
+		require.NoError(t, conn.Err())
+	default:
+		t.Fatal("expected conn.Done() to be signaled")
+	}
+
 	// with Close error
 	netConn = fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled), fake.NetConnOptions{})
 	conn, err = newConn(netConn, nil)
@@ -315,6 +322,50 @@ func TestClose(t *testing.T) {
 	// wait a bit for connReader to read from the mock
 	time.Sleep(100 * time.Millisecond)
 	require.Error(t, conn.Close())
+	select {
+	case <-conn.Done():
+		require.Error(t, conn.Err())
+	default:
+		t.Fatal("expected conn.Done() to be signaled")
+	}
+}
+
+func TestCloseAsync(t *testing.T) {
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled), fake.NetConnOptions{})
+	conn, err := newConn(netConn, nil)
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	require.NoError(t, conn.start(ctx))
+	cancel()
+	go func() {
+		require.NoError(t, conn.Close())
+	}()
+	select {
+	case <-conn.Done():
+		require.NoError(t, conn.Err())
+	case <-time.After(1 * time.Second):
+		t.Fatal("expected conn.Done() to be signaled")
+	}
+
+	// with Close error
+	netConn = fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled), fake.NetConnOptions{})
+	conn, err = newConn(netConn, nil)
+	require.NoError(t, err)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	require.NoError(t, conn.start(ctx))
+	cancel()
+	netConn.OnClose = func() error {
+		return errors.New("mock close failed")
+	}
+	go func() {
+		require.Error(t, conn.Close())
+	}()
+	select {
+	case <-conn.Done():
+		require.Error(t, conn.Err())
+	case <-time.After(1 * time.Second):
+		t.Fatal("expected conn.Done() to be signaled")
+	}
 }
 
 func TestServerSideClose(t *testing.T) {
@@ -344,6 +395,12 @@ func TestServerSideClose(t *testing.T) {
 	<-closeReceived
 	err = conn.Close()
 	require.NoError(t, err)
+	select {
+	case <-conn.Done():
+		require.NoError(t, conn.Err())
+	default:
+		t.Fatal("expected conn.Done() to be signaled")
+	}
 
 	// with error
 	closeReceived = make(chan struct{})
@@ -360,6 +417,16 @@ func TestServerSideClose(t *testing.T) {
 	err = conn.Close()
 	var connErr *ConnError
 	require.ErrorAs(t, err, &connErr)
+	require.Equal(t, "*Error{Condition: Close, Description: mock server error, Info: map[]}", connErr.Error())
+	select {
+	case <-conn.Done():
+		connErr = nil
+		require.ErrorAs(t, conn.Err(), &connErr)
+		require.Equal(t, "*Error{Condition: Close, Description: mock server error, Info: map[]}", connErr.Error())
+	default:
+		t.Fatal("expected conn.Done() to be signaled")
+	}
+	require.ErrorAs(t, conn.Err(), &connErr)
 	require.Equal(t, "*Error{Condition: Close, Description: mock server error, Info: map[]}", connErr.Error())
 }
 
@@ -592,7 +659,9 @@ func TestClientClose(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, client)
 	require.NoError(t, client.Close())
+	require.NoError(t, client.Err())
 	require.NoError(t, client.Close())
+	require.NoError(t, client.Err())
 }
 
 func TestSessionOptions(t *testing.T) {

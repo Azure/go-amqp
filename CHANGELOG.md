@@ -1,14 +1,19 @@
 # Release History
 
+## 1.3.0 (unreleased)
+
+### Features Added
+
+* Added methods `Done` and `Err` to `Conn`
+  * `Done` returns a channel that's closed when `Conn` has closed.
+  * `Err` explains why `Conn` was closed.
+
 ## 1.2.0 (2024-09-30)
 
 ### Features Added
 
 * Added type `Null` used to send an AMQP `null` message value.
 * Added method `Properties` to `Conn`, `Session`, `Receiver`, and `Sender` which contains the peer's respective properties.
-* Added methods `Done` and `Err` to `Conn`
-  * `Done` returns a channel that's closed when `Conn` has closed.
-  * `Err` explains why `Conn` was closed.
 
 ### Bugs Fixed
 

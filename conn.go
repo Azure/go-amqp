@@ -408,7 +408,8 @@ func (c *Conn) startImpl(ctx context.Context) error {
 // Close closes the connection.
 //
 // Returns nil if there were no errors during shutdown,
-// or a *ConnError.
+// or a *ConnError. This is for diagnostic purposes as
+// the connection is still closed.
 //
 // The error returned by subsequent calls to Close is
 // idempotent, so the same value will always be returned.
@@ -491,6 +492,7 @@ func (c *Conn) closeDuringStart() {
 }
 
 // returns the error indicating why Conn has closed
+// NOTE: only call this AFTER Conn.done has been closed!
 func (c *Conn) closedErr() error {
 	// an empty ConnError means the connection was closed by the caller
 	var connErr *ConnError

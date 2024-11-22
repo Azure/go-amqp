@@ -218,3 +218,41 @@ func ExampleLinkError() {
 		log.Fatalf("unexpected error type %T", err)
 	}
 }
+
+func ExampleConn_Done() {
+	ctx := context.TODO()
+
+	// create connection
+	conn, err := amqp.Dial(ctx, "amqps://my-namespace.servicebus.windows.net", &amqp.ConnOptions{
+		SASLType: amqp.SASLTypePlain("access-key-name", "access-key"),
+	})
+	if err != nil {
+		log.Fatal("Dialing AMQP server:", err)
+	}
+
+	// when the channel returned by Done is closed, conn has been closed
+	<-conn.Done()
+
+	// Err indicates why the connection was closed. a nil error indicates
+	// a client-side call to Close and there were no errors during shutdown.
+	closedErr := conn.Err()
+
+	// when Err returns a non-nil error, it means that either a client-side
+	// call to Close encountered an error during shutdown, a fatal error was
+	// encountered that caused the connection to close, or that the peer
+	// closed the connection.
+	if closedErr != nil {
+		// the error returned by Err is always a *ConnError
+		var connErr *amqp.ConnError
+		errors.As(closedErr, &connErr)
+
+		if connErr.RemoteErr != nil {
+			// this indicates that the peer closed the connection.
+			// the RemoteErr will contain info explaining why
+		} else {
+			// the connection encountered a fatal error or there was
+			// an error during client-side shutdown. this is for
+			// diagnostics, the connection has been closed.
+		}
+	}
+}

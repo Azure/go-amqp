@@ -17,7 +17,7 @@
 
 ### Bugs Fixed
 
-* Fixed a rare race in `Conn.start` that could cause goroutines to be leaked if the provided context was canceld/expired.
+* Fixed a rare race in `Conn.start` that could cause goroutines to be leaked if the provided context was canceled/expired.
 
 ### Other Changes
 

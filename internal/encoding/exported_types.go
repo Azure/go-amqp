@@ -120,6 +120,7 @@ const (
 // SenderSettleMode specifies how the sender will settle messages.
 type SenderSettleMode uint8
 
+// Ptr returns a pointer to the value of m.
 func (m SenderSettleMode) Ptr() *SenderSettleMode {
 	return &m
 }
@@ -172,6 +173,7 @@ const (
 // ReceiverSettleMode specifies how the receiver will settle messages.
 type ReceiverSettleMode uint8
 
+// Ptr returns a pointer to the value of m.
 func (m ReceiverSettleMode) Ptr() *ReceiverSettleMode {
 	return &m
 }
@@ -207,6 +209,8 @@ func (m *ReceiverSettleMode) Unmarshal(r *buffer.Buffer) error {
 	return err
 }
 
+// Filter is a set of named filters.
+// http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-filter-set
 type Filter map[Symbol]*DescribedType
 
 // Marshal encodes the type into a buffer. It is not intended for public use.
@@ -341,11 +345,12 @@ func (e *Error) String() string {
 	)
 }
 
+// Error implements the error interface.
 func (e *Error) Error() string {
 	return e.String()
 }
 
-// symbol is an AMQP symbolic string.
+// Symbol is an AMQP symbolic string.
 type Symbol string
 
 // Marshal encodes the type into a buffer. It is not intended for public use.
@@ -403,6 +408,8 @@ func (u *UUID) Unmarshal(r *buffer.Buffer) error {
 	return err
 }
 
+// DescribedType is used for describing a filter.
+// http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-filter-set
 type DescribedType struct {
 	Descriptor any
 	Value      any

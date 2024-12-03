@@ -82,18 +82,6 @@ const (
 // from its originally configured timeout value.
 type ExpiryPolicy Symbol
 
-func ValidateExpiryPolicy(e ExpiryPolicy) error {
-	switch e {
-	case ExpiryLinkDetach,
-		ExpirySessionEnd,
-		ExpiryConnectionClose,
-		ExpiryNever:
-		return nil
-	default:
-		return fmt.Errorf("unknown expiry-policy %q", e)
-	}
-}
-
 // Marshal encodes the type into a buffer. It is not intended for public use.
 func (e ExpiryPolicy) Marshal(wr *buffer.Buffer) error {
 	return Symbol(e).Marshal(wr)

@@ -113,6 +113,18 @@ const (
 	TypeCodeDeleteOnNoLinksOrMessages AMQPType = 0x2e
 )
 
+func ValidateExpiryPolicy(e ExpiryPolicy) error {
+	switch e {
+	case ExpiryLinkDetach,
+		ExpirySessionEnd,
+		ExpiryConnectionClose,
+		ExpiryNever:
+		return nil
+	default:
+		return fmt.Errorf("unknown expiry-policy %q", e)
+	}
+}
+
 type Role bool
 
 const (

@@ -46,12 +46,12 @@ func (d *Durability) String() string {
 	}
 }
 
-// Marshal encodes the type into a buffer. It is not intended for public use.
+// Marshal encodes this type into a buffer. It is not intended for public use.
 func (d Durability) Marshal(wr *buffer.Buffer) error {
 	return Marshal(wr, uint32(d))
 }
 
-// Unmarshal decodes a buffer in this type. It is not intended for public use.
+// Unmarshal decodes a buffer into this type. It is not intended for public use.
 func (d *Durability) Unmarshal(r *buffer.Buffer) error {
 	return Unmarshal(r, (*uint32)(d))
 }
@@ -82,12 +82,12 @@ const (
 // from its originally configured timeout value.
 type ExpiryPolicy Symbol
 
-// Marshal encodes the type into a buffer. It is not intended for public use.
+// Marshal encodes this type into a buffer. It is not intended for public use.
 func (e ExpiryPolicy) Marshal(wr *buffer.Buffer) error {
 	return Symbol(e).Marshal(wr)
 }
 
-// Unmarshal decodes a buffer in this type. It is not intended for public use.
+// Unmarshal decodes a buffer into this type. It is not intended for public use.
 func (e *ExpiryPolicy) Unmarshal(r *buffer.Buffer) error {
 	err := Unmarshal(r, (*Symbol)(e))
 	if err != nil {
@@ -147,12 +147,12 @@ func (m *SenderSettleMode) String() string {
 	}
 }
 
-// Marshal encodes the type into a buffer. It is not intended for public use.
+// Marshal encodes this type into a buffer. It is not intended for public use.
 func (m SenderSettleMode) Marshal(wr *buffer.Buffer) error {
 	return Marshal(wr, uint8(m))
 }
 
-// Unmarshal decodes a buffer in this type. It is not intended for public use.
+// Unmarshal decodes a buffer into this type. It is not intended for public use.
 func (m *SenderSettleMode) Unmarshal(r *buffer.Buffer) error {
 	n, err := ReadUbyte(r)
 	*m = SenderSettleMode(n)
@@ -197,12 +197,12 @@ func (m *ReceiverSettleMode) String() string {
 	}
 }
 
-// Marshal encodes the type into a buffer. It is not intended for public use.
+// Marshal encodes this type into a buffer. It is not intended for public use.
 func (m ReceiverSettleMode) Marshal(wr *buffer.Buffer) error {
 	return Marshal(wr, uint8(m))
 }
 
-// Unmarshal decodes a buffer in this type. It is not intended for public use.
+// Unmarshal decodes a buffer into this type. It is not intended for public use.
 func (m *ReceiverSettleMode) Unmarshal(r *buffer.Buffer) error {
 	n, err := ReadUbyte(r)
 	*m = ReceiverSettleMode(n)
@@ -213,12 +213,12 @@ func (m *ReceiverSettleMode) Unmarshal(r *buffer.Buffer) error {
 // http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-filter-set
 type Filter map[Symbol]*DescribedType
 
-// Marshal encodes the type into a buffer. It is not intended for public use.
+// Marshal encodes this type into a buffer. It is not intended for public use.
 func (f Filter) Marshal(wr *buffer.Buffer) error {
 	return writeMap(wr, f)
 }
 
-// Unmarshal decodes a buffer in this type. It is not intended for public use.
+// Unmarshal decodes a buffer into this type. It is not intended for public use.
 func (f *Filter) Unmarshal(r *buffer.Buffer) error {
 	count, err := readMapHeader(r)
 	if err != nil {
@@ -247,12 +247,12 @@ func (f *Filter) Unmarshal(r *buffer.Buffer) error {
 // String keys are encoded as AMQP Symbols.
 type Annotations map[any]any
 
-// Marshal encodes the type into a buffer. It is not intended for public use.
+// Marshal encodes this type into a buffer. It is not intended for public use.
 func (a Annotations) Marshal(wr *buffer.Buffer) error {
 	return writeMap(wr, a)
 }
 
-// Unmarshal decodes a buffer in this type. It is not intended for public use.
+// Unmarshal decodes a buffer into this type. It is not intended for public use.
 func (a *Annotations) Unmarshal(r *buffer.Buffer) error {
 	count, err := readMapHeader(r)
 	if err != nil {
@@ -278,12 +278,12 @@ func (a *Annotations) Unmarshal(r *buffer.Buffer) error {
 // ErrCond is one of the error conditions defined in the AMQP spec.
 type ErrCond string
 
-// Marshal encodes the type into a buffer. It is not intended for public use.
+// Marshal encodes this type into a buffer. It is not intended for public use.
 func (ec ErrCond) Marshal(wr *buffer.Buffer) error {
 	return (Symbol)(ec).Marshal(wr)
 }
 
-// Unmarshal decodes a buffer in this type. It is not intended for public use.
+// Unmarshal decodes a buffer into this type. It is not intended for public use.
 func (ec *ErrCond) Unmarshal(r *buffer.Buffer) error {
 	s, err := ReadString(r)
 	*ec = ErrCond(s)
@@ -314,7 +314,7 @@ type Error struct {
 	Info map[string]any
 }
 
-// Marshal encodes the type into a buffer. It is not intended for public use.
+// Marshal encodes this type into a buffer. It is not intended for public use.
 func (e *Error) Marshal(wr *buffer.Buffer) error {
 	return MarshalComposite(wr, TypeCodeError, []MarshalField{
 		{Value: &e.Condition, Omit: false},
@@ -323,7 +323,7 @@ func (e *Error) Marshal(wr *buffer.Buffer) error {
 	})
 }
 
-// Unmarshal decodes a buffer in this type. It is not intended for public use.
+// Unmarshal decodes a buffer into this type. It is not intended for public use.
 func (e *Error) Unmarshal(r *buffer.Buffer) error {
 	return UnmarshalComposite(r, TypeCodeError, []UnmarshalField{
 		{Field: &e.Condition, HandleNull: func() error { return errors.New("Error.Condition is required") }},
@@ -353,7 +353,7 @@ func (e *Error) Error() string {
 // Symbol is an AMQP symbolic string.
 type Symbol string
 
-// Marshal encodes the type into a buffer. It is not intended for public use.
+// Marshal encodes this type into a buffer. It is not intended for public use.
 func (s Symbol) Marshal(wr *buffer.Buffer) error {
 	l := len(s)
 	switch {
@@ -394,14 +394,14 @@ func (u UUID) String() string {
 	return string(buf[:])
 }
 
-// Marshal encodes the type into a buffer. It is not intended for public use.
+// Marshal encodes this type into a buffer. It is not intended for public use.
 func (u UUID) Marshal(wr *buffer.Buffer) error {
 	wr.AppendByte(byte(TypeCodeUUID))
 	wr.Append(u[:])
 	return nil
 }
 
-// Unmarshal decodes a buffer in this type. It is not intended for public use.
+// Unmarshal decodes a buffer into this type. It is not intended for public use.
 func (u *UUID) Unmarshal(r *buffer.Buffer) error {
 	un, err := readUUID(r)
 	*u = un
@@ -415,7 +415,7 @@ type DescribedType struct {
 	Value      any
 }
 
-// Marshal encodes the type into a buffer. It is not intended for public use.
+// Marshal encodes this type into a buffer. It is not intended for public use.
 func (t DescribedType) Marshal(wr *buffer.Buffer) error {
 	wr.AppendByte(0x0) // descriptor constructor
 	err := Marshal(wr, t.Descriptor)
@@ -425,7 +425,7 @@ func (t DescribedType) Marshal(wr *buffer.Buffer) error {
 	return Marshal(wr, t.Value)
 }
 
-// Unmarshal decodes a buffer in this type. It is not intended for public use.
+// Unmarshal decodes a buffer into this type. It is not intended for public use.
 func (t *DescribedType) Unmarshal(r *buffer.Buffer) error {
 	b, err := r.ReadByte()
 	if err != nil {

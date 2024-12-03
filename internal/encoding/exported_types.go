@@ -27,6 +27,8 @@ const (
 // Durability specifies the durability of a link.
 type Durability uint32
 
+// String implements the [fmt.Stringer] interface.
+// Note that the values are for diagnostic purposes and may change over time.
 func (d *Durability) String() string {
 	if d == nil {
 		return "<nil>"
@@ -102,6 +104,8 @@ func (e *ExpiryPolicy) Unmarshal(r *buffer.Buffer) error {
 	return ValidateExpiryPolicy(*e)
 }
 
+// String implements the [fmt.Stringer] interface.
+// Note that the values are for diagnostic purposes and may change over time.
 func (e *ExpiryPolicy) String() string {
 	if e == nil {
 		return "<nil>"
@@ -128,6 +132,8 @@ func (m SenderSettleMode) Ptr() *SenderSettleMode {
 	return &m
 }
 
+// String implements the [fmt.Stringer] interface.
+// Note that the values are for diagnostic purposes and may change over time.
 func (m *SenderSettleMode) String() string {
 	if m == nil {
 		return "<nil>"
@@ -176,6 +182,8 @@ func (m ReceiverSettleMode) Ptr() *ReceiverSettleMode {
 	return &m
 }
 
+// String implements the [fmt.Stringer] interface.
+// Note that the values are for diagnostic purposes and may change over time.
 func (m *ReceiverSettleMode) String() string {
 	if m == nil {
 		return "<nil>"
@@ -316,6 +324,8 @@ func (e *Error) Unmarshal(r *buffer.Buffer) error {
 	}...)
 }
 
+// String implements the [fmt.Stringer] interface.
+// Note that the values are for diagnostic purposes and may change over time.
 func (e *Error) String() string {
 	if e == nil {
 		return "*Error(nil)"
@@ -417,6 +427,8 @@ func (t *DescribedType) Unmarshal(r *buffer.Buffer) error {
 	return Unmarshal(r, &t.Value)
 }
 
+// String implements the [fmt.Stringer] interface.
+// Note that the values are for diagnostic purposes and may change over time.
 func (t DescribedType) String() string {
 	return fmt.Sprintf("DescribedType{descriptor: %v, value: %v}",
 		t.Descriptor,

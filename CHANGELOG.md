@@ -1,5 +1,15 @@
 # Release History
 
+## 1.4.0-beta.1 (Unreleased)
+
+### Features Added
+
+* Added `Sender` support for delayed confirmation of message settlement and retrieval of delivery state.
+  * `Sender.SendWithReceipt` sends a message and returns a `SendReceipt`.
+  * `SendReceipt.Wait` waits for confirmation of settlement and returns the message's delivery state.
+  * The `DeliveryState` interface encapsulates concrete delivery outcomes `StateAccepted`, `StateModified`, `StateRejected`, `StateReleased` and
+    non-terminal delivery state `StateReceived`.
+
 ## 1.3.0 (2024-12-03)
 
 ### Features Added

@@ -257,3 +257,61 @@ func ExampleConn_Done() {
 		}
 	}
 }
+
+func ExampleSender_SendWithReceipt() {
+	ctx := context.TODO()
+
+	// create connection
+	conn, err := amqp.Dial(ctx, "amqps://my-namespace.servicebus.windows.net", &amqp.ConnOptions{
+		SASLType: amqp.SASLTypePlain("access-key-name", "access-key"),
+	})
+	if err != nil {
+		log.Fatal("Dialing AMQP server:", err)
+	}
+	defer conn.Close()
+
+	// open a session
+	session, err := conn.NewSession(ctx, nil)
+	if err != nil {
+		log.Fatal("Creating AMQP session:", err)
+	}
+
+	// create a sender
+	sender, err := session.NewSender(ctx, "/queue-name", nil)
+	if err != nil {
+		log.Fatal("Creating sender link:", err)
+	}
+
+	// send message
+	receipt, err := sender.SendWithReceipt(ctx, amqp.NewMessage([]byte("Hello!")), nil)
+	if err != nil {
+		log.Fatal("Sending message:", err)
+	}
+
+	// wait for confirmation of settlement
+	state, err := receipt.Wait(ctx)
+	if err != nil {
+		log.Fatal("Wait on receipt:", err)
+	}
+
+	// determine how the peer settled the message
+	switch stateType := state.(type) {
+	case *amqp.StateAccepted:
+		// message was accepted, no further action is required
+	case *amqp.StateModified:
+		// message must be modified and resent before it can be processed.
+		// the values in stateType provide further context.
+	case *amqp.StateReceived:
+		// see the fields in [StateReceived] for information on
+		// how to handle this delivery state.
+	case *amqp.StateRejected:
+		// the peer rejected the message
+		if stateType.Error != nil {
+			// the error will provide information about why the
+			// message was rejected. note that the peer isn't required
+			// to provide an error.
+		}
+	case *amqp.StateReleased:
+		// message was not and will not be acted upon
+	}
+}

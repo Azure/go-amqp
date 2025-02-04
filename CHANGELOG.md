@@ -1,6 +1,6 @@
 # Release History
 
-## 1.5.0-beta.1 (TBD)
+## 1.4.0-beta.2 (TBD)
 
 ### Features Added
 

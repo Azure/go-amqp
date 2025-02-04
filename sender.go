@@ -341,6 +341,15 @@ func newSender(target string, session *Session, opts *SenderOptions) (*Sender, e
 	if opts.Durability > DurabilityUnsettledState {
 		return nil, fmt.Errorf("invalid Durability %d", opts.Durability)
 	}
+
+	if opts.DesiredCapabilities != nil {
+		s.l.desiredCapabilities = make([]encoding.Symbol, len(opts.DesiredCapabilities))
+
+		for _, capabilityStr := range opts.DesiredCapabilities {
+			s.l.desiredCapabilities = append(s.l.desiredCapabilities, encoding.Symbol(capabilityStr))
+		}
+	}
+
 	s.l.source.Durable = opts.Durability
 	if opts.DynamicAddress {
 		s.l.target.Address = ""

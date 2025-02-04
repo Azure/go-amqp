@@ -401,6 +401,15 @@ func newReceiver(source string, session *Session, opts *ReceiverOptions) (*Recei
 		r.l.linkCredit = 0
 		r.autoSendFlow = false
 	}
+
+	if opts.DesiredCapabilities != nil {
+		r.l.desiredCapabilities = make([]encoding.Symbol, len(opts.DesiredCapabilities))
+
+		for _, capabilityStr := range opts.DesiredCapabilities {
+			r.l.desiredCapabilities = append(r.l.desiredCapabilities, encoding.Symbol(capabilityStr))
+		}
+	}
+
 	if opts.Durability > DurabilityUnsettledState {
 		return nil, fmt.Errorf("invalid Durability %d", opts.Durability)
 	}

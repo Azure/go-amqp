@@ -1,5 +1,11 @@
 # Release History
 
+## 1.5.0-beta.1 (TBD)
+
+### Features Added
+
+* Added support in both `Sender` and `Receiver` to set the `desired-capabilities` in their ATTACH frames, using DesiredCapabilities in their respective Options.
+
 ## 1.4.0-beta.1 (2024-12-05)
 
 ### Features Added

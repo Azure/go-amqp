@@ -343,7 +343,7 @@ func newSender(target string, session *Session, opts *SenderOptions) (*Sender, e
 	}
 
 	if opts.DesiredCapabilities != nil {
-		s.l.desiredCapabilities = make([]encoding.Symbol, len(opts.DesiredCapabilities))
+		s.l.desiredCapabilities = make([]encoding.Symbol, 0, len(opts.DesiredCapabilities))
 
 		for _, capabilityStr := range opts.DesiredCapabilities {
 			s.l.desiredCapabilities = append(s.l.desiredCapabilities, encoding.Symbol(capabilityStr))

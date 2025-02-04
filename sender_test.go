@@ -399,6 +399,27 @@ func TestSenderAttachError(t *testing.T) {
 	require.NoError(t, client.Close())
 }
 
+func TestSenderAttachDesiredCapabilities(t *testing.T) {
+	t.Run("NilDesiredCaps", func(t *testing.T) {
+		require.Nil(t, runToAttachWithOptions(t, SenderOptions{
+			DesiredCapabilities: nil,
+		}).DesiredCapabilities)
+	})
+
+	t.Run("EmptyDesiredCaps", func(t *testing.T) {
+		require.Nil(t, runToAttachWithOptions(t, SenderOptions{
+			DesiredCapabilities: []string{},
+		}).DesiredCapabilities)
+	})
+	t.Run("WithDesiredCaps", func(t *testing.T) {
+		expected := encoding.MultiSymbol{encoding.Symbol("com.microsoft:something")}
+
+		require.Equal(t, expected, runToAttachWithOptions(t, SenderOptions{
+			DesiredCapabilities: []string{"com.microsoft:something"},
+		}).DesiredCapabilities)
+	})
+}
+
 func TestSenderSendMismatchedModes(t *testing.T) {
 	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled), fake.NetConnOptions{})
 

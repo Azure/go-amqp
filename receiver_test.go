@@ -1528,4 +1528,25 @@ func TestReceiverProperties(t *testing.T) {
 	require.NoError(t, conn.Close())
 }
 
+func TestReceiverAttachDesiredCapabilities(t *testing.T) {
+	t.Run("NilDesiredCaps", func(t *testing.T) {
+		require.Nil(t, runToAttachWithOptions(t, ReceiverOptions{
+			DesiredCapabilities: nil,
+		}).DesiredCapabilities)
+	})
+
+	t.Run("EmptyDesiredCaps", func(t *testing.T) {
+		require.Nil(t, runToAttachWithOptions(t, ReceiverOptions{
+			DesiredCapabilities: []string{},
+		}).DesiredCapabilities)
+	})
+	t.Run("WithDesiredCaps", func(t *testing.T) {
+		expected := encoding.MultiSymbol{encoding.Symbol("com.microsoft:something")}
+
+		require.Equal(t, expected, runToAttachWithOptions(t, ReceiverOptions{
+			DesiredCapabilities: []string{"com.microsoft:something"},
+		}).DesiredCapabilities)
+	})
+}
+
 // TODO: add unit tests for manual credit management

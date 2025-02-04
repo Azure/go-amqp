@@ -403,7 +403,7 @@ func newReceiver(source string, session *Session, opts *ReceiverOptions) (*Recei
 	}
 
 	if opts.DesiredCapabilities != nil {
-		r.l.desiredCapabilities = make([]encoding.Symbol, len(opts.DesiredCapabilities))
+		r.l.desiredCapabilities = make([]encoding.Symbol, 0, len(opts.DesiredCapabilities))
 
 		for _, capabilityStr := range opts.DesiredCapabilities {
 			r.l.desiredCapabilities = append(r.l.desiredCapabilities, encoding.Symbol(capabilityStr))

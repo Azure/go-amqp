@@ -1,13 +1,18 @@
 package amqp
 
 import (
+	"context"
 	"fmt"
+	"testing"
+	"time"
 
 	"github.com/Azure/go-amqp/internal/encoding"
 	"github.com/Azure/go-amqp/internal/fake"
 	"github.com/Azure/go-amqp/internal/frames"
 	"github.com/stretchr/testify/require"
 )
+
+type frameHandler func(uint16, frames.FrameBody) (fake.Response, error)
 
 func newResponse(b []byte, err error) (fake.Response, error) {
 	if err != nil {
@@ -36,7 +41,7 @@ func sendInitialFlowFrame(t require.TestingT, channel uint16, netConn *fake.NetC
 
 // standard frame handler for connecting/disconnecting etc.
 // returns zero-value, nil for unhandled frames.
-func senderFrameHandler(channel uint16, ssm encoding.SenderSettleMode) func(uint16, frames.FrameBody) (fake.Response, error) {
+func senderFrameHandler(channel uint16, ssm encoding.SenderSettleMode) frameHandler {
 	return func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
 		switch tt := req.(type) {
 		case *fake.AMQPProto:
@@ -60,7 +65,7 @@ func senderFrameHandler(channel uint16, ssm encoding.SenderSettleMode) func(uint
 }
 
 // similar to senderFrameHandler but returns an error on unhandled frames
-func senderFrameHandlerNoUnhandled(channel uint16, ssm encoding.SenderSettleMode) func(uint16, frames.FrameBody) (fake.Response, error) {
+func senderFrameHandlerNoUnhandled(channel uint16, ssm encoding.SenderSettleMode) frameHandler {
 	return func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
 		resp, err := senderFrameHandler(channel, ssm)(remoteChannel, req)
 		if resp.Payload == nil && err == nil {
@@ -72,7 +77,7 @@ func senderFrameHandlerNoUnhandled(channel uint16, ssm encoding.SenderSettleMode
 
 // standard frame handler for connecting/disconnecting etc.
 // returns zero-value, nil for unhandled frames.
-func receiverFrameHandler(channel uint16, rsm encoding.ReceiverSettleMode) func(uint16, frames.FrameBody) (fake.Response, error) {
+func receiverFrameHandler(channel uint16, rsm encoding.ReceiverSettleMode) frameHandler {
 	return func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
 		switch tt := req.(type) {
 		case *fake.AMQPProto:
@@ -97,7 +102,7 @@ func receiverFrameHandler(channel uint16, rsm encoding.ReceiverSettleMode) func(
 
 // similar to receiverFrameHandler but returns an error on unhandled frames
 // NOTE: consumes flow frames
-func receiverFrameHandlerNoUnhandled(channel uint16, rsm encoding.ReceiverSettleMode) func(uint16, frames.FrameBody) (fake.Response, error) {
+func receiverFrameHandlerNoUnhandled(channel uint16, rsm encoding.ReceiverSettleMode) frameHandler {
 	return func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
 		resp, err := receiverFrameHandler(channel, rsm)(remoteChannel, req)
 		if resp.Payload != nil || err != nil {
@@ -110,4 +115,64 @@ func receiverFrameHandlerNoUnhandled(channel uint16, rsm encoding.ReceiverSettle
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
 	}
+}
+
+// runs a test with specific options passed for either a Sender or Receiver, and returns the ATTACH frame that was sent.
+func runToAttachWithOptions[OptionsT SenderOptions | ReceiverOptions](t *testing.T, options OptionsT) *frames.PerformAttach {
+	var baseFn frameHandler
+
+	switch any(options).(type) {
+	case ReceiverOptions:
+		baseFn = receiverFrameHandlerNoUnhandled(0, encoding.ReceiverSettleModeFirst)
+	case SenderOptions:
+		baseFn = senderFrameHandlerNoUnhandled(0, encoding.SenderSettleModeMixed)
+	default:
+		require.Failf(t, "Options type check", "Unhandled options type %T", options)
+	}
+
+	var attachFrame *frames.PerformAttach
+
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		switch tt := req.(type) {
+		case *frames.PerformAttach:
+			require.Nil(t, attachFrame, "Only expecting a single ATTACH for this style of test")
+			attachFrame = tt
+
+			b, err := fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformAttach{
+				Name:   tt.Name,
+				Role:   !tt.Role,
+				Handle: 0,
+				Target: &frames.Target{
+					Address:      "test",
+					ExpiryPolicy: encoding.ExpirySessionEnd,
+				},
+			})
+			require.NoError(t, err)
+			return fake.Response{Payload: b}, nil
+		default:
+			return baseFn(remoteChannel, req)
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
+	client, err := NewConn(ctx, netConn, nil)
+	require.NoError(t, err)
+
+	session, err := client.NewSession(ctx, nil)
+	require.NoError(t, err)
+
+	switch opt := any(options).(type) {
+	case ReceiverOptions:
+		_, err = session.NewReceiver(ctx, "source", &opt)
+	case SenderOptions:
+		_, err = session.NewSender(ctx, "target", &opt)
+	}
+
+	require.NoError(t, err)
+	require.NoError(t, client.Close())
+
+	return attachFrame
 }

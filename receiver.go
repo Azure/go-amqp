@@ -69,6 +69,10 @@ func (r *Receiver) IssueCredit(credit uint32) error {
 // DrainCredit sets the drain flag on the next flow frame and blocks until
 // the corresponding flow frame is received.
 func (r *Receiver) DrainCredit(ctx context.Context) error {
+	if r.autoSendFlow {
+		return errors.New("drain can only be used with receiver links using manual credit management")
+	}
+
 	return r.creditor.Drain(ctx, r)
 }
 

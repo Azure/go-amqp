@@ -66,6 +66,12 @@ func (r *Receiver) IssueCredit(credit uint32) error {
 	return nil
 }
 
+// DrainCredit sets the drain flag on the next flow frame and blocks until
+// the corresponding flow frame is received.
+func (r *Receiver) DrainCredit(ctx context.Context) error {
+	return r.creditor.Drain(ctx, r)
+}
+
 // Prefetched returns the next message that is stored in the Receiver's
 // prefetch cache. It does NOT wait for the remote sender to send messages
 // and returns immediately if the prefetch cache is empty. To receive from the

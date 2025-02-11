@@ -6,6 +6,10 @@
 
 * Added support in both `Sender` and `Receiver` to set the `desired-capabilities` in their ATTACH frames, using DesiredCapabilities in their respective Options.
 
+### Bugs Fixed
+
+* Fixed encoding and decoding larger timestamp values, like .NET's DateTime.MaxValue.
+
 ## 1.4.0-beta.1 (2024-12-05)
 
 ### Features Added

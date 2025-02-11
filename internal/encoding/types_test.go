@@ -3,12 +3,30 @@ package encoding
 import (
 	"math"
 	"testing"
+	"time"
 
 	"github.com/Azure/go-amqp/internal/buffer"
 	"github.com/stretchr/testify/require"
 )
 
 const amqpArrayHeaderLength = 4
+
+func TestEncodeDecodeTimestamp(t *testing.T) {
+	// this is DateTime.MaxValue from .NET
+	dotnetMaxTime := time.UnixMilli(int64(253402300799999))
+	require.Equal(t, "9999-12-31T23:59:59Z", dotnetMaxTime.Format(time.RFC3339))
+
+	// previously we were using the < go1.17 method that involved converting our milliseconds
+	// into nanoseconds, but that'll overflow an int64 in valid cases, like the .NET DateTime.MaxValue,
+	// which is often used as a sentinel value in brokers like Service Bus or Event Hubs.
+	buff := buffer.New(nil)
+	writeTimestamp(buff, dotnetMaxTime)
+
+	decodedTimestamp, err := readTimestamp(buff)
+	require.NoError(t, err)
+
+	require.Equal(t, "9999-12-31T23:59:59Z", decodedTimestamp.Format(time.RFC3339))
+}
 
 func TestMarshalArrayInt64AsLongArray(t *testing.T) {
 	// 244 is larger than a int8 can contain. When it marshals it

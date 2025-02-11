@@ -66,12 +66,17 @@ type link struct {
 	// can independently set this value. The sender endpoint sets this to the last known value seen from the receiver.
 	linkCredit uint32
 
+	// properties returned by the peer
+	peerProperties map[string]any
+
 	senderSettleMode   *SenderSettleMode
 	receiverSettleMode *ReceiverSettleMode
 	maxMessageSize     uint64
 
 	closeInProgress bool // indicates that the detach performative has been sent
 	dynamicAddr     bool // request a dynamic link address from the server
+
+	desiredCapabilities encoding.MultiSymbol // maps to the ATTACH frame's desired-capabilities field
 }
 
 func newLink(s *Session, r encoding.Role) link {
@@ -127,14 +132,15 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 	}
 
 	attach := &frames.PerformAttach{
-		Name:               l.key.name,
-		Handle:             l.outputHandle,
-		ReceiverSettleMode: l.receiverSettleMode,
-		SenderSettleMode:   l.senderSettleMode,
-		MaxMessageSize:     l.maxMessageSize,
-		Source:             l.source,
-		Target:             l.target,
-		Properties:         l.properties,
+		Name:                l.key.name,
+		Handle:              l.outputHandle,
+		ReceiverSettleMode:  l.receiverSettleMode,
+		SenderSettleMode:    l.senderSettleMode,
+		MaxMessageSize:      l.maxMessageSize,
+		Source:              l.source,
+		Target:              l.target,
+		Properties:          l.properties,
+		DesiredCapabilities: l.desiredCapabilities,
 	}
 
 	// link-specific configuration of the attach frame
@@ -219,6 +225,13 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 			return err
 		}
 		return err
+	}
+
+	if len(resp.Properties) > 0 {
+		l.peerProperties = map[string]any{}
+		for k, v := range resp.Properties {
+			l.peerProperties[string(k)] = v
+		}
 	}
 
 	return nil

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"reflect"
 	"testing"
 	"time"
@@ -89,6 +90,7 @@ func TestSenderMethodsNoSend(t *testing.T) {
 	require.NotNil(t, snd)
 	require.Equal(t, linkAddr, snd.Address())
 	require.Equal(t, linkName, snd.LinkName())
+	require.Nil(t, snd.Properties())
 	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
 	require.NoError(t, snd.Close(ctx))
 	cancel()
@@ -395,6 +397,27 @@ func TestSenderAttachError(t *testing.T) {
 	require.Nil(t, snd)
 	require.Equal(t, true, <-detachAck)
 	require.NoError(t, client.Close())
+}
+
+func TestSenderAttachDesiredCapabilities(t *testing.T) {
+	t.Run("NilDesiredCaps", func(t *testing.T) {
+		require.Nil(t, runToAttachWithOptions(t, SenderOptions{
+			DesiredCapabilities: nil,
+		}).DesiredCapabilities)
+	})
+
+	t.Run("EmptyDesiredCaps", func(t *testing.T) {
+		require.Nil(t, runToAttachWithOptions(t, SenderOptions{
+			DesiredCapabilities: []string{},
+		}).DesiredCapabilities)
+	})
+	t.Run("WithDesiredCaps", func(t *testing.T) {
+		expected := encoding.MultiSymbol{encoding.Symbol("com.microsoft:something")}
+
+		require.Equal(t, expected, runToAttachWithOptions(t, SenderOptions{
+			DesiredCapabilities: []string{"com.microsoft:something"},
+		}).DesiredCapabilities)
+	})
 }
 
 func TestSenderSendMismatchedModes(t *testing.T) {
@@ -1370,4 +1393,208 @@ func TestSenderSendCancelled(t *testing.T) {
 	assert.EqualValues(t, linkCredit, snd.l.linkCredit)
 
 	selectSem.Release(-1)
+}
+
+func TestSenderProperties(t *testing.T) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		switch tt := req.(type) {
+		case *fake.AMQPProto:
+			return newResponse(fake.ProtoHeader(fake.ProtoAMQP))
+		case *frames.PerformOpen:
+			return newResponse(fake.PerformOpen("container"))
+		case *frames.PerformBegin:
+			return newResponse(fake.PerformBegin(0, remoteChannel))
+		case *frames.PerformEnd:
+			return newResponse(fake.PerformEnd(0, nil))
+		case *frames.PerformAttach:
+			b, err := fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformAttach{
+				Name:   tt.Name,
+				Handle: 0,
+				Role:   encoding.RoleReceiver,
+				Target: &frames.Target{
+					Address:      "test",
+					Durable:      encoding.DurabilityNone,
+					ExpiryPolicy: encoding.ExpirySessionEnd,
+				},
+				SenderSettleMode: SenderSettleModeUnsettled.Ptr(),
+				MaxMessageSize:   math.MaxUint32,
+				Properties: map[encoding.Symbol]any{
+					"SenderProperty1": 123,
+					"SenderProperty2": "something",
+				},
+			})
+			return newResponse(b, err)
+		case *frames.PerformDetach:
+			return newResponse(fake.PerformDetach(0, 0, nil))
+		case *frames.PerformClose:
+			return newResponse(fake.PerformClose(nil))
+		default:
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
+	require.NoError(t, err)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx, "thetarget", nil)
+	cancel()
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{
+		"SenderProperty1": int64(123),
+		"SenderProperty2": "something",
+	}, snd.Properties())
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+	require.NoError(t, snd.Close(ctx))
+	cancel()
+	require.NoError(t, client.Close())
+}
+
+func TestSenderSendWithReceipt(t *testing.T) {
+	tests := []struct {
+		name  string
+		state DeliveryState
+	}{
+		{
+			name:  "accepted",
+			state: &StateAccepted{},
+		},
+		{
+			name: "modified",
+			state: &StateModified{
+				MessageAnnotations: Annotations{
+					"foo": int64(123),
+				},
+				DeliveryFailed:    true,
+				UndeliverableHere: true,
+			},
+		},
+		{
+			name: "received",
+			state: &StateReceived{
+				SectionNumber: 123,
+				SectionOffset: 456,
+			},
+		},
+		{
+			name: "rejected-with-error",
+			state: &StateRejected{
+				Error: &Error{
+					Condition:   "rejected",
+					Description: "bad message",
+					Info: map[string]any{
+						"ding": "dong",
+					},
+				},
+			},
+		},
+		{
+			name:  "rejected-no-error",
+			state: &StateRejected{},
+		},
+		{
+			name:  "released",
+			state: &StateReleased{},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+				switch tt := req.(type) {
+				case *fake.AMQPProto:
+					return newResponse(fake.ProtoHeader(fake.ProtoAMQP))
+				case *frames.PerformOpen:
+					return newResponse(fake.PerformOpen("container"))
+				case *frames.PerformBegin:
+					return newResponse(fake.PerformBegin(0, remoteChannel))
+				case *frames.PerformEnd:
+					return newResponse(fake.PerformEnd(0, nil))
+				case *frames.PerformAttach:
+					return newResponse(fake.SenderAttach(0, tt.Name, 0, SenderSettleModeUnsettled))
+				case *frames.PerformTransfer:
+					return newResponse(fake.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, nil, test.state))
+				case *frames.PerformDetach:
+					return newResponse(fake.PerformDetach(0, 0, nil))
+				case *frames.PerformClose:
+					return newResponse(fake.PerformClose(nil))
+				default:
+					return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
+				}
+			}
+			netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
+
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			client, err := NewConn(ctx, netConn, nil)
+			cancel()
+			require.NoError(t, err)
+
+			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+			session, err := client.NewSession(ctx, nil)
+			cancel()
+			require.NoError(t, err)
+			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+			snd, err := session.NewSender(ctx, "target", nil)
+			cancel()
+			require.NoError(t, err)
+
+			sendInitialFlowFrame(t, 0, netConn, 0, 100)
+
+			ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+			receipt, err := snd.SendWithReceipt(ctx, NewMessage([]byte("test")), nil)
+			cancel()
+			require.NoError(t, err)
+			require.Equal(t, []byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}, receipt.DeliveryTag())
+
+			ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+			state, err := receipt.Wait(ctx)
+			cancel()
+			require.NoError(t, err)
+			require.Equal(t, test.state, state)
+
+			// subsequent calls should yield the same result
+			ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+			state, err = receipt.Wait(ctx)
+			cancel()
+			require.NoError(t, err)
+			require.Equal(t, test.state, state)
+
+			require.NoError(t, client.Close())
+		})
+	}
+}
+
+func TestSenderSendWithReceipt_SenderSettleModeSettled(t *testing.T) {
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeSettled), fake.NetConnOptions{})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
+	require.NoError(t, err)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx, "target", &SenderOptions{
+		SettlementMode: SenderSettleModeSettled.Ptr(),
+	})
+	cancel()
+	require.NoError(t, err)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	receipt, err := snd.SendWithReceipt(ctx, NewMessage([]byte("test")), nil)
+	cancel()
+	require.Error(t, err)
+	require.Zero(t, receipt)
+	require.NoError(t, client.Close())
 }

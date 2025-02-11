@@ -231,6 +231,12 @@ func (r *Receiver) LinkSourceFilterValue(name string) any {
 	return filter.Value
 }
 
+// Properties returns the peer's link properties.
+// Returns nil if the peer didn't send any properties.
+func (r *Receiver) Properties() map[string]any {
+	return r.l.peerProperties
+}
+
 // Close closes the Receiver and AMQP link.
 //   - ctx controls waiting for the peer to acknowledge the close
 //
@@ -395,6 +401,15 @@ func newReceiver(source string, session *Session, opts *ReceiverOptions) (*Recei
 		r.l.linkCredit = 0
 		r.autoSendFlow = false
 	}
+
+	if opts.DesiredCapabilities != nil {
+		r.l.desiredCapabilities = make([]encoding.Symbol, 0, len(opts.DesiredCapabilities))
+
+		for _, capabilityStr := range opts.DesiredCapabilities {
+			r.l.desiredCapabilities = append(r.l.desiredCapabilities, encoding.Symbol(capabilityStr))
+		}
+	}
+
 	if opts.Durability > DurabilityUnsettledState {
 		return nil, fmt.Errorf("invalid Durability %d", opts.Durability)
 	}

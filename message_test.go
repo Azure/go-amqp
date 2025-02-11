@@ -3,6 +3,7 @@ package amqp
 import (
 	"testing"
 
+	"github.com/Azure/go-amqp/internal/buffer"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/require"
@@ -45,6 +46,16 @@ var exampleEncodedMessages = []struct {
 	},
 }
 
+func TestMessageNull(t *testing.T) {
+	msg := &Message{
+		Value: Null{},
+	}
+	b, err := msg.MarshalBinary()
+	require.NoError(t, err)
+	require.NotNil(t, b)
+	require.Equal(t, []byte{0, 0x53, 0x77, 0x40}, b)
+}
+
 func TestMessageUnmarshaling(t *testing.T) {
 	for _, tt := range exampleEncodedMessages {
 		t.Run(tt.label, func(t *testing.T) {
@@ -80,4 +91,15 @@ func TestMessageWithSequence(t *testing.T) {
 		{"hello1", "world1", int64(11), int64(12), int64(13)},
 		{"hello2", "world2", int64(21), int64(22), int64(23)},
 	}, newM.Sequence)
+}
+
+func TestMessageHeaderMarshal(t *testing.T) {
+	header := MessageHeader{}
+	buf := &buffer.Buffer{}
+	err := header.Marshal(buf)
+	require.NoError(t, err)
+	b := buf.Detach()
+	require.NotNil(t, b)
+	// 0x42 is false for the Durable field
+	require.Equal(t, []byte{0x0, 0x53, 0x70, 0xd0, 0x0, 0x0, 0x0, 0x7, 0x0, 0x0, 0x0, 0x2, 0x42, 0x50, 0x0}, b)
 }

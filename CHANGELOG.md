@@ -1,5 +1,51 @@
 # Release History
 
+## 1.4.0-beta.2 (TBD)
+
+### Features Added
+
+* Added support in both `Sender` and `Receiver` to set the `desired-capabilities` in their ATTACH frames, using DesiredCapabilities in their respective Options.
+
+## 1.4.0-beta.1 (2024-12-05)
+
+### Features Added
+
+* Added `Sender` support for delayed confirmation of message settlement and retrieval of delivery state.
+  * `Sender.SendWithReceipt` sends a message and returns a `SendReceipt`.
+  * `SendReceipt.Wait` waits for confirmation of settlement and returns the message's delivery state.
+  * The `DeliveryState` interface encapsulates concrete delivery outcomes `StateAccepted`, `StateModified`, `StateRejected`, `StateReleased` and
+    non-terminal delivery state `StateReceived`.
+
+## 1.3.0 (2024-12-03)
+
+### Features Added
+
+* Added methods `Done` and `Err` to `Conn`
+  * `Done` returns a channel that's closed when `Conn` has closed.
+  * `Err` explains why `Conn` was closed.
+* encoding.Symbol was exposed as a public type `Symbol`.
+
+## 1.2.0 (2024-09-30)
+
+### Features Added
+
+* Added type `Null` used to send an AMQP `null` message value.
+* Added method `Properties` to `Conn`, `Session`, `Receiver`, and `Sender` which contains the peer's respective properties.
+
+### Bugs Fixed
+
+* Fixed a rare race in `Conn.start` that could cause goroutines to be leaked if the provided context was canceled/expired.
+
+### Other Changes
+
+* The field `MessageHeader.Durable` is not omitted when it's `false`.
+
+## 1.1.0 (2024-08-20)
+
+### Features Added
+
+* ConnError, SessionError and LinkError now work with errors.As(), making it easier to write generalized error handling code that wants to deal with *amqp.Error's.
+
 ## 1.0.5 (2024-03-04)
 
 ### Bugs Fixed

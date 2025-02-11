@@ -300,7 +300,15 @@ func TestClose(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	require.NoError(t, conn.start(ctx))
 	cancel()
+	require.Nil(t, conn.Properties())
 	require.NoError(t, conn.Close())
+	select {
+	case <-conn.Done():
+		require.NoError(t, conn.Err())
+	default:
+		t.Fatal("expected conn.Done() to be signaled")
+	}
+
 	// with Close error
 	netConn = fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled), fake.NetConnOptions{})
 	conn, err = newConn(netConn, nil)
@@ -314,6 +322,50 @@ func TestClose(t *testing.T) {
 	// wait a bit for connReader to read from the mock
 	time.Sleep(100 * time.Millisecond)
 	require.Error(t, conn.Close())
+	select {
+	case <-conn.Done():
+		require.Error(t, conn.Err())
+	default:
+		t.Fatal("expected conn.Done() to be signaled")
+	}
+}
+
+func TestCloseAsync(t *testing.T) {
+	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled), fake.NetConnOptions{})
+	conn, err := newConn(netConn, nil)
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	require.NoError(t, conn.start(ctx))
+	cancel()
+	go func() {
+		require.NoError(t, conn.Close())
+	}()
+	select {
+	case <-conn.Done():
+		require.NoError(t, conn.Err())
+	case <-time.After(1 * time.Second):
+		t.Fatal("expected conn.Done() to be signaled")
+	}
+
+	// with Close error
+	netConn = fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled), fake.NetConnOptions{})
+	conn, err = newConn(netConn, nil)
+	require.NoError(t, err)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	require.NoError(t, conn.start(ctx))
+	cancel()
+	netConn.OnClose = func() error {
+		return errors.New("mock close failed")
+	}
+	go func() {
+		require.Error(t, conn.Close())
+	}()
+	select {
+	case <-conn.Done():
+		require.Error(t, conn.Err())
+	case <-time.After(1 * time.Second):
+		t.Fatal("expected conn.Done() to be signaled")
+	}
 }
 
 func TestServerSideClose(t *testing.T) {
@@ -343,6 +395,12 @@ func TestServerSideClose(t *testing.T) {
 	<-closeReceived
 	err = conn.Close()
 	require.NoError(t, err)
+	select {
+	case <-conn.Done():
+		require.NoError(t, conn.Err())
+	default:
+		t.Fatal("expected conn.Done() to be signaled")
+	}
 
 	// with error
 	closeReceived = make(chan struct{})
@@ -359,6 +417,16 @@ func TestServerSideClose(t *testing.T) {
 	err = conn.Close()
 	var connErr *ConnError
 	require.ErrorAs(t, err, &connErr)
+	require.Equal(t, "*Error{Condition: Close, Description: mock server error, Info: map[]}", connErr.Error())
+	select {
+	case <-conn.Done():
+		connErr = nil
+		require.ErrorAs(t, conn.Err(), &connErr)
+		require.Equal(t, "*Error{Condition: Close, Description: mock server error, Info: map[]}", connErr.Error())
+	default:
+		t.Fatal("expected conn.Done() to be signaled")
+	}
+	require.ErrorAs(t, conn.Err(), &connErr)
 	require.Equal(t, "*Error{Condition: Close, Description: mock server error, Info: map[]}", connErr.Error())
 }
 
@@ -591,7 +659,9 @@ func TestClientClose(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, client)
 	require.NoError(t, client.Close())
+	require.NoError(t, client.Err())
 	require.NoError(t, client.Close())
+	require.NoError(t, client.Err())
 }
 
 func TestSessionOptions(t *testing.T) {
@@ -1069,4 +1139,40 @@ func TestConnSmallFrames(t *testing.T) {
 	require.NoError(t, session.Close(ctx))
 	cancel()
 	require.NoError(t, conn.Close())
+}
+
+func TestConnProperties(t *testing.T) {
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		switch req.(type) {
+		case *fake.AMQPProto:
+			return newResponse(fake.ProtoHeader(fake.ProtoAMQP))
+		case *frames.PerformOpen:
+			b, err := fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformOpen{
+				ChannelMax:   65535,
+				ContainerID:  "container",
+				IdleTimeout:  time.Minute,
+				MaxFrameSize: 4294967295,
+				Properties: map[encoding.Symbol]any{
+					"ConnProperty1": "foo",
+					"ConnProperty2": 123,
+				},
+			})
+			return newResponse(b, err)
+		case *frames.PerformClose:
+			return newResponse(fake.PerformClose(nil))
+		default:
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{
+		"ConnProperty1": "foo",
+		"ConnProperty2": int64(123),
+	}, client.Properties())
+	require.NoError(t, client.Close())
 }

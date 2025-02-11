@@ -218,3 +218,100 @@ func ExampleLinkError() {
 		log.Fatalf("unexpected error type %T", err)
 	}
 }
+
+func ExampleConn_Done() {
+	ctx := context.TODO()
+
+	// create connection
+	conn, err := amqp.Dial(ctx, "amqps://my-namespace.servicebus.windows.net", &amqp.ConnOptions{
+		SASLType: amqp.SASLTypePlain("access-key-name", "access-key"),
+	})
+	if err != nil {
+		log.Fatal("Dialing AMQP server:", err)
+	}
+
+	// when the channel returned by Done is closed, conn has been closed
+	<-conn.Done()
+
+	// Err indicates why the connection was closed. a nil error indicates
+	// a client-side call to Close and there were no errors during shutdown.
+	closedErr := conn.Err()
+
+	// when Err returns a non-nil error, it means that either a client-side
+	// call to Close encountered an error during shutdown, a fatal error was
+	// encountered that caused the connection to close, or that the peer
+	// closed the connection.
+	if closedErr != nil {
+		// the error returned by Err is always a *ConnError
+		var connErr *amqp.ConnError
+		errors.As(closedErr, &connErr)
+
+		if connErr.RemoteErr != nil {
+			// the peer closed the connection and provided an error explaining why.
+			// note that the peer MAY send an error when closing the connection but
+			// is not required to.
+		} else {
+			// the connection encountered a fatal error or there was
+			// an error during client-side shutdown. this is for
+			// diagnostics, the connection has been closed.
+		}
+	}
+}
+
+func ExampleSender_SendWithReceipt() {
+	ctx := context.TODO()
+
+	// create connection
+	conn, err := amqp.Dial(ctx, "amqps://my-namespace.servicebus.windows.net", &amqp.ConnOptions{
+		SASLType: amqp.SASLTypePlain("access-key-name", "access-key"),
+	})
+	if err != nil {
+		log.Fatal("Dialing AMQP server:", err)
+	}
+	defer conn.Close()
+
+	// open a session
+	session, err := conn.NewSession(ctx, nil)
+	if err != nil {
+		log.Fatal("Creating AMQP session:", err)
+	}
+
+	// create a sender
+	sender, err := session.NewSender(ctx, "/queue-name", nil)
+	if err != nil {
+		log.Fatal("Creating sender link:", err)
+	}
+
+	// send message
+	receipt, err := sender.SendWithReceipt(ctx, amqp.NewMessage([]byte("Hello!")), nil)
+	if err != nil {
+		log.Fatal("Sending message:", err)
+	}
+
+	// wait for confirmation of settlement
+	state, err := receipt.Wait(ctx)
+	if err != nil {
+		log.Fatal("Wait on receipt:", err)
+	}
+
+	// determine how the peer settled the message
+	switch stateType := state.(type) {
+	case *amqp.StateAccepted:
+		// message was accepted, no further action is required
+	case *amqp.StateModified:
+		// message must be modified and resent before it can be processed.
+		// the values in stateType provide further context.
+	case *amqp.StateReceived:
+		// see the fields in [StateReceived] for information on
+		// how to handle this delivery state.
+	case *amqp.StateRejected:
+		// the peer rejected the message
+		if stateType.Error != nil {
+			// the error will provide information about why the
+			// message was rejected. note that the peer isn't required
+			// to provide an error.
+		}
+	case *amqp.StateReleased:
+		// message was not and will not be acted upon
+	}
+}

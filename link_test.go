@@ -28,7 +28,7 @@ func TestLinkFlowThatNeedsToReplenishCredits(t *testing.T) {
 			},
 		})
 
-		err := l.DrainCredit(context.Background())
+		err := l.DrainCredit(context.Background(), nil)
 		require.Error(t, err, "drain can only be used with receiver links using manual credit management")
 
 		err = l.IssueCredit(1)
@@ -173,7 +173,7 @@ func TestLinkFlowWithDrain(t *testing.T) {
 	require.NoError(t, err)
 
 	time.Sleep(200 * time.Millisecond)
-	err = receiver.DrainCredit(context.Background())
+	err = receiver.DrainCredit(context.Background(), nil)
 	require.NoError(t, err)
 
 	require.NotNil(t, drainedFlow)

@@ -66,6 +66,11 @@ func (r *Receiver) IssueCredit(credit uint32) error {
 	return nil
 }
 
+// DrainCreditOptions contains any optional values for the Receiver.DrainCredit method.
+type DrainCreditOptions struct {
+	// for future expansion
+}
+
 // DrainCredit sets the drain flag on the next outbound FLOW frame and blocks until
 // the corresponding FLOW frame is received. While a drain is in progress, messages
 // can continue to arrive. After a drain completes, the Receiver will have
@@ -81,7 +86,7 @@ func (r *Receiver) IssueCredit(credit uint32) error {
 //
 // NOTE: The behavior of drain is optional, as per the AMQP spec. Check with your individual
 // broker's documentation for implementation details.
-func (r *Receiver) DrainCredit(ctx context.Context) error {
+func (r *Receiver) DrainCredit(ctx context.Context, options *DrainCreditOptions) error {
 	if r.autoSendFlow {
 		return errors.New("drain can only be used with receiver links using manual credit management")
 	}

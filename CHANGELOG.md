@@ -1,6 +1,6 @@
 # Release History
 
-## 1.4.0-beta.2 (TBD)
+## 1.4.0 (2025-02-18)
 
 ### Features Added
 

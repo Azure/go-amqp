@@ -1241,7 +1241,7 @@ func TestDrainingLink(t *testing.T) {
 	require.Equal(t, 1, len(receiveAllPrefetched(receiver)), "we received the single message that was available")
 
 	// now we'll drain - there's a single active credit that will now get thrown away
-	err = receiver.DrainCredit(context.Background())
+	err = receiver.DrainCredit(context.Background(), nil)
 	require.NoError(t, err)
 	require.Zero(t, receiveAllPrefetched(receiver)) // there weren't any messages to send to us
 

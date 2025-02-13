@@ -1191,6 +1191,10 @@ func TestDrainingLink(t *testing.T) {
 	conn, err := amqp.Dial(context.Background(), localBrokerAddr, nil)
 	require.NoError(t, err)
 
+	t.Cleanup(func() {
+		require.NoError(t, conn.Close())
+	})
+
 	session, err := conn.NewSession(context.Background(), nil)
 	require.NoError(t, err)
 

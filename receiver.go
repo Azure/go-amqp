@@ -86,7 +86,7 @@ type DrainCreditOptions struct {
 //
 // NOTE: The behavior of drain is optional, as per the AMQP spec. Check with your individual
 // broker's documentation for implementation details.
-func (r *Receiver) DrainCredit(ctx context.Context, options *DrainCreditOptions) error {
+func (r *Receiver) DrainCredit(ctx context.Context, _ *DrainCreditOptions) error {
 	if r.autoSendFlow {
 		return errors.New("drain can only be used with receiver links using manual credit management")
 	}

@@ -9,21 +9,21 @@ jobs:
     strategy:
       matrix:
         Linux_Go118:
-          pool.name: 'azsdk-pool-mms-ubuntu-2004-general'
-          vm.image: 'ubuntu-20.04'
+          pool.name: 'azsdk-pool'
+          vm.image: 'ubuntu-24.04'
           go.version: '1.18.10'
         Linux_Go123:
-          pool.name: 'azsdk-pool-mms-ubuntu-2004-general'
-          vm.image: 'ubuntu-20.04'
+          pool.name: 'azsdk-pool'
+          vm.image: 'ubuntu-24.04'
           go.version: '1.23.7'
         Linux_Go124:
-          pool.name: 'azsdk-pool-mms-ubuntu-2004-general'
-          vm.image: 'ubuntu-20.04'
+          pool.name: 'azsdk-pool'
+          vm.image: 'ubuntu-24.04'
           go.version: '1.24.1'
 
     pool:
       name: '$(pool.name)'
-      vmImage: '$(vm.image)'
+      demands: ImageOverride -equals '$(vm.image)'
 
     steps:
       - task: GoTool@0

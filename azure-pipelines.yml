@@ -23,7 +23,7 @@ jobs:
 
     pool:
       name: '$(pool.name)'
-      demands: ImageOverride -equals '$(vm.image)'
+      demands: ImageOverride -equals $(vm.image)
 
     steps:
       - task: GoTool@0

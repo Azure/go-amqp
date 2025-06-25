@@ -68,14 +68,13 @@ jobs:
           pushd $(Pipeline.Workspace)/azure-amqp/test/TestAmqpBroker
           dotnet restore
           dotnet build
-          chmod +x $(Pipeline.Workspace)/azure-amqp/bin/Debug/TestAmqpBroker/net8.0/TestAmqpBroker.exe
         displayName: 'Clone and Build Broker'
 
       - script: |
           set -e
           export TEST_CORPUS=1
           echo '##[command]Starting broker at $(AMQP_BROKER_ADDR)'
-          $(Pipeline.Workspace)/azure-amqp/bin/Debug/TestAmqpBroker/net8.0/TestAmqpBroker.exe $AMQP_BROKER_ADDR /headless &
+          dotnet $(Pipeline.Workspace)/azure-amqp/bin/Debug/TestAmqpBroker/net8.0/TestAmqpBroker.dll $AMQP_BROKER_ADDR /headless &
           brokerPID=$!
           echo '##[section]Starting tests'
           go test -race -v -coverprofile=coverage.txt -covermode atomic ./... 2>&1 | tee gotestoutput.log 

@@ -1,5 +1,12 @@
 # Release History
 
+## 1.4.1
+
+### Bugs Fixed
+
+* Fixed panic when using unhashable types as map keys in mapAnyAny.Unmarshal.
+
+
 ## 1.4.0 (2025-02-19)
 
 ### Features Added

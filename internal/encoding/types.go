@@ -284,7 +284,7 @@ func (m *mapAnyAny) Unmarshal(r *buffer.Buffer) error {
 		// for operands of the key type; thus the key type must not
 		// be a function, map, or slice.
 		switch reflect.ValueOf(key).Kind() {
-		case reflect.Slice, reflect.Func, reflect.Map:
+		case reflect.Slice, reflect.Func, reflect.Map, reflect.Struct:
 			return errors.New("invalid map key")
 		}
 

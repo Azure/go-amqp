@@ -1601,7 +1601,9 @@ func (a arrayMap) Marshal(wr *buffer.Buffer) error {
 
 	// marshal each map (without the type code)
 	for _, element := range a {
-		writeMap32(wr, element)
+		if err := writeMap32(wr, element); err != nil {
+			return err
+		}
 	}
 
 	// overwrite array size

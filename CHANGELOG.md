@@ -1,6 +1,6 @@
 # Release History
 
-## 1.5.0 (Unreleased)
+## 1.5.0 (2025-09-04)
 
 * Added support for marshaling and unmarshaling arrays of maps
 

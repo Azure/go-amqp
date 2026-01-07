@@ -1,5 +1,11 @@
 # Release History
 
+## 1.5.1 (2026-01-07)
+
+### Bugs Fixed
+
+* Fixed attach frame nil terminus check expectations
+
 ## 1.5.0 (2025-09-04)
 
 * Added support for marshaling and unmarshaling arrays of maps

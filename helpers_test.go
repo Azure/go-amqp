@@ -138,15 +138,25 @@ func runToAttachWithOptions[OptionsT SenderOptions | ReceiverOptions](t *testing
 			require.Nil(t, attachFrame, "Only expecting a single ATTACH for this style of test")
 			attachFrame = tt
 
-			b, err := fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformAttach{
+			resp := &frames.PerformAttach{
 				Name:   tt.Name,
 				Role:   !tt.Role,
 				Handle: 0,
-				Target: &frames.Target{
+			}
+
+			if tt.Role == encoding.RoleReceiver {
+				resp.Source = &frames.Source{
 					Address:      "test",
 					ExpiryPolicy: encoding.ExpirySessionEnd,
-				},
-			})
+				}
+			} else {
+				resp.Target = &frames.Target{
+					Address:      "test",
+					ExpiryPolicy: encoding.ExpirySessionEnd,
+				}
+			}
+
+			b, err := fake.EncodeFrame(frames.TypeAMQP, 0, resp)
 			require.NoError(t, err)
 			return fake.Response{Payload: b}, nil
 		default:

@@ -40,9 +40,10 @@ type Receiver struct {
 	settlementCount   uint32     // the count of settled messages
 	settlementCountMu sync.Mutex // must be held when accessing settlementCount
 
-	autoSendFlow bool     // automatically send flow frames as credit becomes available
-	inFlight     inFlight // used to track message disposition when rcv-settle-mode == second
-	creditor     creditor // manages credits via calls to IssueCredit/DrainCredit
+	autoSendFlow          bool                 // automatically send flow frames as credit becomes available
+	inFlight              inFlight             // used to track message disposition when rcv-settle-mode == second
+	creditor              creditor             // manages credits via calls to IssueCredit/DrainCredit
+	onLinkStateProperties func(map[string]any) // callback for when link props are set in the flow frame
 }
 
 // IssueCredit adds credits to be requested in the next flow request.
@@ -499,6 +500,9 @@ func newReceiver(source string, session *Session, opts *ReceiverOptions) (*Recei
 	if opts.SourceExpiryTimeout != 0 {
 		r.l.source.Timeout = opts.SourceExpiryTimeout
 	}
+	if opts.OnLinkStateProperties != nil {
+		r.onLinkStateProperties = opts.OnLinkStateProperties
+	}
 	return r, nil
 }
 
@@ -710,6 +714,14 @@ func (r *Receiver) muxHandleFrame(fr frames.FrameBody) error {
 
 	// flow control frame
 	case *frames.PerformFlow:
+		if fr.Properties != nil && r.onLinkStateProperties != nil {
+			props := make(map[string]any)
+			for k, v := range fr.Properties {
+				props[string(k)] = v
+			}
+			r.onLinkStateProperties(props)
+		}
+
 		if !fr.Echo {
 			// if the 'drain' flag has been set in the frame sent to the _receiver_ then
 			// we signal whomever is waiting (the service has seen and acknowledged our drain)

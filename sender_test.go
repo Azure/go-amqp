@@ -1457,6 +1457,72 @@ func TestSenderProperties(t *testing.T) {
 	require.NoError(t, client.Close())
 }
 
+func TestSenderOnLinkStateProperties(t *testing.T) {
+	linkCredit := uint32(1)
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		resp, err := senderFrameHandler(0, SenderSettleModeUnsettled)(remoteChannel, req)
+		if resp.Payload != nil || err != nil {
+			return resp, err
+		}
+		switch req.(type) {
+		case *frames.PerformFlow, *fake.KeepAlive:
+			return fake.Response{}, nil
+		default:
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+
+	received := make(chan map[string]any, 1)
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
+	require.NoError(t, err)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	sender, err := session.NewSender(ctx, "target", &SenderOptions{
+		OnLinkStateProperties: func(props map[string]any) {
+			received <- props
+		},
+	})
+	cancel()
+	require.NoError(t, err)
+
+	nextIncomingID := uint32(1)
+	b, err := fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformFlow{
+		Handle:         &sender.l.outputHandle,
+		NextIncomingID: &nextIncomingID,
+		IncomingWindow: 100,
+		OutgoingWindow: 100,
+		NextOutgoingID: 1,
+		LinkCredit:     &linkCredit,
+		Properties: map[encoding.Symbol]any{
+			"foo:active": true,
+		},
+	})
+	require.NoError(t, err)
+	netConn.SendFrame(b)
+
+	select {
+	case props := <-received:
+		require.Equal(t, map[string]any{"foo:active": true}, props)
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for link state properties callback")
+	}
+
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+	err = sender.Close(ctx)
+	cancel()
+	require.NoError(t, err)
+	require.NoError(t, client.Close())
+}
+
 func TestSenderSendWithReceipt(t *testing.T) {
 	tests := []struct {
 		name  string

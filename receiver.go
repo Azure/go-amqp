@@ -500,9 +500,7 @@ func newReceiver(source string, session *Session, opts *ReceiverOptions) (*Recei
 	if opts.SourceExpiryTimeout != 0 {
 		r.l.source.Timeout = opts.SourceExpiryTimeout
 	}
-	if opts.OnLinkStateProperties != nil {
-		r.onLinkStateProperties = opts.OnLinkStateProperties
-	}
+	r.onLinkStateProperties = opts.OnLinkStateProperties
 	return r, nil
 }
 

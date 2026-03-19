@@ -44,6 +44,9 @@ type SenderOptions struct {
 	// Properties sets an entry in the link properties map sent to the server.
 	Properties map[string]any
 
+	// OnLinkStateProperties is called when a flow frame with link state properties is received.
+	OnLinkStateProperties func(map[string]any)
+
 	// RequestedReceiverSettleMode sets the requested receiver settlement mode.
 	//
 	// If a settlement mode is explicitly set and the server does not
@@ -147,6 +150,9 @@ type ReceiverOptions struct {
 
 	// Properties sets an entry in the link properties map sent to the server.
 	Properties map[string]any
+
+	// OnLinkStateProperties is called when a flow frame with link state properties is received.
+	OnLinkStateProperties func(map[string]any)
 
 	// RequestedSenderSettleMode sets the requested sender settlement mode.
 	//

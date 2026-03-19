@@ -22,6 +22,8 @@ type Sender struct {
 	buf             buffer.Buffer
 	nextDeliveryTag uint64
 	rollback        chan struct{}
+
+	onLinkStateProperties func(map[string]any)
 }
 
 // LinkName() is the name of the link used for this Sender.
@@ -399,6 +401,9 @@ func newSender(target string, session *Session, opts *SenderOptions) (*Sender, e
 	if opts.TargetExpiryTimeout != 0 {
 		s.l.target.Timeout = opts.TargetExpiryTimeout
 	}
+	if opts.OnLinkStateProperties != nil {
+		s.onLinkStateProperties = opts.OnLinkStateProperties
+	}
 	return s, nil
 }
 
@@ -535,6 +540,14 @@ func (s *Sender) muxHandleFrame(fr frames.FrameBody) error {
 	switch fr := fr.(type) {
 	// flow control frame
 	case *frames.PerformFlow:
+		if fr.Properties != nil && s.onLinkStateProperties != nil {
+			props := make(map[string]any)
+			for k, v := range fr.Properties {
+				props[string(k)] = v
+			}
+			s.onLinkStateProperties(props)
+		}
+
 		// the sender's link-credit variable MUST be set according to this formula when flow information is given by the receiver:
 		// link-credit(snd) := delivery-count(rcv) + link-credit(rcv) - delivery-count(snd)
 		linkCredit := *fr.LinkCredit - s.l.deliveryCount

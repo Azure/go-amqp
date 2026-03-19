@@ -185,9 +185,9 @@ type ReceiverOptions struct {
 	SourceExpiryTimeout uint32
 
 	// SourceDistributionMode sets the distribution mode on the source.
-	// Valid values are "move" (default, messages are consumed) and
-	// "copy" (messages are browsed without being removed).
-	SourceDistributionMode string
+	//
+	// Default: SourceDistributionModeMove (messages are consumed).
+	SourceDistributionMode SourceDistributionMode
 }
 
 // LinkFilter is an advanced API for setting non-standard source filters.

@@ -1,5 +1,9 @@
 # Release History
 
+## 1.6.0 (TBD)
+
+* Add SourceDistributionMode to ReceiverOptions
+
 ## 1.5.1 (2026-01-07)
 
 ### Bugs Fixed

@@ -499,6 +499,9 @@ func newReceiver(source string, session *Session, opts *ReceiverOptions) (*Recei
 	if opts.SourceExpiryTimeout != 0 {
 		r.l.source.Timeout = opts.SourceExpiryTimeout
 	}
+	if opts.SourceDistributionMode != "" {
+		r.l.source.DistributionMode = opts.SourceDistributionMode
+	}
 	return r, nil
 }
 

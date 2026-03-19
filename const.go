@@ -91,3 +91,16 @@ const (
 // terminus-expiry-policy are subsequently re-met, the expiry timer restarts
 // from its originally configured timeout value.
 type ExpiryPolicy = encoding.ExpiryPolicy
+
+// SourceDistributionMode specifies the message distribution mode for a source.
+type SourceDistributionMode = encoding.Symbol
+
+// Distribution Modes
+// https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#doc-idp328592
+const (
+	// Default behaviour: messages are consumed.
+	SourceDistributionModeMove SourceDistributionMode = "move"
+
+	// Messages are copied from the source. Messages can be browsed without being consumed.
+	SourceDistributionModeCopy SourceDistributionMode = "copy"
+)

@@ -1528,6 +1528,86 @@ func TestReceiverProperties(t *testing.T) {
 	require.NoError(t, conn.Close())
 }
 
+func TestReceiverOnLinkStateProperties(t *testing.T) {
+	var netConn *fake.NetConn
+
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		switch ff := req.(type) {
+		case *fake.AMQPProto:
+			return newResponse(fake.ProtoHeader(fake.ProtoAMQP))
+		case *frames.PerformOpen:
+			return newResponse(fake.PerformOpen("test"))
+		case *frames.PerformBegin:
+			return newResponse(fake.PerformBegin(0, remoteChannel))
+		case *frames.PerformAttach:
+			return newResponse(fake.ReceiverAttach(0, ff.Name, 0, encoding.ReceiverSettleModeFirst, ff.Source.Filter))
+		case *frames.PerformFlow:
+			// after the receiver sends its initial flow, send back a flow with properties
+			if ff.Handle != nil {
+				flowWithProps := &frames.PerformFlow{
+					NextIncomingID: ff.NextIncomingID,
+					IncomingWindow: 1000,
+					NextOutgoingID: 0,
+					OutgoingWindow: 1000,
+					Handle:         ff.Handle,
+					DeliveryCount:  ff.DeliveryCount,
+					LinkCredit:     ff.LinkCredit,
+					Properties: map[encoding.Symbol]any{
+						"foo:active": true,
+					},
+				}
+				b, err := fake.EncodeFrame(frames.TypeAMQP, 0, flowWithProps)
+				if err != nil {
+					return fake.Response{}, err
+				}
+				netConn.SendFrame(b)
+			}
+			return fake.Response{}, nil
+		case *fake.KeepAlive:
+			return fake.Response{}, nil
+		case *frames.PerformDetach:
+			return newResponse(fake.PerformDetach(0, ff.Handle, nil))
+		case *frames.PerformClose:
+			return newResponse(fake.PerformClose(nil))
+		case *frames.PerformEnd:
+			return newResponse(fake.PerformEnd(0, nil))
+		default:
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+
+	received := make(chan map[string]any, 1)
+	netConn = fake.NewNetConn(responder, fake.NetConnOptions{})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
+	require.NoError(t, err)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	_, err = session.NewReceiver(ctx, "source", &ReceiverOptions{
+		OnLinkStateProperties: func(props map[string]any) {
+			received <- props
+		},
+	})
+	cancel()
+	require.NoError(t, err)
+
+	select {
+	case props := <-received:
+		require.Equal(t, map[string]any{"foo:active": true}, props)
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for link state properties callback")
+	}
+
+	require.NoError(t, netConn.Close())
+}
+
 func TestReceiverAttachDesiredCapabilities(t *testing.T) {
 	t.Run("NilDesiredCaps", func(t *testing.T) {
 		require.Nil(t, runToAttachWithOptions(t, ReceiverOptions{

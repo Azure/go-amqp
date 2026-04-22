@@ -1,8 +1,10 @@
 # Release History
 
-## 1.6.0 (TBD)
+## 1.6.0 (2026-04-22)
 
 * Add SourceDistributionMode to ReceiverOptions
+* Add a callback for link state properties in the flow frame. This allows applications to react to the
+  properties sent by the broker.
 
 ## 1.5.1 (2026-01-07)
 

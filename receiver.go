@@ -277,19 +277,33 @@ func (r *Receiver) Close(ctx context.Context) error {
 	return r.l.closeLink(ctx)
 }
 
-// sendDisposition sends a disposition frame to the peer
-func (r *Receiver) sendDisposition(ctx context.Context, first uint32, last *uint32, state encoding.DeliveryState) error {
+// sendDisposition sends a disposition frame to the peer.
+// The frame is enqueued asynchronously; the caller does not wait for it to
+// be written to the network.  Any write error will close the connection and
+// will be surfaced the next time the link is used.  For ReceiverSettleModeSecond,
+// the error surfaces through the inFlight wait channel when the mux unwinds,
+// so there is no need to block on the write here either.
+func (r *Receiver) sendDisposition(first uint32, last *uint32, state encoding.DeliveryState) error {
+	modeSecond := r.l.receiverSettleMode != nil && *r.l.receiverSettleMode == ReceiverSettleModeSecond
+
 	fr := &frames.PerformDisposition{
 		Role:    encoding.RoleReceiver,
 		First:   first,
 		Last:    last,
-		Settled: r.l.receiverSettleMode == nil || *r.l.receiverSettleMode == ReceiverSettleModeFirst,
+		Settled: !modeSecond,
 		State:   state,
 	}
 
+	// Use a background context and no Done channel so the caller returns as soon
+	// as the frame is enqueued, without blocking on the network write.  This
+	// matches the async transfer path introduced for senders.
+	//
+	// For mode-second, if the write fails the connection is closed, the mux
+	// unwinds, and inFlight.clear() delivers the error to the wait channel in
+	// messageDisposition — so the caller still sees the error.
 	frameCtx := frameContext{
-		Ctx:  ctx,
-		Done: make(chan struct{}),
+		Ctx:  context.Background(),
+		Done: nil,
 	}
 
 	select {
@@ -299,12 +313,7 @@ func (r *Receiver) sendDisposition(ctx context.Context, first uint32, last *uint
 		return r.l.doneErr
 	}
 
-	select {
-	case <-frameCtx.Done:
-		return frameCtx.Err
-	case <-r.l.done:
-		return r.l.doneErr
-	}
+	return nil
 }
 
 // messageDisposition is called via the *Receiver associated with a *Message.
@@ -329,7 +338,7 @@ func (r *Receiver) messageDisposition(ctx context.Context, msg *Message, state e
 		wait = r.inFlight.add(msg)
 	}
 
-	if err := r.sendDisposition(ctx, msg.deliveryID, nil, state); err != nil {
+	if err := r.sendDisposition(msg.deliveryID, nil, state); err != nil {
 		return err
 	}
 

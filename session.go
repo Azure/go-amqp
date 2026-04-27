@@ -16,7 +16,8 @@ import (
 
 // Default session options
 const (
-	defaultWindow = 5000
+	defaultWindow             = 5000
+	defaultTransferQueueDepth = 1
 )
 
 // SessionOptions contains the optional settings for configuring an AMQP session.
@@ -27,6 +28,13 @@ type SessionOptions struct {
 	// Minimum: 1.
 	// Default: 4294967295.
 	MaxLinks uint32
+
+	// TransferQueueDepth sets the number of transfer frames that can be
+	// queued for sending before the sender blocks. Larger values allow
+	// more pipelining at the cost of memory.
+	//
+	// Default: 1.
+	TransferQueueDepth int
 }
 
 // Session is an AMQP session.
@@ -72,11 +80,16 @@ type Session struct {
 }
 
 func newSession(c *Conn, channel uint16, opts *SessionOptions) *Session {
+	transferQueueDepth := defaultTransferQueueDepth
+	if opts != nil && opts.TransferQueueDepth > 0 {
+		transferQueueDepth = opts.TransferQueueDepth
+	}
+
 	s := &Session{
 		conn:           c,
 		channel:        channel,
 		tx:             make(chan frameBodyEnvelope),
-		txTransfer:     make(chan transferEnvelope),
+		txTransfer:     make(chan transferEnvelope, transferQueueDepth),
 		incomingWindow: defaultWindow,
 		outgoingWindow: defaultWindow,
 		handleMax:      math.MaxUint32 - 1,

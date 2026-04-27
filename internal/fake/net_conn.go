@@ -40,7 +40,7 @@ func NewNetConn(resp func(remoteChannel uint16, fr frames.FrameBody) (Response, 
 		// used to serialize writes so the frames are returned in their specified order.
 		// buffering is necessary because write() will sleep when a write delay was
 		// specified and we don't want to stall Write(). the size was arbitrarily picked.
-		writeResp: make(chan Response, 10),
+		writeResp: make(chan Response, 100),
 		close:     make(chan struct{}),
 		readDL:    newNopTimer(), // default, no deadline
 	}
@@ -167,26 +167,30 @@ func (n *NetConn) Write(b []byte) (int, error) {
 		// no fake write error
 	}
 
-	remoteChannel, frame, err := decodeFrame(b)
-	if err != nil {
-		return 0, err
-	}
-	resp, err := n.resp(remoteChannel, frame)
-	if err != nil {
-		return 0, err
-	}
-	if resp.Payload != nil {
-		select {
-		case n.writeResp <- resp:
-			// resp was sent to write()
-		default:
-			// this means we incorrectly sized writeResp.
-			// we do this to ensure that we never stall
-			// waiting to write to writeResp.
-			panic("writeResp full")
+	total := len(b)
+	for len(b) > 0 {
+		remoteChannel, frame, consumed, err := decodeFrameWithSize(b)
+		if err != nil {
+			return 0, err
 		}
+		resp, err := n.resp(remoteChannel, frame)
+		if err != nil {
+			return 0, err
+		}
+		if resp.Payload != nil {
+			select {
+			case n.writeResp <- resp:
+				// resp was sent to write()
+			default:
+				// this means we incorrectly sized writeResp.
+				// we do this to ensure that we never stall
+				// waiting to write to writeResp.
+				panic("writeResp full")
+			}
+		}
+		b = b[consumed:]
 	}
-	return len(b), nil
+	return total, nil
 }
 
 func (n *NetConn) write() {
@@ -436,29 +440,34 @@ func EncodeFrame(t frames.Type, channel uint16, f frames.FrameBody) ([]byte, err
 }
 
 func decodeFrame(b []byte) (uint16, frames.FrameBody, error) {
+	ch, fr, _, err := decodeFrameWithSize(b)
+	return ch, fr, err
+}
+
+func decodeFrameWithSize(b []byte) (uint16, frames.FrameBody, int, error) {
 	if len(b) > 3 && b[0] == 'A' && b[1] == 'M' && b[2] == 'Q' && b[3] == 'P' {
-		return 0, &AMQPProto{}, nil
+		return 0, &AMQPProto{}, 8, nil
 	}
 	buf := buffer.New(b)
 	header, err := frames.ParseHeader(buf)
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, 0, err
 	}
 	bodySize := int64(header.Size - frames.HeaderSize)
 	if bodySize == 0 {
 		// keep alive frame
-		return 0, &KeepAlive{}, nil
+		return 0, &KeepAlive{}, int(header.Size), nil
 	}
 	// parse the frame
-	b, ok := buf.Next(bodySize)
+	body, ok := buf.Next(bodySize)
 	if !ok {
-		return 0, nil, err
+		return 0, nil, 0, err
 	}
-	fr, err := frames.ParseBody(buffer.New(b))
+	fr, err := frames.ParseBody(buffer.New(body))
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, 0, err
 	}
-	return header.Channel, fr, nil
+	return header.Channel, fr, int(header.Size), nil
 }
 
 func encodeMultiFrameTransfer(channel uint16, linkHandle, deliveryID uint32, payload []byte, edit func(int, *frames.PerformTransfer)) ([][]byte, error) {

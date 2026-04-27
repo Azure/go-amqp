@@ -68,10 +68,15 @@ func senderFrameHandler(channel uint16, ssm encoding.SenderSettleMode) frameHand
 func senderFrameHandlerNoUnhandled(channel uint16, ssm encoding.SenderSettleMode) frameHandler {
 	return func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
 		resp, err := senderFrameHandler(channel, ssm)(remoteChannel, req)
-		if resp.Payload == nil && err == nil {
+		if resp.Payload != nil || err != nil {
+			return resp, err
+		}
+		switch req.(type) {
+		case *fake.KeepAlive:
+			return fake.Response{}, nil
+		default:
 			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
 		}
-		return resp, err
 	}
 }
 

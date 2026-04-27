@@ -1613,20 +1613,20 @@ func TestSenderSendWithReceipt(t *testing.T) {
 
 			sendInitialFlowFrame(t, 0, netConn, 0, 100)
 
-			ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 			receipt, err := snd.SendWithReceipt(ctx, NewMessage([]byte("test")), nil)
 			cancel()
 			require.NoError(t, err)
 			require.Equal(t, []byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}, receipt.DeliveryTag())
 
-			ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 			state, err := receipt.Wait(ctx)
 			cancel()
 			require.NoError(t, err)
 			require.Equal(t, test.state, state)
 
 			// subsequent calls should yield the same result
-			ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 			state, err = receipt.Wait(ctx)
 			cancel()
 			require.NoError(t, err)

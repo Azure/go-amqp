@@ -22,9 +22,13 @@ type Sender struct {
 	buf             buffer.Buffer
 	nextDeliveryTag uint64
 	rollback        chan struct{}
+	settlements     chan<- Settlement // optional channel for settlement notifications
+	settlementQ     chan Settlement
 
 	onLinkStateProperties func(map[string]any)
 }
+
+const defaultSettlementQueueDepth = 1
 
 // LinkName() is the name of the link used for this Sender.
 func (s *Sender) LinkName() string {
@@ -79,7 +83,7 @@ func (s *Sender) Send(ctx context.Context, msg *Message, opts *SendOptions) erro
 		// link is still active
 	}
 
-	receipt, err := s.send(ctx, msg, opts)
+	receipt, err := s.send(ctx, msg, opts, true)
 	if err != nil {
 		return err
 	}
@@ -125,6 +129,10 @@ func (s SendReceipt) DeliveryTag() []byte {
 //
 // If the context's deadline expires or is cancelled before the operation
 // completes, the message is in an unknown state of settlement.
+//
+// If the [Sender] was created with [SenderOptions.Settlements] set, settlement
+// is delivered on that channel instead; in that case Wait does not receive a
+// delivery state and only returns when the link ends or ctx is done.
 func (s *SendReceipt) Wait(ctx context.Context) (DeliveryState, error) {
 	if s.state != nil {
 		return s.state, nil
@@ -161,6 +169,9 @@ type SendWithReceiptOptions struct {
 // If the context's deadline expires or is cancelled before the operation
 // completes, the message is in an unknown state of transmission.
 //
+// If [SenderOptions.Settlements] is configured, read settlement from that channel;
+// [SendReceipt.Wait] does not report broker disposition in that mode (see [SendReceipt.Wait]).
+//
 // If the Sender has been configured with [SenderSettleModeSettled] an error is returned.
 //
 // SendWithReceipt is safe for concurrent use.
@@ -178,12 +189,14 @@ func (s *Sender) SendWithReceipt(ctx context.Context, msg *Message, opts *SendWi
 		// link is still active
 	}
 
-	return s.send(ctx, msg, nil)
+	return s.send(ctx, msg, nil, false)
 }
 
 // send is separated from Send so that the mutex unlock can be deferred without
 // locking the transfer confirmation that happens in Send.
-func (s *Sender) send(ctx context.Context, msg *Message, opts *SendOptions) (SendReceipt, error) {
+// when waitForWrite is false, the caller does not block waiting for the frame
+// to be written to the network, allowing the pipeline to flow freely.
+func (s *Sender) send(ctx context.Context, msg *Message, opts *SendOptions, waitForWrite bool) (SendReceipt, error) {
 	const (
 		maxDeliveryTagLength   = 32
 		maxTransferFrameHeader = 66 // determined by calcMaxTransferFrameHeader
@@ -253,19 +266,27 @@ func (s *Sender) send(ctx context.Context, msg *Message, opts *SendOptions) (Sen
 			// mark final transfer as settled when sender mode is settled
 			fr.Settled = senderSettled
 
-			// set done on last frame
-			fr.Done = make(chan encoding.DeliveryState, 1)
+			// When the caller uses the Settlements channel, skip the
+			// per-message Done channel to avoid the allocation.
+			if s.settlementQ == nil {
+				fr.Done = make(chan encoding.DeliveryState, 1)
+			}
 		}
 
 		// NOTE: we MUST send a copy of fr here since we modify it post send
 
-		frameCtx := frameContext{
-			Ctx:  ctx,
-			Done: make(chan struct{}),
+		frameCtx := frameContext{Ctx: ctx}
+		if waitForWrite {
+			frameCtx.Done = make(chan struct{})
+		} else {
+			// when the caller doesn't wait for the write, use a background
+			// context for the write deadline so the frame is written even
+			// if the caller's context is cancelled after send returns.
+			frameCtx.Ctx = context.Background()
 		}
 
 		select {
-		case s.transfers <- transferEnvelope{FrameCtx: &frameCtx, InputHandle: s.l.inputHandle, Frame: fr}:
+		case s.transfers <- transferEnvelope{FrameCtx: &frameCtx, InputHandle: s.l.inputHandle, Frame: fr, Settlements: s.settlementQ}:
 			// frame was sent to our mux
 		case <-s.l.done:
 			return SendReceipt{}, s.l.doneErr
@@ -273,22 +294,24 @@ func (s *Sender) send(ctx context.Context, msg *Message, opts *SendOptions) (Sen
 			return SendReceipt{}, &Error{Condition: ErrCondTransferLimitExceeded, Description: fmt.Sprintf("credit limit exceeded for sending link %s", s.l.key.name)}
 		}
 
-		select {
-		case <-frameCtx.Done:
-			if frameCtx.Err != nil {
-				if !fr.More {
-					select {
-					case s.rollback <- struct{}{}:
-						// the write never happened so signal the mux to roll back the delivery count and link credit
-					case <-s.l.close:
-						// the link is going down
+		if waitForWrite {
+			select {
+			case <-frameCtx.Done:
+				if frameCtx.Err != nil {
+					if !fr.More {
+						select {
+						case s.rollback <- struct{}{}:
+							// the write never happened so signal the mux to roll back the delivery count and link credit
+						case <-s.l.close:
+							// the link is going down
+						}
 					}
+					return SendReceipt{}, frameCtx.Err
 				}
-				return SendReceipt{}, frameCtx.Err
+				// frame was written to the network
+			case <-s.l.done:
+				return SendReceipt{}, s.l.doneErr
 			}
-			// frame was written to the network
-		case <-s.l.done:
-			return SendReceipt{}, s.l.doneErr
 		}
 
 		// clear values that are only required on first message
@@ -335,6 +358,11 @@ func newSender(target string, session *Session, opts *SenderOptions) (*Sender, e
 
 	if opts == nil {
 		return s, nil
+	}
+
+	queueDepth := defaultSettlementQueueDepth
+	if opts.SettlementQueueDepth > 0 {
+		queueDepth = opts.SettlementQueueDepth
 	}
 
 	for _, v := range opts.Capabilities {
@@ -401,6 +429,10 @@ func newSender(target string, session *Session, opts *SenderOptions) (*Sender, e
 	if opts.TargetExpiryTimeout != 0 {
 		s.l.target.Timeout = opts.TargetExpiryTimeout
 	}
+	s.settlements = opts.Settlements
+	if s.settlements != nil {
+		s.settlementQ = make(chan Settlement, queueDepth)
+	}
 	if opts.OnLinkStateProperties != nil {
 		s.onLinkStateProperties = opts.OnLinkStateProperties
 	}
@@ -428,8 +460,26 @@ func (s *Sender) attach(ctx context.Context) error {
 	}
 
 	s.transfers = make(chan transferEnvelope)
+	if s.settlementQ != nil {
+		go s.forwardSettlements()
+	}
 
 	return nil
+}
+
+func (s *Sender) forwardSettlements() {
+	for {
+		select {
+		case settlement := <-s.settlementQ:
+			select {
+			case s.settlements <- settlement:
+			case <-s.l.done:
+				return
+			}
+		case <-s.l.done:
+			return
+		}
+	}
 }
 
 type senderTestHooks struct {

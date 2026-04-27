@@ -41,6 +41,7 @@ type Receiver struct {
 	settlementCountMu sync.Mutex // must be held when accessing settlementCount
 
 	autoSendFlow          bool                 // automatically send flow frames as credit becomes available
+	initialCreditWindow   uint32               // the initial link credit value, used as the target for replenishment
 	inFlight              inFlight             // used to track message disposition when rcv-settle-mode == second
 	creditor              creditor             // manages credits via calls to IssueCredit/DrainCredit
 	onLinkStateProperties func(map[string]any) // callback for when link props are set in the flow frame
@@ -277,19 +278,33 @@ func (r *Receiver) Close(ctx context.Context) error {
 	return r.l.closeLink(ctx)
 }
 
-// sendDisposition sends a disposition frame to the peer
-func (r *Receiver) sendDisposition(ctx context.Context, first uint32, last *uint32, state encoding.DeliveryState) error {
+// sendDisposition sends a disposition frame to the peer.
+// The frame is enqueued asynchronously; the caller does not wait for it to
+// be written to the network.  Any write error will close the connection and
+// will be surfaced the next time the link is used.  For ReceiverSettleModeSecond,
+// the error surfaces through the inFlight wait channel when the mux unwinds,
+// so there is no need to block on the write here either.
+func (r *Receiver) sendDisposition(first uint32, last *uint32, state encoding.DeliveryState) error {
+	modeSecond := r.l.receiverSettleMode != nil && *r.l.receiverSettleMode == ReceiverSettleModeSecond
+
 	fr := &frames.PerformDisposition{
 		Role:    encoding.RoleReceiver,
 		First:   first,
 		Last:    last,
-		Settled: r.l.receiverSettleMode == nil || *r.l.receiverSettleMode == ReceiverSettleModeFirst,
+		Settled: !modeSecond,
 		State:   state,
 	}
 
+	// Use a background context and no Done channel so the caller returns as soon
+	// as the frame is enqueued, without blocking on the network write.  This
+	// matches the async transfer path introduced for senders.
+	//
+	// For mode-second, if the write fails the connection is closed, the mux
+	// unwinds, and inFlight.clear() delivers the error to the wait channel in
+	// messageDisposition — so the caller still sees the error.
 	frameCtx := frameContext{
-		Ctx:  ctx,
-		Done: make(chan struct{}),
+		Ctx:  context.Background(),
+		Done: nil,
 	}
 
 	select {
@@ -299,12 +314,7 @@ func (r *Receiver) sendDisposition(ctx context.Context, first uint32, last *uint
 		return r.l.doneErr
 	}
 
-	select {
-	case <-frameCtx.Done:
-		return frameCtx.Err
-	case <-r.l.done:
-		return r.l.doneErr
-	}
+	return nil
 }
 
 // messageDisposition is called via the *Receiver associated with a *Message.
@@ -329,7 +339,7 @@ func (r *Receiver) messageDisposition(ctx context.Context, msg *Message, state e
 		wait = r.inFlight.add(msg)
 	}
 
-	if err := r.sendDisposition(ctx, msg.deliveryID, nil, state); err != nil {
+	if err := r.sendDisposition(msg.deliveryID, nil, state); err != nil {
 		return err
 	}
 
@@ -409,10 +419,11 @@ func newReceiver(source string, session *Session, opts *ReceiverOptions) (*Recei
 	l.target = new(frames.Target)
 	l.linkCredit = defaultLinkCredit
 	r := &Receiver{
-		l:             l,
-		autoSendFlow:  true,
-		receiverReady: make(chan struct{}, 1),
-		txDisposition: make(chan frameBodyEnvelope),
+		l:                   l,
+		autoSendFlow:        true,
+		initialCreditWindow: defaultLinkCredit,
+		receiverReady:       make(chan struct{}, 1),
+		txDisposition:       make(chan frameBodyEnvelope),
 	}
 
 	r.messagesQ = queue.NewHolder(queue.New[Message](int(session.incomingWindow)))
@@ -426,6 +437,16 @@ func newReceiver(source string, session *Session, opts *ReceiverOptions) (*Recei
 	}
 	if opts.Credit > 0 {
 		r.l.linkCredit = uint32(opts.Credit)
+		r.initialCreditWindow = uint32(opts.Credit)
+		// A credit window of 1 cannot pipeline: the broker must wait for a
+		// FLOW after every message. Internally use 2 so the broker always
+		// has 1 credit outstanding while the consumer settles the current
+		// message. This matches the effective behavior of Proton-based
+		// clients that coalesce the disposition and FLOW into one write.
+		if r.initialCreditWindow == 1 {
+			r.l.linkCredit = 2
+			r.initialCreditWindow = 2
+		}
 	} else if opts.Credit < 0 {
 		r.l.linkCredit = 0
 		r.autoSendFlow = false
@@ -573,38 +594,19 @@ func (r *Receiver) mux(hooks receiverTestHooks) {
 	for {
 		msgLen := r.messagesQ.Len()
 
-		r.settlementCountMu.Lock()
-		// counter that accumulates the settled delivery count.
-		// once the threshold has been reached, the counter is
-		// reset and a flow frame is sent.
-		previousSettlementCount := r.settlementCount
-		if previousSettlementCount >= r.l.linkCredit {
-			r.settlementCount = 0
-		}
-		r.settlementCountMu.Unlock()
-
-		// once we have pending credit equal to or greater than our available credit, reclaim it.
-		// we do this instead of settlementCount > 0 to prevent flow frames from being too chatty.
-		// NOTE: we compare the settlementCount against the current link credit instead of some
-		// fixed threshold to ensure credit is reclaimed in cases where the number of unsettled
-		// messages remains high for whatever reason.
-		if r.autoSendFlow && previousSettlementCount > 0 && previousSettlementCount >= r.l.linkCredit {
-			debug.Log(1, "RX (Receiver %p) (auto): source: %q, inflight: %d, linkCredit: %d, deliveryCount: %d, messages: %d, unsettled: %d, settlementCount: %d, settleMode: %s",
-				r, r.l.source.Address, r.inFlight.len(), r.l.linkCredit, r.l.deliveryCount, msgLen, r.countUnsettled(), previousSettlementCount, r.l.receiverSettleMode.String())
-			r.l.doneErr = r.creditor.IssueCredit(previousSettlementCount)
-		} else if r.l.linkCredit == 0 {
-			debug.Log(1, "RX (Receiver %p) (pause): source: %q, inflight: %d, linkCredit: %d, deliveryCount: %d, messages: %d, unsettled: %d, settlementCount: %d, settleMode: %s",
-				r, r.l.source.Address, r.inFlight.len(), r.l.linkCredit, r.l.deliveryCount, msgLen, r.countUnsettled(), previousSettlementCount, r.l.receiverSettleMode.String())
-		}
-
 		if r.l.doneErr != nil {
+			return
+		}
+
+		if err := r.maybeIssueCredit(msgLen); err != nil {
+			r.l.doneErr = err
 			return
 		}
 
 		drain, credits := r.creditor.FlowBits(r.l.linkCredit)
 		if drain || credits > 0 {
-			debug.Log(1, "RX (Receiver %p) (flow): source: %q, inflight: %d, curLinkCredit: %d, newLinkCredit: %d, drain: %v, deliveryCount: %d, messages: %d, unsettled: %d, settlementCount: %d, settleMode: %s",
-				r, r.l.source.Address, r.inFlight.len(), r.l.linkCredit, credits, drain, r.l.deliveryCount, msgLen, r.countUnsettled(), previousSettlementCount, r.l.receiverSettleMode.String())
+			debug.Log(1, "RX (Receiver %p) (flow): source: %q, inflight: %d, curLinkCredit: %d, newLinkCredit: %d, drain: %v, deliveryCount: %d, messages: %d, unsettled: %d, settleMode: %s",
+				r, r.l.source.Address, r.inFlight.len(), r.l.linkCredit, credits, drain, r.l.deliveryCount, msgLen, r.countUnsettled(), r.l.receiverSettleMode.String())
 
 			// send a flow frame.
 			r.l.doneErr = r.muxFlow(credits, drain)
@@ -645,6 +647,25 @@ func (r *Receiver) mux(hooks receiverTestHooks) {
 		case env := <-txDisposition:
 			r.l.txFrame(env.FrameCtx, env.FrameBody)
 
+			// After sending a disposition, immediately check whether credit
+			// should be replenished and send the FLOW right away. This keeps
+			// the disposition and FLOW close together in the session's tx
+			// queue, allowing the connection writer to batch them into fewer
+			// TCP writes and avoiding an extra mux loop round-trip.
+			if r.autoSendFlow {
+				if err := r.maybeIssueCredit(r.messagesQ.Len()); err != nil {
+					r.l.doneErr = err
+					return
+				}
+				drain, credits := r.creditor.FlowBits(r.l.linkCredit)
+				if drain || credits > 0 {
+					if err := r.muxFlow(credits, drain); err != nil {
+						r.l.doneErr = err
+						return
+					}
+				}
+			}
+
 		case <-r.receiverReady:
 			continue
 
@@ -667,6 +688,54 @@ func (r *Receiver) mux(hooks receiverTestHooks) {
 			return
 		}
 	}
+}
+
+// maybeIssueCredit checks whether link credit should be replenished and, if so,
+// queues up the appropriate amount via the creditor.
+//
+// Credit is replenished when the current link credit has dropped to half or
+// below of the initial credit window. The top-up amount restores credit to the
+// initial window, accounting for messages already buffered in the prefetch
+// queue (they consume credit but haven't been settled yet).
+//
+// This strategy matches the approach used by the RabbitMQ AMQP Java client and
+// avoids the round-trip stall that occurs with small credit windows (e.g. 1)
+// under the previous strategy, which waited until all credits were exhausted.
+func (r *Receiver) maybeIssueCredit(msgQueueLen int) error {
+	if !r.autoSendFlow {
+		return nil
+	}
+
+	r.settlementCountMu.Lock()
+	sc := r.settlementCount
+	currentCredit := r.l.linkCredit
+	halfWindow := r.initialCreditWindow / 2
+
+	if sc > 0 && currentCredit <= halfWindow {
+		potentialPrefetch := currentCredit + uint32(msgQueueLen)
+		// Only replenish if the potential prefetch (credit + queued messages)
+		// is also at or below 70% of the window. This prevents over-granting
+		// when many messages are buffered but not yet settled.
+		threshold := r.initialCreditWindow*7/10 + 1
+		if potentialPrefetch <= threshold {
+			topUp := r.initialCreditWindow - potentialPrefetch
+			if topUp > 0 {
+				r.settlementCount = 0
+				r.settlementCountMu.Unlock()
+				debug.Log(1, "RX (Receiver %p) (auto): source: %q, inflight: %d, linkCredit: %d, initialCredit: %d, deliveryCount: %d, unsettled: %d, settlementCount: %d, topUp: %d, settleMode: %s",
+					r, r.l.source.Address, r.inFlight.len(), currentCredit, r.initialCreditWindow, r.l.deliveryCount, r.countUnsettled(), sc, topUp, r.l.receiverSettleMode.String())
+				return r.creditor.IssueCredit(topUp)
+			}
+		}
+		r.settlementCountMu.Unlock()
+	} else {
+		if currentCredit == 0 {
+			debug.Log(1, "RX (Receiver %p) (pause): source: %q, inflight: %d, linkCredit: %d, deliveryCount: %d, unsettled: %d, settlementCount: %d, settleMode: %s",
+				r, r.l.source.Address, r.inFlight.len(), currentCredit, r.l.deliveryCount, r.countUnsettled(), sc, r.l.receiverSettleMode.String())
+		}
+		r.settlementCountMu.Unlock()
+	}
+	return nil
 }
 
 // muxFlow sends tr to the session mux.

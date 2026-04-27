@@ -22,10 +22,11 @@ import (
 
 // Default connection options
 const (
-	defaultIdleTimeout  = 1 * time.Minute
-	defaultMaxFrameSize = 65536
-	defaultMaxSessions  = 65536
-	defaultWriteTimeout = 30 * time.Second
+	defaultIdleTimeout     = 1 * time.Minute
+	defaultMaxFrameSize    = 65536
+	defaultMaxSessions     = 65536
+	defaultWriteTimeout    = 30 * time.Second
+	defaultWriteQueueDepth = 1
 )
 
 // ConnOptions contains the optional settings for configuring an AMQP connection.
@@ -84,6 +85,13 @@ type ConnOptions struct {
 	//
 	// Default: 30s
 	WriteTimeout time.Duration
+
+	// WriteQueueDepth sets the number of frames that can be queued for
+	// writing before the sender blocks. Larger values allow more
+	// batching of frames into fewer syscalls at the cost of memory.
+	//
+	// Default: 1.
+	WriteQueueDepth int
 
 	// test hook
 	dialer dialer
@@ -175,10 +183,11 @@ type Conn struct {
 	rxErr  error         // contains last error reading from c.net; DO NOT TOUCH outside of connReader until rxDone has been closed!
 
 	// connWriter
-	txFrame chan frameEnvelope // AMQP frames to be sent by connWriter
-	txBuf   buffer.Buffer      // buffer for marshaling frames before transmitting
-	txDone  chan struct{}      // closed when connWriter exits
-	txErr   error              // contains last error writing to c.net; DO NOT TOUCH outside of connWriter until txDone has been closed!
+	txFrame      chan frameEnvelope // AMQP frames to be sent by connWriter
+	txBuf        buffer.Buffer      // buffer for marshaling frames before transmitting
+	txDone       chan struct{}      // closed when connWriter exits
+	txErr        error              // contains last error writing to c.net; DO NOT TOUCH outside of connWriter until txDone has been closed!
+	batchTimeout time.Duration      // write deadline for the current batch, set by connWriter
 }
 
 // used to abstract the underlying dialer for testing purposes
@@ -253,6 +262,11 @@ func dialConn(ctx context.Context, addr string, opts *ConnOptions) (*Conn, error
 }
 
 func newConn(netConn net.Conn, opts *ConnOptions) (*Conn, error) {
+	writeQueueDepth := defaultWriteQueueDepth
+	if opts != nil && opts.WriteQueueDepth > 0 {
+		writeQueueDepth = opts.WriteQueueDepth
+	}
+
 	c := &Conn{
 		dialer:            defaultDialer{},
 		net:               netConn,
@@ -264,7 +278,7 @@ func newConn(netConn net.Conn, opts *ConnOptions) (*Conn, error) {
 		done:              make(chan struct{}),
 		rxtxExit:          make(chan struct{}),
 		rxDone:            make(chan struct{}),
-		txFrame:           make(chan frameEnvelope),
+		txFrame:           make(chan frameEnvelope, writeQueueDepth),
 		txDone:            make(chan struct{}),
 		sessionsByChannel: map[uint16]*Session{},
 		writeTimeout:      defaultWriteTimeout,
@@ -808,6 +822,9 @@ func (c *Conn) connWriter() {
 		keepalive = ticker.C
 	}
 
+	// batch collects frameContexts so we can signal them after a successful flush
+	var batch []*frameContext
+
 	var err error
 	for {
 		if err != nil {
@@ -819,24 +836,35 @@ func (c *Conn) connWriter() {
 		select {
 		// frame write request
 		case env := <-c.txFrame:
-			timeout, ctxErr := c.getWriteTimeout(env.FrameCtx.Ctx)
-			if ctxErr != nil {
-				debug.Log(1, "TX (connWriter %p) getWriteTimeout: %s: %s", c, ctxErr.Error(), env.Frame)
-				if env.FrameCtx.Done != nil {
-					// the error MUST be set before closing the channel
-					env.FrameCtx.Err = ctxErr
-					close(env.FrameCtx.Done)
-				}
+			c.txBuf.Reset()
+			batch = batch[:0]
+
+			// marshal the first frame
+			if marshalErr := c.marshalFrame(&env, &batch); marshalErr != nil {
+				err = marshalErr
 				continue
 			}
 
-			debug.Log(0, "TX (connWriter %p) timeout %s: %s", c, timeout, env.Frame)
-			err = c.writeFrame(timeout, env.Frame)
-			if err == nil && env.FrameCtx.Done != nil {
-				close(env.FrameCtx.Done)
+			// drain additional pending frames without blocking
+		DrainLoop:
+			for {
+				select {
+				case env := <-c.txFrame:
+					if marshalErr := c.marshalFrame(&env, &batch); marshalErr != nil {
+						err = marshalErr
+						break DrainLoop
+					}
+				default:
+					break DrainLoop
+				}
 			}
-			// in the event of write failure, Conn will close and a
-			// *ConnError will be propagated to all of the sessions/link.
+
+			if err != nil {
+				continue
+			}
+
+			// flush the entire batch in a single write
+			err = c.flushTxBuf(batch)
 
 		// keepalive timer
 		case <-keepalive:
@@ -845,20 +873,9 @@ func (c *Conn) connWriter() {
 			if _, err = c.net.Write(keepaliveFrame); err != nil {
 				err = &ConnError{inner: err}
 			}
-			// It would be slightly more efficient in terms of network
-			// resources to reset the timer each time a frame is sent.
-			// However, keepalives are small (8 bytes) and the interval
-			// is usually on the order of minutes. It does not seem
-			// worth it to add extra operations in the write path to
-			// avoid. (To properly reset a timer it needs to be stopped,
-			// possibly drained, then reset.)
 
 		// connection complete
 		case <-c.rxtxExit:
-			// send close performative.  note that the spec says we
-			// SHOULD wait for the ack but we don't HAVE to, in order
-			// to be resilient to bad actors etc.  so we just send
-			// the close performative and exit.
 			fr := frames.Frame{
 				Type: frames.TypeAMQP,
 				Body: &frames.PerformClose{},
@@ -868,6 +885,65 @@ func (c *Conn) connWriter() {
 			return
 		}
 	}
+}
+
+// marshalFrame serializes a single frame into c.txBuf for batched writing.
+// On context error, it signals the frameCtx and returns nil (skip this frame).
+// On marshal/size error, it returns a terminal error.
+func (c *Conn) marshalFrame(env *frameEnvelope, batch *[]*frameContext) error {
+	timeout, ctxErr := c.getWriteTimeout(env.FrameCtx.Ctx)
+	if ctxErr != nil {
+		debug.Log(1, "TX (connWriter %p) getWriteTimeout: %s: %s", c, ctxErr.Error(), env.Frame)
+		if env.FrameCtx.Done != nil {
+			env.FrameCtx.Err = ctxErr
+			close(env.FrameCtx.Done)
+		}
+		return nil
+	}
+
+	// remember the timeout from the first frame in the batch for the write deadline
+	if len(*batch) == 0 {
+		c.batchTimeout = timeout
+	}
+
+	startLen := c.txBuf.Len()
+	if writeErr := frames.Write(&c.txBuf, env.Frame); writeErr != nil {
+		return &ConnError{inner: writeErr}
+	}
+
+	frameSize := c.txBuf.Len() - startLen
+	if uint64(frameSize) > uint64(c.peerMaxFrameSize) {
+		return &ConnError{inner: fmt.Errorf("%T frame size %d larger than peer's max frame size %d", env.Frame, frameSize, c.peerMaxFrameSize)}
+	}
+
+	debug.Log(0, "TX (connWriter %p) timeout %s: %s", c, timeout, env.Frame)
+	*batch = append(*batch, env.FrameCtx)
+	return nil
+}
+
+// flushTxBuf writes the accumulated txBuf to the network and signals all batched frameContexts.
+func (c *Conn) flushTxBuf(batch []*frameContext) error {
+	if c.txBuf.Len() == 0 {
+		return nil
+	}
+
+	if c.batchTimeout == 0 {
+		_ = c.net.SetWriteDeadline(time.Time{})
+	} else {
+		_ = c.net.SetWriteDeadline(time.Now().Add(c.batchTimeout))
+	}
+
+	_, writeErr := c.net.Write(c.txBuf.Bytes())
+	if writeErr != nil {
+		return &ConnError{inner: writeErr}
+	}
+
+	for _, fc := range batch {
+		if fc.Done != nil {
+			close(fc.Done)
+		}
+	}
+	return nil
 }
 
 // writeFrame writes a frame to the network.

@@ -16,7 +16,8 @@ import (
 
 // Default session options
 const (
-	defaultWindow = 5000
+	defaultWindow             = 5000
+	defaultTransferQueueDepth = 1
 )
 
 // SessionOptions contains the optional settings for configuring an AMQP session.
@@ -27,6 +28,13 @@ type SessionOptions struct {
 	// Minimum: 1.
 	// Default: 4294967295.
 	MaxLinks uint32
+
+	// TransferQueueDepth sets the number of transfer frames that can be
+	// queued for sending before the sender blocks. Larger values allow
+	// more pipelining at the cost of memory.
+	//
+	// Default: 1.
+	TransferQueueDepth int
 }
 
 // Session is an AMQP session.
@@ -72,11 +80,16 @@ type Session struct {
 }
 
 func newSession(c *Conn, channel uint16, opts *SessionOptions) *Session {
+	transferQueueDepth := defaultTransferQueueDepth
+	if opts != nil && opts.TransferQueueDepth > 0 {
+		transferQueueDepth = opts.TransferQueueDepth
+	}
+
 	s := &Session{
 		conn:           c,
 		channel:        channel,
 		tx:             make(chan frameBodyEnvelope),
-		txTransfer:     make(chan transferEnvelope),
+		txTransfer:     make(chan transferEnvelope, transferQueueDepth),
 		incomingWindow: defaultWindow,
 		outgoingWindow: defaultWindow,
 		handleMax:      math.MaxUint32 - 1,
@@ -344,8 +357,8 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 		// maps delivery IDs to output (our) handles. used for multi-frame transfers
 		deliveryIDFromOutputHandle = make(map[uint32]uint32)
 
-		// maps delivery IDs to the settlement state channel
-		settlementFromDeliveryID = make(map[uint32]chan encoding.DeliveryState)
+		// maps delivery IDs to pending settlement state
+		settlementFromDeliveryID = make(map[uint32]pendingSettlement)
 
 		// tracks the next delivery ID for outgoing transfers
 		nextDeliveryID uint32
@@ -451,13 +464,21 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 					if body.Settled && body.Role == encoding.RoleReceiver {
 						// check if settlement confirmation was requested, if so
 						// confirm by closing channel (RSM == ModeFirst)
-						if done, ok := settlementFromDeliveryID[deliveryID]; ok {
+						if ps, ok := settlementFromDeliveryID[deliveryID]; ok {
 							delete(settlementFromDeliveryID, deliveryID)
-							select {
-							case done <- body.State:
-							default:
+							if ps.done != nil {
+								select {
+								case ps.done <- body.State:
+								default:
+								}
+								close(ps.done)
 							}
-							close(done)
+							if ps.settlements != nil {
+								ps.settlements <- Settlement{
+									DeliveryTag:   ps.deliveryTag,
+									DeliveryState: body.State,
+								}
+							}
 						}
 					}
 
@@ -678,21 +699,27 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 			s.txFrame(env.FrameCtx, fr)
 
-			select {
-			case <-env.FrameCtx.Done:
-				if env.FrameCtx.Err != nil {
-					// transfer wasn't sent, don't update state
+			if env.FrameCtx.Done != nil {
+				select {
+				case <-env.FrameCtx.Done:
+					if env.FrameCtx.Err != nil {
+						// transfer wasn't sent, don't update state
+						continue
+					}
+					// transfer was written to the network
+				case <-s.conn.done:
+					// the write failed, Conn is going down
 					continue
 				}
-				// transfer was written to the network
-			case <-s.conn.done:
-				// the write failed, Conn is going down
-				continue
 			}
 
-			// if not settled, add done chan to map
-			if !fr.Settled && fr.Done != nil {
-				settlementFromDeliveryID[deliveryID] = fr.Done
+			// if not settled, track pending settlement for disposition handling
+			if !fr.Settled && (fr.Done != nil || env.Settlements != nil) {
+				settlementFromDeliveryID[deliveryID] = pendingSettlement{
+					done:        fr.Done,
+					deliveryTag: fr.DeliveryTag,
+					settlements: env.Settlements,
+				}
 			} else if fr.Done != nil {
 				// sender-settled, close done now that the transfer has been sent
 				close(fr.Done)
@@ -724,13 +751,21 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 					for deliveryID := start; deliveryID <= end; deliveryID++ {
 						// send delivery state to the channel and close it to signal
 						// that the delivery has completed (RSM == ModeSecond)
-						if done, ok := settlementFromDeliveryID[deliveryID]; ok {
+						if ps, ok := settlementFromDeliveryID[deliveryID]; ok {
 							delete(settlementFromDeliveryID, deliveryID)
-							select {
-							case done <- fr.State:
-							default:
+							if ps.done != nil {
+								select {
+								case ps.done <- fr.State:
+								default:
+								}
+								close(ps.done)
 							}
-							close(done)
+							if ps.settlements != nil {
+								ps.settlements <- Settlement{
+									DeliveryTag:   ps.deliveryTag,
+									DeliveryState: fr.State,
+								}
+							}
 						}
 					}
 				}
@@ -825,6 +860,16 @@ type transferEnvelope struct {
 	InputHandle uint32
 
 	Frame frames.PerformTransfer
+
+	// optional sender-owned queue for settlement notifications
+	Settlements chan<- Settlement
+}
+
+// pendingSettlement tracks the state needed to complete settlement of a sent message.
+type pendingSettlement struct {
+	done        chan encoding.DeliveryState
+	deliveryTag []byte
+	settlements chan<- Settlement
 }
 
 // frameBodyEnvelope is used by senders and receivers to send frames.

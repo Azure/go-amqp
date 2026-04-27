@@ -647,6 +647,25 @@ func (r *Receiver) mux(hooks receiverTestHooks) {
 		case env := <-txDisposition:
 			r.l.txFrame(env.FrameCtx, env.FrameBody)
 
+			// After sending a disposition, immediately check whether credit
+			// should be replenished and send the FLOW right away. This keeps
+			// the disposition and FLOW close together in the session's tx
+			// queue, allowing the connection writer to batch them into fewer
+			// TCP writes and avoiding an extra mux loop round-trip.
+			if r.autoSendFlow {
+				if err := r.maybeIssueCredit(r.messagesQ.Len()); err != nil {
+					r.l.doneErr = err
+					return
+				}
+				drain, credits := r.creditor.FlowBits(r.l.linkCredit)
+				if drain || credits > 0 {
+					if err := r.muxFlow(credits, drain); err != nil {
+						r.l.doneErr = err
+						return
+					}
+				}
+			}
+
 		case <-r.receiverReady:
 			continue
 

@@ -332,12 +332,34 @@ func readCompositeHeader(r *buffer.Buffer) (_ AMQPType, fields int64, _ error) {
 	return AMQPType(v), fields, err
 }
 
-// maxCompoundCount caps the COUNT field of an AMQP compound type
-// (array, list, map) at decode time. AMQP COUNT is attacker-controlled
-// (up to 2^32-1 for the 32-bit form), and combined with zero-width or
-// 1-byte element constructors can drive unbounded allocation or loop
-// iteration. Legitimate Service Bus / Event Hubs traffic is far below
-// this limit.
+// maxCompoundCount caps the COUNT field of an AMQP 1.0 compound type
+// (array, list, map) at decode time.
+//
+// Per AMQP 1.0 §1.6.22-§1.6.24 the wire format of each compound type is
+//
+//	[type code] [SIZE] [COUNT] [body]
+//
+// where SIZE is the byte length of everything after SIZE itself and
+// COUNT is the number of elements (or, for map, of key+value items).
+// Both fields are peer-supplied and, in the 32-bit forms, can range
+// up to 2^32-1.
+//
+// Without an upper bound, two attacker-controlled COUNT shapes are
+// dangerous:
+//
+//  1. Array with a zero-width element constructor (TypeCodeNull,
+//     TypeCodeBoolTrue/False, TypeCodeUint0, TypeCodeUlong0, ...).
+//     Per-element body cost is 0, so a tiny frame can declare billions
+//     of elements. Typed Unmarshal callers (e.g. arrayUint32) then call
+//     make([]T, COUNT), which OOMs the process.
+//  2. List/map with 1-byte-per-element constructors. COUNT is bounded
+//     by the buffer here, but a multi-megabyte frame can still pin the
+//     decoder in a long loop.
+//
+// 65536 is well above any legitimate compound emitted by Azure Service
+// Bus, Event Hubs, or any other AMQP 1.0 broker we are aware of, and
+// matches the bound used in the corresponding C library fix
+// (azure-uamqp-c).
 const maxCompoundCount = 65536
 
 func readListHeader(r *buffer.Buffer) (length int64, _ error) {
@@ -437,9 +459,19 @@ func readArrayHeader(r *buffer.Buffer) (length int64, _ error) {
 	if length > maxCompoundCount {
 		return 0, fmt.Errorf("array count %d exceeds maximum %d", length, maxCompoundCount)
 	}
-	// Body remaining after the COUNT field equals size - countFieldBytes.
-	// COUNT cannot exceed that remaining byte budget; this catches Array
-	// frames that pair a huge COUNT with a zero-width element constructor.
+	// Body-length check.
+	//
+	// SIZE covers [COUNT field][element constructor][elements...].
+	// After subtracting the COUNT field itself, the remaining budget
+	// must fit the constructor (>=1 byte) plus all elements, so COUNT
+	// cannot exceed (size - countFieldBytes).
+	//
+	// For zero-width element constructors (e.g. TypeCodeUint0) a single
+	// element occupies 0 body bytes, so this check effectively forbids
+	// any non-empty zero-width-element array. That encoding is legal
+	// per the spec but redundant in practice (the same payload encodes
+	// in fewer bytes as repeated single values), and rejecting it is
+	// what closes the OOM vector even if maxCompoundCount were raised.
 	if size < countFieldBytes || length > size-countFieldBytes {
 		return 0, fmt.Errorf("array count %d exceeds body length %d", length, size-countFieldBytes)
 	}
@@ -1204,9 +1236,12 @@ func readMap8Header(r *buffer.Buffer) (count uint32, _ error) {
 	}
 	count = uint32(buf[1])
 
+	// Hard cap on attacker-controlled COUNT; see maxCompoundCount.
 	if count > maxCompoundCount {
 		return 0, fmt.Errorf("map count %d exceeds maximum %d", count, maxCompoundCount)
 	}
+	// Each map item carries its own constructor (>=1 byte), so COUNT
+	// must fit in the remaining buffer.
 	if int(count) > r.Len() {
 		return 0, errors.New("invalid length")
 	}
@@ -1228,9 +1263,12 @@ func readMap32Header(r *buffer.Buffer) (count uint32, _ error) {
 	}
 	count = binary.BigEndian.Uint32(buf[4:8])
 
+	// Hard cap on attacker-controlled COUNT; see maxCompoundCount.
 	if count > maxCompoundCount {
 		return 0, fmt.Errorf("map count %d exceeds maximum %d", count, maxCompoundCount)
 	}
+	// Each map item carries its own constructor (>=1 byte), so COUNT
+	// must fit in the remaining buffer.
 	if int(count) > r.Len() {
 		return 0, errors.New("invalid length")
 	}

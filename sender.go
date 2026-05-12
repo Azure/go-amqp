@@ -23,7 +23,8 @@ type Sender struct {
 	nextDeliveryTag uint64
 	rollback        chan struct{}
 
-	onLinkStateProperties func(map[string]any)
+	onLinkStateProperties  func(map[string]any)
+	onDeliveryStateChanged func(DeliveryState)
 }
 
 // LinkName() is the name of the link used for this Sender.
@@ -404,6 +405,9 @@ func newSender(target string, session *Session, opts *SenderOptions) (*Sender, e
 	if opts.OnLinkStateProperties != nil {
 		s.onLinkStateProperties = opts.OnLinkStateProperties
 	}
+	if opts.OnDeliveryStateChanged != nil {
+		s.onDeliveryStateChanged = opts.OnDeliveryStateChanged
+	}
 	return s, nil
 }
 
@@ -587,12 +591,19 @@ func (s *Sender) muxHandleFrame(fr frames.FrameBody) error {
 
 	case *frames.PerformDisposition:
 		if fr.Settled {
+			if s.onDeliveryStateChanged != nil {
+				s.onDeliveryStateChanged(fr.State)
+			}
 			return nil
 		}
 
 		// peer is in mode second, so we must send confirmation of disposition.
 		// NOTE: the ack must be sent through the session so it can close out
 		// the in-flight disposition.
+		if s.onDeliveryStateChanged != nil {
+			s.onDeliveryStateChanged(fr.State)
+		}
+
 		dr := &frames.PerformDisposition{
 			Role:    encoding.RoleSender,
 			First:   fr.First,

@@ -77,6 +77,11 @@ type link struct {
 	dynamicAddr     bool // request a dynamic link address from the server
 
 	desiredCapabilities encoding.MultiSymbol // maps to the ATTACH frame's desired-capabilities field
+
+	// trackIncomingDeliveries causes the session to register every incoming transfer delivery ID
+	// in inputHandleFromRemoteDeliveryID so that unsolicited disposition frames from the peer
+	// (e.g. broker-side consumer timeouts) can be routed to this link's mux.
+	trackIncomingDeliveries bool
 }
 
 func newLink(s *Session, r encoding.Role) link {

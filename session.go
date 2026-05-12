@@ -581,8 +581,8 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 				s.muxFrameToLink(link, fr)
 
 				// Track remote delivery IDs when RSM == second (so we can route the ack disposition back
-			// to the receiver) or when the link has requested full delivery tracking (so that
-			// unsolicited peer dispositions — e.g. broker consumer timeouts — can be routed back).
+				// to the receiver) or when the link has requested full delivery tracking (so that
+				// unsolicited peer dispositions — e.g. broker consumer timeouts — can be routed back).
 				if !body.Settled && body.DeliveryID != nil &&
 					((link.receiverSettleMode != nil && *link.receiverSettleMode == ReceiverSettleModeSecond) ||
 						link.trackIncomingDeliveries) {

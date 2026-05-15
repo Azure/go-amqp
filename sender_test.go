@@ -1664,3 +1664,130 @@ func TestSenderSendWithReceipt_SenderSettleModeSettled(t *testing.T) {
 	require.Zero(t, receipt)
 	require.NoError(t, client.Close())
 }
+
+func TestSenderOnDeliveryStateChangedSettled(t *testing.T) {
+	// Verify that OnDeliveryStateChanged fires when the peer sends a settled
+	// Disposition (the common RSM=First acknowledgement path).
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		resp, err := senderFrameHandler(0, SenderSettleModeUnsettled)(remoteChannel, req)
+		if err != nil || resp.Payload != nil {
+			return resp, err
+		}
+		switch tt := req.(type) {
+		case *frames.PerformTransfer:
+			// Broker acks immediately with a settled Accepted disposition.
+			return newResponse(fake.PerformDisposition(encoding.RoleReceiver, 0, *tt.DeliveryID, nil, &encoding.StateAccepted{}))
+		default:
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	client, err := NewConn(ctx, netConn, nil)
+	require.NoError(t, err)
+
+	session, err := client.NewSession(ctx, nil)
+	require.NoError(t, err)
+
+	callbackCh := make(chan DeliveryState, 1)
+
+	snd, err := session.NewSender(ctx, "target", &SenderOptions{
+		OnDeliveryStateChanged: func(state DeliveryState) {
+			callbackCh <- state
+		},
+	})
+	require.NoError(t, err)
+
+	sendInitialFlowFrame(t, 0, netConn, 0, 100)
+
+	require.NoError(t, snd.Send(ctx, NewMessage([]byte("test")), nil))
+
+	// Send() returns after the session closes the done channel (step before muxFrameToLink).
+	// The callback fires in the sender's mux goroutine shortly after.
+	select {
+	case state := <-callbackCh:
+		require.IsType(t, &StateAccepted{}, state)
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for OnDeliveryStateChanged callback")
+	}
+
+	require.NoError(t, client.Close())
+}
+
+func TestSenderOnDeliveryStateChangedUnsettled(t *testing.T) {
+	// Simulate RSM=Second: the peer first sends an UNSETTLED Disposition, then the
+	// sender acks with a settled Disposition.  OnDeliveryStateChanged must fire on
+	// the unsettled disposition before the two-phase settlement completes.
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		resp, err := senderFrameHandler(0, SenderSettleModeUnsettled)(remoteChannel, req)
+		if err != nil || resp.Payload != nil {
+			return resp, err
+		}
+		switch tt := req.(type) {
+		case *frames.PerformTransfer:
+			// Peer sends an unsettled disposition (Settled=false) to begin RSM=Second.
+			b, e := fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformDisposition{
+				Role:    encoding.RoleReceiver,
+				First:   *tt.DeliveryID,
+				Settled: false,
+				State:   &encoding.StateAccepted{},
+			})
+			return fake.Response{Payload: b}, e
+		case *frames.PerformDisposition:
+			// Sender's settled ack — no further response needed.
+			return fake.Response{}, nil
+		default:
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{})
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	client, err := NewConn(ctx, netConn, nil)
+	require.NoError(t, err)
+
+	session, err := client.NewSession(ctx, nil)
+	require.NoError(t, err)
+
+	callbackCh := make(chan DeliveryState, 1)
+
+	snd, err := session.NewSender(ctx, "target", &SenderOptions{
+		OnDeliveryStateChanged: func(state DeliveryState) {
+			callbackCh <- state
+		},
+	})
+	require.NoError(t, err)
+
+	sendInitialFlowFrame(t, 0, netConn, 0, 100)
+
+	// Send in a goroutine: Send() blocks until the sender receives the broker's ack
+	// to the RSM=Second settlement confirmation it sends after the callback fires.
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- snd.Send(ctx, NewMessage([]byte("test")), nil)
+	}()
+
+	// Callback must fire when the unsettled disposition arrives.
+	select {
+	case state := <-callbackCh:
+		require.IsType(t, &StateAccepted{}, state)
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for OnDeliveryStateChanged callback")
+	}
+
+	// After the callback fires the sender sends its ack, which closes the done
+	// channel and unblocks Send().
+	select {
+	case err := <-errCh:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for Send to return")
+	}
+
+	require.NoError(t, client.Close())
+}

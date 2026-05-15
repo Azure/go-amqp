@@ -580,8 +580,12 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 
 				s.muxFrameToLink(link, fr)
 
-				// if this message is received unsettled and link rcv-settle-mode == second, add to handlesByRemoteDeliveryID
-				if !body.Settled && body.DeliveryID != nil && link.receiverSettleMode != nil && *link.receiverSettleMode == ReceiverSettleModeSecond {
+				// Track remote delivery IDs when RSM == second (so we can route the ack disposition back
+				// to the receiver) or when the link has requested full delivery tracking (so that
+				// unsolicited peer dispositions — e.g. broker consumer timeouts — can be routed back).
+				if !body.Settled && body.DeliveryID != nil &&
+					((link.receiverSettleMode != nil && *link.receiverSettleMode == ReceiverSettleModeSecond) ||
+						link.trackIncomingDeliveries) {
 					debug.Log(1, "RX (Session %p): adding handle %d to inputHandleFromRemoteDeliveryID. remote delivery ID: %d", s, body.Handle, *body.DeliveryID)
 					inputHandleFromRemoteDeliveryID[*body.DeliveryID] = body.Handle
 				}
@@ -732,6 +736,18 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 							}
 							close(done)
 						}
+					}
+				} else if fr.Role == encoding.RoleReceiver && fr.Settled {
+					// The receiver is settling with RSM == first (immediate settlement).
+					// Remove the delivery IDs from the remote-delivery tracking map so that
+					// memory is reclaimed even if the peer never sends a confirming disposition.
+					start := fr.First
+					end := start
+					if fr.Last != nil {
+						end = *fr.Last
+					}
+					for deliveryID := start; deliveryID <= end; deliveryID++ {
+						delete(inputHandleFromRemoteDeliveryID, deliveryID)
 					}
 				}
 				s.txFrame(env.FrameCtx, fr)

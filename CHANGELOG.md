@@ -1,5 +1,10 @@
 # Release History
 
+## 1.7.0
+
+* Add OnDeliveryStateChanged callback to Sender and Receiver
+
+
 ## 1.6.0 (2026-04-22)
 
 * Add SourceDistributionMode to ReceiverOptions

@@ -1630,3 +1630,204 @@ func TestReceiverAttachDesiredCapabilities(t *testing.T) {
 }
 
 // TODO: add unit tests for manual credit management
+
+// receiverOnDeliveryStateChangedResponder returns a responder suitable for
+// OnDeliveryStateChanged tests. It handles the standard connection/session/link
+// lifecycle; PerformFlow and PerformDisposition are silently consumed.
+func receiverOnDeliveryStateChangedResponder(t *testing.T, rsm ReceiverSettleMode) func(uint16, frames.FrameBody) (fake.Response, error) {
+	t.Helper()
+	return func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		resp, err := receiverFrameHandler(0, rsm)(remoteChannel, req)
+		if resp.Payload != nil || err != nil {
+			return resp, err
+		}
+		switch req.(type) {
+		case *frames.PerformFlow, *frames.PerformDisposition, *fake.KeepAlive:
+			return fake.Response{}, nil
+		default:
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+}
+
+func TestReceiverOnDeliveryStateChangedUnsolicitedDisposition(t *testing.T) {
+	// Simulate a broker-side consumer timeout: the broker sends an unsolicited
+	// Disposition(Role=Sender, State=Released) for a message the receiver has not
+	// yet settled.  OnDeliveryStateChanged must fire with the message and state.
+	const (
+		linkHandle = uint32(0)
+		deliveryID = uint32(1)
+	)
+
+	conn := fake.NewNetConn(receiverOnDeliveryStateChangedResponder(t, ReceiverSettleModeFirst), fake.NetConnOptions{})
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	client, err := NewConn(ctx, conn, nil)
+	require.NoError(t, err)
+
+	session, err := client.NewSession(ctx, nil)
+	require.NoError(t, err)
+
+	type callbackResult struct {
+		tag   []byte
+		state DeliveryState
+	}
+	callbackCh := make(chan callbackResult, 1)
+
+	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
+		SettlementMode: ReceiverSettleModeFirst.Ptr(),
+		OnDeliveryStateChanged: func(msg *Message, state DeliveryState) {
+			callbackCh <- callbackResult{msg.DeliveryTag, state}
+		},
+	})
+	require.NoError(t, err)
+
+	// Inject a transfer directly — the receiver has been fully attached.
+	b, err := fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
+	require.NoError(t, err)
+	conn.SendFrame(b)
+
+	msg, err := r.Receive(ctx, nil)
+	require.NoError(t, err)
+	require.NotNil(t, msg)
+
+	// Broker sends an unsolicited settled disposition (consumer timeout → Released).
+	b, err = fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateReleased{})
+	require.NoError(t, err)
+	conn.SendFrame(b)
+
+	select {
+	case result := <-callbackCh:
+		require.Equal(t, msg.DeliveryTag, result.tag)
+		require.IsType(t, &StateReleased{}, result.state)
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for OnDeliveryStateChanged callback")
+	}
+
+	require.NoError(t, client.Close())
+}
+
+func TestReceiverOnDeliveryStateChangedRange(t *testing.T) {
+	// A single Disposition frame can cover a contiguous range of delivery IDs.
+	// The callback must fire once for each delivery ID within [first, last].
+	const (
+		linkHandle = uint32(0)
+		firstID    = uint32(1)
+		lastID     = uint32(3)
+	)
+
+	conn := fake.NewNetConn(receiverOnDeliveryStateChangedResponder(t, ReceiverSettleModeFirst), fake.NetConnOptions{})
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	client, err := NewConn(ctx, conn, nil)
+	require.NoError(t, err)
+
+	session, err := client.NewSession(ctx, nil)
+	require.NoError(t, err)
+
+	type callbackResult struct {
+		tag   []byte
+		state DeliveryState
+	}
+	callbackCh := make(chan callbackResult, 10)
+
+	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
+		SettlementMode: ReceiverSettleModeFirst.Ptr(),
+		Credit:         int32(lastID - firstID + 1),
+		OnDeliveryStateChanged: func(msg *Message, state DeliveryState) {
+			callbackCh <- callbackResult{msg.DeliveryTag, state}
+		},
+	})
+	require.NoError(t, err)
+
+	// Inject three transfers.
+	for i := firstID; i <= lastID; i++ {
+		b, err := fake.PerformTransfer(0, linkHandle, i, []byte("hello"))
+		require.NoError(t, err)
+		conn.SendFrame(b)
+	}
+
+	// Receive all three messages so they are tracked in incomingDeliveries.
+	for i := firstID; i <= lastID; i++ {
+		msg, err := r.Receive(ctx, nil)
+		require.NoError(t, err)
+		require.NotNil(t, msg)
+	}
+
+	// Broker sends one disposition covering the whole range.
+	last := lastID
+	b, err := fake.PerformDisposition(encoding.RoleSender, 0, firstID, &last, &encoding.StateModified{DeliveryFailed: true})
+	require.NoError(t, err)
+	conn.SendFrame(b)
+
+	// Expect one callback per delivery ID in the range.
+	for i := firstID; i <= lastID; i++ {
+		select {
+		case result := <-callbackCh:
+			require.IsType(t, &StateModified{}, result.state)
+		case <-time.After(2 * time.Second):
+			t.Fatalf("timed out waiting for OnDeliveryStateChanged callback (delivery %d)", i)
+		}
+	}
+
+	require.NoError(t, client.Close())
+}
+
+func TestReceiverOnDeliveryStateChangedNotFiredAfterSettle(t *testing.T) {
+	// Once the receiver has settled a message (AcceptMessage), a subsequent
+	// unsolicited Disposition from the broker must NOT trigger the callback.
+	// Correctness relies on two independent guards:
+	//   1. incomingDeliveries is cleared synchronously inside messageDisposition.
+	//   2. inputHandleFromRemoteDeliveryID is cleaned up before AcceptMessage returns.
+	const (
+		linkHandle = uint32(0)
+		deliveryID = uint32(1)
+	)
+
+	conn := fake.NewNetConn(receiverOnDeliveryStateChangedResponder(t, ReceiverSettleModeFirst), fake.NetConnOptions{})
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	client, err := NewConn(ctx, conn, nil)
+	require.NoError(t, err)
+
+	session, err := client.NewSession(ctx, nil)
+	require.NoError(t, err)
+
+	callbackCh := make(chan struct{}, 1)
+
+	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
+		SettlementMode: ReceiverSettleModeFirst.Ptr(),
+		OnDeliveryStateChanged: func(_ *Message, _ DeliveryState) {
+			callbackCh <- struct{}{}
+		},
+	})
+	require.NoError(t, err)
+
+	b, err := fake.PerformTransfer(0, linkHandle, deliveryID, []byte("hello"))
+	require.NoError(t, err)
+	conn.SendFrame(b)
+
+	msg, err := r.Receive(ctx, nil)
+	require.NoError(t, err)
+
+	// Settle the message.  When AcceptMessage returns both incomingDeliveries and
+	// inputHandleFromRemoteDeliveryID have been cleaned up for deliveryID.
+	require.NoError(t, r.AcceptMessage(ctx, msg))
+
+	// Now inject a late broker disposition for the same delivery ID.
+	b, err = fake.PerformDisposition(encoding.RoleSender, 0, deliveryID, nil, &encoding.StateReleased{})
+	require.NoError(t, err)
+	conn.SendFrame(b)
+
+	select {
+	case <-callbackCh:
+		t.Fatal("OnDeliveryStateChanged must not fire after message is already settled")
+	case <-time.After(200 * time.Millisecond):
+		// expected: no callback
+	}
+
+	require.NoError(t, client.Close())
+}

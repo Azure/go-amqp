@@ -332,6 +332,36 @@ func readCompositeHeader(r *buffer.Buffer) (_ AMQPType, fields int64, _ error) {
 	return AMQPType(v), fields, err
 }
 
+// maxCompoundCount caps the COUNT field of an AMQP 1.0 compound type
+// (array, list, map) at decode time.
+//
+// Per AMQP 1.0 §1.6.22-§1.6.24 the wire format of each compound type is
+//
+//	[type code] [SIZE] [COUNT] [body]
+//
+// where SIZE is the byte length of everything after SIZE itself and
+// COUNT is the number of elements (or, for map, of key+value items).
+// Both fields are peer-supplied and, in the 32-bit forms, can range
+// up to 2^32-1.
+//
+// Without an upper bound, two attacker-controlled COUNT shapes are
+// dangerous:
+//
+//  1. Array with a zero-width element constructor (TypeCodeNull,
+//     TypeCodeBoolTrue/False, TypeCodeUint0, TypeCodeUlong0, ...).
+//     Per-element body cost is 0, so a tiny frame can declare billions
+//     of elements. Typed Unmarshal callers (e.g. arrayUint32) then call
+//     make([]T, COUNT), which OOMs the process.
+//  2. List/map with 1-byte-per-element constructors. COUNT is bounded
+//     by the buffer here, but a multi-megabyte frame can still pin the
+//     decoder in a long loop.
+//
+// 65536 is well above any legitimate compound emitted by Azure Service
+// Bus, Event Hubs, or any other AMQP 1.0 broker we are aware of, and
+// matches the bound used in the corresponding C library fix
+// (azure-uamqp-c).
+const maxCompoundCount = 65536
+
 func readListHeader(r *buffer.Buffer) (length int64, _ error) {
 	type_, err := readType(r)
 	if err != nil {
@@ -340,6 +370,7 @@ func readListHeader(r *buffer.Buffer) (length int64, _ error) {
 
 	listLength := r.Len()
 
+	var size, countFieldBytes int64
 	switch type_ {
 	case TypeCodeList0:
 		return 0, nil
@@ -350,11 +381,12 @@ func readListHeader(r *buffer.Buffer) (length int64, _ error) {
 		}
 		_ = buf[1]
 
-		size := int(buf[0])
-		if size > listLength-1 {
+		size = int64(buf[0])
+		if size > int64(listLength-1) {
 			return 0, errors.New("invalid length")
 		}
 		length = int64(buf[1])
+		countFieldBytes = 1
 	case TypeCodeList32:
 		buf, ok := r.Next(8)
 		if !ok {
@@ -362,13 +394,23 @@ func readListHeader(r *buffer.Buffer) (length int64, _ error) {
 		}
 		_ = buf[7]
 
-		size := int(binary.BigEndian.Uint32(buf[:4]))
-		if size > listLength-4 {
+		size = int64(binary.BigEndian.Uint32(buf[:4]))
+		if size > int64(listLength-4) {
 			return 0, errors.New("invalid length")
 		}
 		length = int64(binary.BigEndian.Uint32(buf[4:8]))
+		countFieldBytes = 4
 	default:
 		return 0, fmt.Errorf("type code %#02x is not a recognized list type", type_)
+	}
+
+	if length > maxCompoundCount {
+		return 0, fmt.Errorf("list count %d exceeds maximum %d", length, maxCompoundCount)
+	}
+	// Each list element carries its own constructor (>=1 byte), so COUNT
+	// cannot exceed the encoded body size minus the COUNT field itself.
+	if size < countFieldBytes || length > size-countFieldBytes {
+		return 0, fmt.Errorf("list count %d exceeds body length %d", length, size-countFieldBytes)
 	}
 
 	return length, nil
@@ -382,6 +424,7 @@ func readArrayHeader(r *buffer.Buffer) (length int64, _ error) {
 
 	arrayLength := r.Len()
 
+	var size, countFieldBytes int64
 	switch type_ {
 	case TypeCodeArray8:
 		buf, ok := r.Next(2)
@@ -390,11 +433,12 @@ func readArrayHeader(r *buffer.Buffer) (length int64, _ error) {
 		}
 		_ = buf[1]
 
-		size := int(buf[0])
-		if size > arrayLength-1 {
+		size = int64(buf[0])
+		if size > int64(arrayLength-1) {
 			return 0, errors.New("invalid length")
 		}
 		length = int64(buf[1])
+		countFieldBytes = 1
 	case TypeCodeArray32:
 		buf, ok := r.Next(8)
 		if !ok {
@@ -402,13 +446,34 @@ func readArrayHeader(r *buffer.Buffer) (length int64, _ error) {
 		}
 		_ = buf[7]
 
-		size := binary.BigEndian.Uint32(buf[:4])
-		if int(size) > arrayLength-4 {
+		size = int64(binary.BigEndian.Uint32(buf[:4]))
+		if size > int64(arrayLength-4) {
 			return 0, fmt.Errorf("invalid length for type %02x", type_)
 		}
 		length = int64(binary.BigEndian.Uint32(buf[4:8]))
+		countFieldBytes = 4
 	default:
 		return 0, fmt.Errorf("type code %#02x is not a recognized array type", type_)
+	}
+
+	if length > maxCompoundCount {
+		return 0, fmt.Errorf("array count %d exceeds maximum %d", length, maxCompoundCount)
+	}
+	// Body-length check.
+	//
+	// SIZE covers [COUNT field][element constructor][elements...].
+	// After subtracting the COUNT field itself, the remaining budget
+	// must fit the constructor (>=1 byte) plus all elements, so COUNT
+	// cannot exceed (size - countFieldBytes).
+	//
+	// For zero-width element constructors (e.g. TypeCodeUint0) a single
+	// element occupies 0 body bytes, so this check effectively forbids
+	// any non-empty zero-width-element array. That encoding is legal
+	// per the spec but redundant in practice (the same payload encodes
+	// in fewer bytes as repeated single values), and rejecting it is
+	// what closes the OOM vector even if maxCompoundCount were raised.
+	if size < countFieldBytes || length > size-countFieldBytes {
+		return 0, fmt.Errorf("array count %d exceeds body length %d", length, size-countFieldBytes)
 	}
 	return length, nil
 }
@@ -1171,6 +1236,12 @@ func readMap8Header(r *buffer.Buffer) (count uint32, _ error) {
 	}
 	count = uint32(buf[1])
 
+	// Hard cap on attacker-controlled COUNT; see maxCompoundCount.
+	if count > maxCompoundCount {
+		return 0, fmt.Errorf("map count %d exceeds maximum %d", count, maxCompoundCount)
+	}
+	// Each map item carries its own constructor (>=1 byte), so COUNT
+	// must fit in the remaining buffer.
 	if int(count) > r.Len() {
 		return 0, errors.New("invalid length")
 	}
@@ -1192,6 +1263,12 @@ func readMap32Header(r *buffer.Buffer) (count uint32, _ error) {
 	}
 	count = binary.BigEndian.Uint32(buf[4:8])
 
+	// Hard cap on attacker-controlled COUNT; see maxCompoundCount.
+	if count > maxCompoundCount {
+		return 0, fmt.Errorf("map count %d exceeds maximum %d", count, maxCompoundCount)
+	}
+	// Each map item carries its own constructor (>=1 byte), so COUNT
+	// must fit in the remaining buffer.
 	if int(count) > r.Len() {
 		return 0, errors.New("invalid length")
 	}

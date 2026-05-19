@@ -12,6 +12,12 @@ import (
 
 const amqpArrayHeaderLength = 4
 
+func appendUint32BE(b []byte, v uint32) []byte {
+	var buf [4]byte
+	binary.BigEndian.PutUint32(buf[:], v)
+	return append(b, buf[:]...)
+}
+
 func TestEncodeDecodeTimestamp(t *testing.T) {
 	// this is DateTime.MaxValue from .NET
 	dotnetMaxTime := time.UnixMilli(int64(253402300799999)).UTC()
@@ -94,8 +100,8 @@ func TestArray32CountExceedingMaxIsRejected(t *testing.T) {
 	const size = 9
 	frame := make([]byte, 0, 1+4+size)
 	frame = append(frame, byte(TypeCodeArray32))
-	frame = binary.BigEndian.AppendUint32(frame, uint32(size))
-	frame = binary.BigEndian.AppendUint32(frame, 0x7fffffff)
+	frame = appendUint32BE(frame, uint32(size))
+	frame = appendUint32BE(frame, 0x7fffffff)
 	frame = append(frame, byte(TypeCodeNull))
 	frame = append(frame, make([]byte, size-4-1)...)
 
@@ -123,8 +129,8 @@ func TestArray32CountExceedingBodyIsRejected(t *testing.T) {
 	const count = 100
 	frame := make([]byte, 0, 1+4+size)
 	frame = append(frame, byte(TypeCodeArray32))
-	frame = binary.BigEndian.AppendUint32(frame, uint32(size))
-	frame = binary.BigEndian.AppendUint32(frame, uint32(count))
+	frame = appendUint32BE(frame, uint32(size))
+	frame = appendUint32BE(frame, uint32(count))
 	frame = append(frame, byte(TypeCodeNull))
 	frame = append(frame, make([]byte, size-4-1)...) // pad to declared size
 	buff := buffer.New(frame)
@@ -141,8 +147,8 @@ func TestArray32AtMaxCountSucceeds(t *testing.T) {
 	const size = 4 + 1 + count
 	frame := make([]byte, 0, 1+4+size)
 	frame = append(frame, byte(TypeCodeArray32))
-	frame = binary.BigEndian.AppendUint32(frame, uint32(size))
-	frame = binary.BigEndian.AppendUint32(frame, uint32(count))
+	frame = appendUint32BE(frame, uint32(size))
+	frame = appendUint32BE(frame, uint32(count))
 	frame = append(frame, byte(TypeCodeSmallUint))
 	frame = append(frame, make([]byte, count)...)
 	buff := buffer.New(frame)
@@ -175,8 +181,8 @@ func TestList32CountBoundsChecked(t *testing.T) {
 	const size = 9
 	frame := make([]byte, 0, 1+4+size)
 	frame = append(frame, byte(TypeCodeList32))
-	frame = binary.BigEndian.AppendUint32(frame, uint32(size))
-	frame = binary.BigEndian.AppendUint32(frame, 0x7fffffff)
+	frame = appendUint32BE(frame, uint32(size))
+	frame = appendUint32BE(frame, 0x7fffffff)
 	frame = append(frame, make([]byte, size-4)...)
 
 	buff := buffer.New(frame)
@@ -190,8 +196,8 @@ func TestMap32CountBoundsChecked(t *testing.T) {
 	const size = 9
 	frame := make([]byte, 0, 1+4+size)
 	frame = append(frame, byte(TypeCodeMap32))
-	frame = binary.BigEndian.AppendUint32(frame, uint32(size))
-	frame = binary.BigEndian.AppendUint32(frame, 0x7fffffff)
+	frame = appendUint32BE(frame, uint32(size))
+	frame = appendUint32BE(frame, 0x7fffffff)
 	frame = append(frame, make([]byte, size-4)...)
 
 	buff := buffer.New(frame)

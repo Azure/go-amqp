@@ -159,8 +159,8 @@ func TestArray8CountChecksApplied(t *testing.T) {
 	// must be rejected.
 	frame := []byte{
 		byte(TypeCodeArray8),
-		0x05,             // size: 1 (count) + 1 (constructor) + 3 (padding)
-		200,              // count
+		0x05, // size: 1 (count) + 1 (constructor) + 3 (padding)
+		200,  // count
 		byte(TypeCodeNull),
 		0x00, 0x00, 0x00, // padding to declared size
 	}

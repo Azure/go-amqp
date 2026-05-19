@@ -459,19 +459,22 @@ func readArrayHeader(r *buffer.Buffer) (length int64, _ error) {
 	if length > maxCompoundCount {
 		return 0, fmt.Errorf("array count %d exceeds maximum %d", length, maxCompoundCount)
 	}
-	// Body-length check.
+	// Body-length sanity check.
 	//
-	// SIZE covers [COUNT field][element constructor][elements...].
-	// After subtracting the COUNT field itself, the remaining budget
-	// must fit the constructor (>=1 byte) plus all elements, so COUNT
-	// cannot exceed (size - countFieldBytes).
+	// We compare COUNT (a number of elements) against bytes-of-body —
+	// a deliberate unit mismatch, but a sound lower bound: each element
+	// costs at least 1 byte (either its own value bytes or a share of
+	// the leading constructor). SIZE covers [COUNT field][element
+	// constructor][elements...], so after subtracting the COUNT field's
+	// own width the remaining body must hold the constructor plus all
+	// elements, giving COUNT <= (size - countFieldBytes).
 	//
-	// For zero-width element constructors (e.g. TypeCodeUint0) a single
-	// element occupies 0 body bytes, so this check effectively forbids
-	// any non-empty zero-width-element array. That encoding is legal
-	// per the spec but redundant in practice (the same payload encodes
-	// in fewer bytes as repeated single values), and rejecting it is
-	// what closes the OOM vector even if maxCompoundCount were raised.
+	// For arrays declared with a zero-width element constructor
+	// (e.g. TypeCodeUint0) a single element occupies 0 body bytes,
+	// so this check effectively forbids any non-empty zero-width
+	// array. That encoding is legal per the spec but redundant in
+	// practice, and rejecting it is what closes the OOM vector even
+	// if maxCompoundCount were raised.
 	if size < countFieldBytes || length > size-countFieldBytes {
 		return 0, fmt.Errorf("array count %d exceeds body length %d", length, size-countFieldBytes)
 	}

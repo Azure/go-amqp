@@ -101,23 +101,14 @@ func TestArray32CountExceedingMaxIsRejected(t *testing.T) {
 	frame := make([]byte, 0, 1+4+size)
 	frame = append(frame, byte(TypeCodeArray32))
 	frame = appendUint32BE(frame, uint32(size))
-	frame = appendUint32BE(frame, 0x7fffffff)
-	frame = append(frame, byte(TypeCodeNull))
-	frame = append(frame, make([]byte, size-4-1)...)
+	frame = appendUint32BE(frame, 0x7fffffff)        // pretend our zero-width array is HUGE
+	frame = append(frame, byte(TypeCodeNull))        // use a zero-width 'constructor' for the array
+	frame = append(frame, make([]byte, size-4-1)...) // note that the actual bytes sent is basically zero, for the body of the array. Totally legal, but would have caused us to allocate a 'count' sized array to represent it.
 
 	buff := buffer.New(frame)
-	done := make(chan error, 1)
-	go func() {
-		_, err := readArrayHeader(buff)
-		done <- err
-	}()
-	select {
-	case err := <-done:
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "exceeds maximum")
-	case <-time.After(time.Second):
-		t.Fatal("readArrayHeader did not return promptly on malicious COUNT")
-	}
+	_, err := readArrayHeader(buff)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "exceeds maximum")
 }
 
 func TestArray32CountExceedingBodyIsRejected(t *testing.T) {

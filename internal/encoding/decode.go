@@ -459,22 +459,13 @@ func readArrayHeader(r *buffer.Buffer) (length int64, _ error) {
 	if length > maxCompoundCount {
 		return 0, fmt.Errorf("array count %d exceeds maximum %d", length, maxCompoundCount)
 	}
-	// Body-length sanity check.
-	//
-	// We compare COUNT (a number of elements) against bytes-of-body —
-	// a deliberate unit mismatch, but a sound lower bound: each element
-	// costs at least 1 byte (either its own value bytes or a share of
-	// the leading constructor). SIZE covers [COUNT field][element
-	// constructor][elements...], so after subtracting the COUNT field's
-	// own width the remaining body must hold the constructor plus all
-	// elements, giving COUNT <= (size - countFieldBytes).
-	//
-	// For arrays declared with a zero-width element constructor
-	// (e.g. TypeCodeUint0) a single element occupies 0 body bytes,
-	// so this check effectively forbids any non-empty zero-width
-	// array. That encoding is legal per the spec but redundant in
-	// practice, and rejecting it is what closes the OOM vector even
-	// if maxCompoundCount were raised.
+	// Cheap pre-allocation bound: compare COUNT (element count) against
+	// the remaining body SIZE in bytes. Units intentionally don't match —
+	// this is an over-approximation that assumes a >=1-byte-per-element
+	// floor, which holds for every non-zero-width constructor. The
+	// constructor isn't known yet, so a precise per-element check has to
+	// wait until we actually read each element; this guard just keeps an
+	// attacker from making us allocate a COUNT-sized slice up front.
 	if size < countFieldBytes || length > size-countFieldBytes {
 		return 0, fmt.Errorf("array count %d exceeds body length %d", length, size-countFieldBytes)
 	}

@@ -93,10 +93,8 @@ func TestDecodeSmallInts(t *testing.T) {
 }
 
 func TestArray32CountExceedingMaxIsRejected(t *testing.T) {
-	// Array32 with COUNT 0x7FFFFFFF — far above any legitimate value.
-	// Body padding makes the (correct) size-vs-buffer check pass so the
-	// COUNT cap is what fires. Decoder must reject before allocating
-	// or iterating.
+	// Array32 with count 0x7FFFFFFF. Body padding makes the size check
+	// pass, so the count cap is what must fire.
 	const size = 9
 	frame := make([]byte, 0, 1+4+size)
 	frame = append(frame, byte(TypeCodeArray32))
@@ -112,10 +110,9 @@ func TestArray32CountExceedingMaxIsRejected(t *testing.T) {
 }
 
 func TestArray32CountExceedingBodyIsRejected(t *testing.T) {
-	// COUNT (=100) is below maxCompoundCount but exceeds the
-	// remaining body budget after the COUNT field. Element type
-	// 0x40 (Null) is zero-width, mirroring the canonical exploit
-	// shape that the body-length check is meant to catch.
+	// count=100 is below maxCompoundCount but exceeds the body budget
+	// after the count field. Zero-width Null element mirrors the
+	// exploit shape the body-length check targets.
 	const size = 10
 	const count = 100
 	frame := make([]byte, 0, 1+4+size)
@@ -150,10 +147,9 @@ func TestArray32AtMaxCountSucceeds(t *testing.T) {
 }
 
 func TestArray8CountChecksApplied(t *testing.T) {
-	// Array8 max COUNT is 255, so the maxCompoundCount cap is
-	// effectively a no-op for this code, but the body-length
-	// check still matters: COUNT=200 with body remaining=4 bytes
-	// must be rejected.
+	// Array8's max count is 255, so maxCompoundCount is a no-op here;
+	// the body-length check is what must reject count=200 with only
+	// 4 bytes of body remaining.
 	frame := []byte{
 		byte(TypeCodeArray8),
 		0x05, // size: 1 (count) + 1 (constructor) + 3 (padding)
@@ -168,7 +164,7 @@ func TestArray8CountChecksApplied(t *testing.T) {
 }
 
 func TestList32CountBoundsChecked(t *testing.T) {
-	// COUNT 0x7FFFFFFF on a List32 must be rejected by the cap.
+	// count 0x7FFFFFFF on a List32 must be rejected by the cap.
 	const size = 9
 	frame := make([]byte, 0, 1+4+size)
 	frame = append(frame, byte(TypeCodeList32))
@@ -183,7 +179,7 @@ func TestList32CountBoundsChecked(t *testing.T) {
 }
 
 func TestMap32CountBoundsChecked(t *testing.T) {
-	// COUNT 0x7FFFFFFF on a Map32 must be rejected by the cap.
+	// count 0x7FFFFFFF on a Map32 must be rejected by the cap.
 	const size = 9
 	frame := make([]byte, 0, 1+4+size)
 	frame = append(frame, byte(TypeCodeMap32))

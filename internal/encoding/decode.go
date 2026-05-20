@@ -332,34 +332,14 @@ func readCompositeHeader(r *buffer.Buffer) (_ AMQPType, fields int64, _ error) {
 	return AMQPType(v), fields, err
 }
 
-// maxCompoundCount caps the COUNT field of an AMQP 1.0 compound type
-// (array, list, map) at decode time.
-//
-// Per AMQP 1.0 §1.6.22-§1.6.24 the wire format of each compound type is
-//
-//	[type code] [SIZE] [COUNT] [body]
-//
-// where SIZE is the byte length of everything after SIZE itself and
-// COUNT is the number of elements (or, for map, of key+value items).
-// Both fields are peer-supplied and, in the 32-bit forms, can range
-// up to 2^32-1.
-//
-// Without an upper bound, two attacker-controlled COUNT shapes are
-// dangerous:
-//
-//  1. Array with a zero-width element constructor (TypeCodeNull,
-//     TypeCodeBoolTrue/False, TypeCodeUint0, TypeCodeUlong0, ...).
-//     Per-element body cost is 0, so a tiny frame can declare billions
-//     of elements. Typed Unmarshal callers (e.g. arrayUint32) then call
-//     make([]T, COUNT), which OOMs the process.
-//  2. List/map with 1-byte-per-element constructors. COUNT is bounded
-//     by the buffer here, but a multi-megabyte frame can still pin the
-//     decoder in a long loop.
-//
-// 65536 is well above any legitimate compound emitted by Azure Service
-// Bus, Event Hubs, or any other AMQP 1.0 broker we are aware of, and
-// matches the bound used in the corresponding C library fix
-// (azure-uamqp-c).
+// maxCompoundCount caps the element count of an AMQP 1.0 compound type
+// (array, list, map) at decode time. Per AMQP 1.0 §1.6.22-§1.6.24, the
+// 32-bit forms can declare counts up to 2^32-1. Two attacker shapes are
+// then dangerous: a zero-width array constructor lets a tiny frame
+// claim billions of elements (typed decoders then make([]T, count) and
+// OOM); a 1-byte-per-element list/map is bounded by the buffer but
+// still pins the decoder in a long loop. 65536 sits well above any
+// legitimate compound observed on real brokers.
 const maxCompoundCount = 65536
 
 func readListHeader(r *buffer.Buffer) (length int64, _ error) {
@@ -407,8 +387,8 @@ func readListHeader(r *buffer.Buffer) (length int64, _ error) {
 	if length > maxCompoundCount {
 		return 0, fmt.Errorf("list count %d exceeds maximum %d", length, maxCompoundCount)
 	}
-	// Each list element carries its own constructor (>=1 byte), so COUNT
-	// cannot exceed the encoded body size minus the COUNT field itself.
+	// Each list element carries a constructor (>=1 byte), so the count
+	// can't exceed the body size minus the count field itself.
 	if size < countFieldBytes || length > size-countFieldBytes {
 		return 0, fmt.Errorf("list count %d exceeds body length %d", length, size-countFieldBytes)
 	}
@@ -459,13 +439,10 @@ func readArrayHeader(r *buffer.Buffer) (length int64, _ error) {
 	if length > maxCompoundCount {
 		return 0, fmt.Errorf("array count %d exceeds maximum %d", length, maxCompoundCount)
 	}
-	// Cheap pre-allocation bound: compare COUNT (element count) against
-	// the remaining body SIZE in bytes. Units intentionally don't match —
-	// this is an over-approximation that assumes a >=1-byte-per-element
-	// floor, which holds for every non-zero-width constructor. The
-	// constructor isn't known yet, so a precise per-element check has to
-	// wait until we actually read each element; this guard just keeps an
-	// attacker from making us allocate a COUNT-sized slice up front.
+	// Cheap pre-allocation bound: element count can't exceed remaining
+	// body bytes. Units differ, but every non-zero-width element is at
+	// least one byte, so the over-approximation is safe. Per-element
+	// validation happens at decode time.
 	if size < countFieldBytes || length > size-countFieldBytes {
 		return 0, fmt.Errorf("array count %d exceeds body length %d", length, size-countFieldBytes)
 	}
@@ -1230,12 +1207,12 @@ func readMap8Header(r *buffer.Buffer) (count uint32, _ error) {
 	}
 	count = uint32(buf[1])
 
-	// Hard cap on attacker-controlled COUNT; see maxCompoundCount.
+	// Hard cap; see maxCompoundCount.
 	if count > maxCompoundCount {
 		return 0, fmt.Errorf("map count %d exceeds maximum %d", count, maxCompoundCount)
 	}
-	// Each map item carries its own constructor (>=1 byte), so COUNT
-	// must fit in the remaining buffer.
+	// Each entry carries a constructor (>=1 byte), so the count must
+	// fit in the remaining buffer.
 	if int(count) > r.Len() {
 		return 0, errors.New("invalid length")
 	}
@@ -1257,12 +1234,12 @@ func readMap32Header(r *buffer.Buffer) (count uint32, _ error) {
 	}
 	count = binary.BigEndian.Uint32(buf[4:8])
 
-	// Hard cap on attacker-controlled COUNT; see maxCompoundCount.
+	// Hard cap; see maxCompoundCount.
 	if count > maxCompoundCount {
 		return 0, fmt.Errorf("map count %d exceeds maximum %d", count, maxCompoundCount)
 	}
-	// Each map item carries its own constructor (>=1 byte), so COUNT
-	// must fit in the remaining buffer.
+	// Each entry carries a constructor (>=1 byte), so the count must
+	// fit in the remaining buffer.
 	if int(count) > r.Len() {
 		return 0, errors.New("invalid length")
 	}

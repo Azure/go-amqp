@@ -578,6 +578,15 @@ func (r *Receiver) mux(hooks receiverTestHooks) {
 		// unblock any in flight message dispositions
 		r.inFlight.clear(r.l.doneErr)
 
+		// When a link shuts down, any messages stored in incomingDeliveries that never received
+		// a peer Disposition frame would keep their *Message pointers alive indefinitely,
+		// causing a memory leak. Replacing the map with make(map[uint32]*Message)
+		// on defer releases all those references,
+		// allowing the GC to reclaim them. Using make(...)
+		// instead of nil also prevents nil-map panics in case concurrent code
+		// (guarded by the mutex) accesses the map after the mux loop exits.
+		// In essence: it's a defensive memory cleanup that prevents leaked message
+		// references when the link closes.
 		if r.onDeliveryStateChanged != nil {
 			r.incomingDeliveriesMu.Lock()
 			r.incomingDeliveries = make(map[uint32]*Message)

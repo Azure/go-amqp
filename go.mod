@@ -1,11 +1,11 @@
 module github.com/Azure/go-amqp
 
-go 1.18
+go 1.25
 
 require (
 	github.com/fortytw2/leaktest v1.3.0
-	github.com/google/go-cmp v0.5.9
-	github.com/stretchr/testify v1.8.4
+	github.com/google/go-cmp v0.7.0
+	github.com/stretchr/testify v1.11.1
 )
 
 require (

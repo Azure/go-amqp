@@ -1,9 +1,8 @@
 # Release History
 
-## 1.7.0
+## 1.7.0 (2026-06-08)
 
-* Add OnDeliveryStateChanged callback to Sender and Receiver
-
+* Add `OnDeliveryStateChanged` callback to `SenderOptions` and `ReceiverOptions`.
 
 ## 1.6.0 (2026-04-22)
 

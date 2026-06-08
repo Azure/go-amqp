@@ -114,7 +114,10 @@ func TestConnSASLXOAUTH2AuthSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer client.Close()
+	err = client.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestConnSASLXOAUTH2AuthFail(t *testing.T) {
@@ -143,12 +146,10 @@ func TestConnSASLXOAUTH2AuthFail(t *testing.T) {
 		SASLType:    SASLTypeXOAUTH2("someuser@example.com", "ya29.vF9dft4qmTc2Nvb3RlckBhdHRhdmlzdGEuY29tCg", 512),
 	})
 	cancel()
-	if err == nil {
-		defer client.Close()
-	}
 	switch {
 	case err == nil:
 		t.Errorf("authentication is expected to fail ")
+		_ = client.Close()
 	case !strings.Contains(err.Error(), fmt.Sprintf("code %#00x", encoding.CodeSASLAuth)):
 		t.Errorf("unexpected connection failure : %s", err)
 	}
@@ -185,12 +186,10 @@ func TestConnSASLXOAUTH2AuthFailWithErrorResponse(t *testing.T) {
 		SASLType:    SASLTypeXOAUTH2("someuser@example.com", "ya29.vF9dft4qmTc2Nvb3RlckBhdHRhdmlzdGEuY29tCg", 512),
 	})
 	cancel()
-	if err == nil {
-		defer client.Close()
-	}
 	switch {
 	case err == nil:
 		t.Errorf("authentication is expected to fail ")
+		_ = client.Close()
 	case !strings.Contains(err.Error(), fmt.Sprintf("code %#00x", encoding.CodeSASLAuth)):
 		t.Errorf("unexpected connection failure : %s", err)
 	}
@@ -227,12 +226,10 @@ func TestConnSASLXOAUTH2AuthFailsAdditionalErrorResponse(t *testing.T) {
 		SASLType:    SASLTypeXOAUTH2("someuser@example.com", "ya29.vF9dft4qmTc2Nvb3RlckBhdHRhdmlzdGEuY29tCg", 512),
 	})
 	cancel()
-	if err == nil {
-		defer client.Close()
-	}
 	switch {
 	case err == nil:
 		t.Errorf("authentication is expected to fail ")
+		_ = client.Close()
 	case !strings.Contains(err.Error(), "Initial error response: fail1, additional response: fail2"):
 		t.Errorf("unexpected connection failure : %s", err)
 	}
@@ -273,7 +270,10 @@ func TestConnSASLExternal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer client.Close()
+	err = client.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func peerResponse(items ...any) ([]byte, error) {

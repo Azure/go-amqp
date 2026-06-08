@@ -28,7 +28,7 @@ func (c *Conn) Read(b []byte) (int, error) {
 	if len(c.data) == 0 {
 		select {
 		case <-c.done:
-			return 0, errors.New("connection closed")
+			return 0, net.ErrClosed
 		case err := <-c.err:
 			return 0, err
 		}

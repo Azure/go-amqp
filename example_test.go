@@ -20,7 +20,9 @@ func Example() {
 	if err != nil {
 		log.Fatal("Dialing AMQP server:", err)
 	}
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 
 	// open a session
 	session, err := conn.NewSession(ctx, nil)
@@ -44,7 +46,7 @@ func Example() {
 			log.Fatal("Sending message:", err)
 		}
 
-		sender.Close(ctx)
+		_ = sender.Close(ctx)
 		cancel()
 	}
 
@@ -57,7 +59,7 @@ func Example() {
 		}
 		defer func() {
 			ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
-			receiver.Close(ctx)
+			_ = receiver.Close(ctx)
 			cancel()
 		}()
 
@@ -105,7 +107,7 @@ func ExampleConnError() {
 	}
 
 	// close the connection before sending the message
-	conn.Close()
+	_ = conn.Close()
 
 	// attempt to send message on a closed connection
 	err = sender.Send(ctx, amqp.NewMessage([]byte("Hello!")), nil)
@@ -141,7 +143,9 @@ func ExampleSessionError() {
 	if err != nil {
 		log.Fatal("Dialing AMQP server:", err)
 	}
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 
 	// open a session
 	session, err := conn.NewSession(ctx, nil)
@@ -156,7 +160,7 @@ func ExampleSessionError() {
 	}
 
 	// close the session before sending the message
-	session.Close(ctx)
+	_ = session.Close(ctx)
 
 	// attempt to send message on a closed session
 	err = sender.Send(ctx, amqp.NewMessage([]byte("Hello!")), nil)
@@ -187,7 +191,9 @@ func ExampleLinkError() {
 	if err != nil {
 		log.Fatal("Dialing AMQP server:", err)
 	}
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 
 	// open a session
 	session, err := conn.NewSession(ctx, nil)
@@ -208,7 +214,7 @@ func ExampleLinkError() {
 	}
 
 	// now close the sender
-	sender.Close(ctx)
+	_ = sender.Close(ctx)
 
 	// attempt to send a message after close
 	err = sender.Send(ctx, amqp.NewMessage([]byte("Hello!")), nil)
@@ -268,7 +274,9 @@ func ExampleSender_SendWithReceipt() {
 	if err != nil {
 		log.Fatal("Dialing AMQP server:", err)
 	}
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 
 	// open a session
 	session, err := conn.NewSession(ctx, nil)

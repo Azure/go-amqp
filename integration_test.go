@@ -99,7 +99,9 @@ func TestIntegrationRoundTrip(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer client.Close()
+			defer func() {
+				require.NoError(t, client.Close(), tt.label)
+			}()
 
 			for i := uint16(0); i < tt.sessions; i++ {
 				// Open a session
@@ -213,8 +215,9 @@ func TestIntegrationRoundTrip(t *testing.T) {
 				}
 			}
 
-			client.Close() // close before leak check
-			checkLeaks()   // this is done here because queuesClient starts additional goroutines
+			// close before leak check
+			require.NoError(t, client.Close())
+			checkLeaks() // this is done here because queuesClient starts additional goroutines
 		})
 	}
 }
@@ -248,7 +251,9 @@ func TestIntegrationRoundTrip_Buffered(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer client.Close()
+			defer func() {
+				require.NoError(t, client.Close(), tt.label)
+			}()
 
 			// Open a session
 			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -310,8 +315,9 @@ func TestIntegrationRoundTrip_Buffered(t *testing.T) {
 
 			// close link
 			testClose(t, receiver.Close)
-			client.Close() // close before leak check
-			checkLeaks()   // this is done here because queuesClient starts additional goroutines
+			// close before leak check
+			require.NoError(t, client.Close())
+			checkLeaks() // this is done here because queuesClient starts additional goroutines
 		})
 	}
 }
@@ -361,7 +367,9 @@ func TestIntegrationReceiverModeSecond(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer client.Close()
+			defer func() {
+				require.NoError(t, client.Close(), tt.label)
+			}()
 
 			for i := 0; i < tt.sessions; i++ {
 				// Open a session
@@ -451,8 +459,9 @@ func TestIntegrationReceiverModeSecond(t *testing.T) {
 				}
 			}
 
-			client.Close() // close before leak check
-			checkLeaks()   // this is done here because queuesClient starts additional goroutines
+			// close before leak check
+			require.NoError(t, client.Close())
+			checkLeaks() // this is done here because queuesClient starts additional goroutines
 		})
 	}
 }
@@ -512,7 +521,9 @@ func TestIntegrationSessionHandleMax(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer client.Close()
+			defer func() {
+				require.NoError(t, client.Close(), label)
+			}()
 
 			// Open a session
 			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -585,7 +596,9 @@ func TestIntegrationLinkName(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer client.Close()
+			defer func() {
+				require.NoError(t, client.Close(), label)
+			}()
 
 			// Open a session
 			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -644,7 +657,9 @@ func TestIntegrationClose(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer client.Close()
+			defer func() {
+				require.NoError(t, client.Close(), label)
+			}()
 
 			// Open a session
 			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -668,10 +683,8 @@ func TestIntegrationClose(t *testing.T) {
 			var linkErr *amqp.LinkError
 			require.ErrorAs(t, err, &linkErr)
 
-			err = client.Close() // close before leak check
-			if err != nil {
-				t.Fatal(err)
-			}
+			// close before leak check
+			require.NoError(t, client.Close())
 
 			checkLeaks()
 		})
@@ -687,7 +700,9 @@ func TestIntegrationClose(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer client.Close()
+			defer func() {
+				require.NoError(t, client.Close(), label)
+			}()
 
 			// Open a session
 			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -714,10 +729,8 @@ func TestIntegrationClose(t *testing.T) {
 				t.Fatal("expected nil message")
 			}
 
-			err = client.Close() // close before leak check
-			if err != nil {
-				t.Fatal(err)
-			}
+			// close before leak check
+			require.NoError(t, client.Close())
 
 			checkLeaks()
 		})
@@ -733,7 +746,9 @@ func TestIntegrationClose(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer client.Close()
+			defer func() {
+				require.NoError(t, client.Close(), label)
+			}()
 
 			// Open a session
 			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
@@ -808,7 +823,7 @@ func TestMultipleSessionsOpenClose(t *testing.T) {
 		}
 	}
 
-	client.Close()
+	require.NoError(t, client.Close())
 	checkLeaks()
 }
 
@@ -893,7 +908,7 @@ func TestConcurrentSessionsOpenClose(t *testing.T) {
 	}
 	wg.Wait()
 
-	client.Close()
+	require.NoError(t, client.Close())
 	checkLeaks()
 }
 
@@ -977,7 +992,7 @@ func TestReceiverModeFirst(t *testing.T) {
 		}
 	}
 
-	client.Close()
+	require.NoError(t, client.Close())
 	checkLeaks()
 }
 
@@ -1025,7 +1040,7 @@ func TestSenderExactlyOnce(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, "hello!", string(msg.GetData()))
-	client.Close()
+	require.NoError(t, client.Close())
 	checkLeaks()
 }
 
@@ -1092,7 +1107,7 @@ func TestReceivingLotsOfSettledMessages(t *testing.T) {
 
 	testClose(t, receiver.Close)
 
-	client.Close()
+	require.NoError(t, client.Close())
 }
 
 func TestNewReceiverWithCancelledContext(t *testing.T) {
@@ -1300,7 +1315,7 @@ func TestSenderNullValue(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Nil(t, msg.Value)
-	client.Close()
+	require.NoError(t, client.Close())
 	checkLeaks()
 }
 

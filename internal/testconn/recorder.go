@@ -26,6 +26,6 @@ func (r Recorder) Read(b []byte) (int, error) {
 
 func (r Recorder) Close() error {
 	err := r.Conn.Close()
-	r.w.Close()
+	_ = r.w.Close()
 	return err
 }

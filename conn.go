@@ -491,7 +491,10 @@ func (c *Conn) close() {
 // closeDuringStart is a special close to be used only during startup (i.e. c.start() and any of its children)
 func (c *Conn) closeDuringStart() {
 	c.closeOnce.Do(func() {
-		c.net.Close()
+		// there was an error during startup so close the connection.
+		// we don't need to propagate any error from closing the underlying
+		// connection as it's not germane to the error we're reporting.
+		_ = c.net.Close()
 	})
 }
 

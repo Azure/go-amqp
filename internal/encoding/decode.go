@@ -217,7 +217,7 @@ func Unmarshal(r *buffer.Buffer, i any) error {
 		v := reflect.Indirect(reflect.ValueOf(i))
 
 		// can't unmarshal into a non-pointer
-		if v.Kind() != reflect.Ptr {
+		if v.Kind() != reflect.Pointer {
 			return fmt.Errorf("unable to unmarshal %T", i)
 		}
 

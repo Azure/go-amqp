@@ -27,7 +27,9 @@ func fuzzConn(data []byte) int {
 	if err != nil {
 		return 0
 	}
-	defer client.Close()
+	defer func() {
+		_ = client.Close()
+	}()
 
 	s, err := client.NewSession(context.Background(), nil)
 	if err != nil {
@@ -53,9 +55,9 @@ func fuzzConn(data []byte) int {
 	ctx, close := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer close()
 
-	r.Close(ctx)
+	_ = r.Close(ctx)
 
-	s.Close(ctx)
+	_ = s.Close(ctx)
 
 	// Send
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
@@ -67,7 +69,9 @@ func fuzzConn(data []byte) int {
 	if err != nil {
 		return 0
 	}
-	defer client.Close()
+	defer func() {
+		_ = client.Close()
+	}()
 
 	s, err = client.NewSession(context.Background(), nil)
 	if err != nil {
@@ -87,9 +91,9 @@ func fuzzConn(data []byte) int {
 	ctx, close = context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer close()
 
-	r.Close(ctx)
+	_ = r.Close(ctx)
 
-	s.Close(ctx)
+	_ = s.Close(ctx)
 
 	return 1
 }

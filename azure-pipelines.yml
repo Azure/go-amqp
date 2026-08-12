@@ -1,6 +1,10 @@
 variables:
   GO111MODULE: 'on'
   AMQP_BROKER_ADDR: 'amqp://127.0.0.1:25672'
+  # Revision of Azure/azure-amqp used to build TestAmqpBroker.
+  # No released tag contains the .NET 10 broker yet, so this pins a commit.
+  AZURE_AMQP_COMMIT: '111de654e170de3ab6cefe150043458c67b6660d'
+  AZURE_AMQP_BROKER_TFM: 'net10.0'
 
 jobs:
   - job: 'goamqp'
@@ -55,22 +59,23 @@ jobs:
         displayName: 'Use .NET sdk'
         inputs:
           packageType: sdk
-          version: 8.0.x
+          version: 10.0.x
           installationPath: $(Agent.ToolsDirectory)/dotnet
 
       - script: |
+          set -e
           git clone https://github.com/Azure/azure-amqp $(Pipeline.Workspace)/azure-amqp
-          git checkout v2.6.5
+          git -C $(Pipeline.Workspace)/azure-amqp checkout $(AZURE_AMQP_COMMIT)
           pushd $(Pipeline.Workspace)/azure-amqp/test/TestAmqpBroker
           dotnet restore
-          dotnet build
+          dotnet build -f $(AZURE_AMQP_BROKER_TFM)
         displayName: 'Clone and Build Broker'
 
       - script: |
           set -e
           export TEST_CORPUS=1
           echo '##[command]Starting broker at $(AMQP_BROKER_ADDR)'
-          dotnet $(Pipeline.Workspace)/azure-amqp/bin/Debug/TestAmqpBroker/net8.0/TestAmqpBroker.dll $AMQP_BROKER_ADDR /headless &
+          dotnet $(Pipeline.Workspace)/azure-amqp/bin/Debug/TestAmqpBroker/$(AZURE_AMQP_BROKER_TFM)/TestAmqpBroker.dll $AMQP_BROKER_ADDR /headless &
           brokerPID=$!
           echo '##[section]Starting tests'
           go test -race -v -coverprofile=coverage.txt -covermode atomic ./... 2>&1 | tee gotestoutput.log 

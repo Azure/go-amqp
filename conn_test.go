@@ -46,6 +46,15 @@ func TestConnOptions(t *testing.T) {
 			},
 		},
 		{
+			label: "ConnDesiredCapabilities",
+			opts: ConnOptions{
+				DesiredCapabilities: []string{"sole-connection-for-container"},
+			},
+			verify: func(t *testing.T, c *Conn) {
+				require.Equal(t, encoding.MultiSymbol{"sole-connection-for-container"}, c.desiredCapabilities)
+			},
+		},
+		{
 			label: "ConnServerHostname",
 			opts: ConnOptions{
 				HostName: "testhost",

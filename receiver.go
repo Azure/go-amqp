@@ -75,6 +75,34 @@ func (r *Receiver) IssueCredit(credit uint32) error {
 	return nil
 }
 
+// IssueCreditWithProperties adds credit to be requested on the next outbound
+// FLOW frame, together with link-state properties to attach to that FLOW
+// Unlike IssueCredit, it may be called regardless of whether the receiver uses
+// automatic or manual flow control, since its purpose - attaching a one-off
+// property to a specific FLOW - is orthogonal to steady-state credit
+// management.
+func (r *Receiver) IssueCreditWithProperties(credit uint32, properties map[string]any) error {
+	props := make(map[encoding.Symbol]any, len(properties))
+	for k, v := range properties {
+		if k == "" {
+			return errors.New("flow property key must not be empty")
+		}
+		props[encoding.Symbol(k)] = v
+	}
+
+	if err := r.creditor.IssueCreditWithProperties(credit, props); err != nil {
+		return err
+	}
+
+	// cause mux() to check our flow conditions.
+	select {
+	case r.receiverReady <- struct{}{}:
+	default:
+	}
+
+	return nil
+}
+
 // DrainCreditOptions contains any optional values for the Receiver.DrainCredit method.
 type DrainCreditOptions struct {
 	// for future expansion
@@ -604,7 +632,7 @@ func (r *Receiver) mux(hooks receiverTestHooks) {
 	hooks.MuxStart()
 
 	if r.autoSendFlow {
-		r.l.doneErr = r.muxFlow(r.l.linkCredit, false)
+		r.l.doneErr = r.muxFlow(r.l.linkCredit, false, nil)
 	}
 
 	for {
@@ -638,13 +666,13 @@ func (r *Receiver) mux(hooks receiverTestHooks) {
 			return
 		}
 
-		drain, credits := r.creditor.FlowBits(r.l.linkCredit)
-		if drain || credits > 0 {
-			debug.Log(1, "RX (Receiver %p) (flow): source: %q, inflight: %d, curLinkCredit: %d, newLinkCredit: %d, drain: %v, deliveryCount: %d, messages: %d, unsettled: %d, settlementCount: %d, settleMode: %s",
-				r, r.l.source.Address, r.inFlight.len(), r.l.linkCredit, credits, drain, r.l.deliveryCount, msgLen, r.countUnsettled(), previousSettlementCount, r.l.receiverSettleMode.String())
+		drain, credits, properties := r.creditor.FlowBits(r.l.linkCredit)
+		if drain || credits > 0 || len(properties) > 0 {
+			debug.Log(1, "RX (Receiver %p) (flow): source: %q, inflight: %d, curLinkCredit: %d, newLinkCredit: %d, drain: %v, deliveryCount: %d, messages: %d, unsettled: %d, settlementCount: %d, settleMode: %s, properties: %+v",
+				r, r.l.source.Address, r.inFlight.len(), r.l.linkCredit, credits, drain, r.l.deliveryCount, msgLen, r.countUnsettled(), previousSettlementCount, r.l.receiverSettleMode.String(), properties)
 
 			// send a flow frame.
-			r.l.doneErr = r.muxFlow(credits, drain)
+			r.l.doneErr = r.muxFlow(credits, drain, properties)
 		}
 
 		if r.l.doneErr != nil {
@@ -708,7 +736,8 @@ func (r *Receiver) mux(hooks receiverTestHooks) {
 
 // muxFlow sends tr to the session mux.
 // l.linkCredit will also be updated to `linkCredit`
-func (r *Receiver) muxFlow(linkCredit uint32, drain bool) error {
+// properties, if non-nil, are attached as link-state properties on the outgoing flow frame.
+func (r *Receiver) muxFlow(linkCredit uint32, drain bool, properties map[encoding.Symbol]any) error {
 	var (
 		deliveryCount = r.l.deliveryCount
 	)
@@ -718,6 +747,7 @@ func (r *Receiver) muxFlow(linkCredit uint32, drain bool) error {
 		DeliveryCount: &deliveryCount,
 		LinkCredit:    &linkCredit, // max number of messages,
 		Drain:         drain,
+		Properties:    properties,
 	}
 
 	// Update credit. This must happen before entering loop below

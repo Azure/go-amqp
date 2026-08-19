@@ -127,6 +127,32 @@ func TestLinkFlowWithManualCreditor(t *testing.T) {
 	}
 }
 
+func TestLinkFlowWithManualCreditorAndProperties(t *testing.T) {
+	l := newTestLink(t)
+	l.autoSendFlow = false
+	l.l.linkCredit = 1
+	go l.mux(receiverTestHooks{})
+	defer closeTestLink(&l.l)
+
+	require.NoError(t, l.IssueCreditWithProperties(2, map[string]any{
+		"foo:bar": []string{"tok1", "tok2"},
+	}))
+
+	// flow happens immmediately in 'mux'
+	txFrame := <-l.l.session.tx
+
+	switch frame := txFrame.FrameBody.(type) {
+	case *frames.PerformFlow:
+		require.False(t, frame.Drain)
+		require.EqualValues(t, 2+1, *frame.LinkCredit)
+		require.Equal(t,
+			[]string{"tok1", "tok2"},
+			frame.Properties[encoding.Symbol("foo:bar")])
+	default:
+		require.Fail(t, fmt.Sprintf("Unexpected frame was transferred: %+v", txFrame))
+	}
+}
+
 func TestLinkFlowWithDrain(t *testing.T) {
 	var drainedFlow *frames.PerformFlow
 	var issuedFlow *frames.PerformFlow
@@ -213,11 +239,11 @@ func TestMuxFlowHandlesDrainProperly(t *testing.T) {
 
 	// simulate what our 'drain' call to muxFlow would look like
 	// when draining
-	require.NoError(t, l.muxFlow(0, true))
+	require.NoError(t, l.muxFlow(0, true, nil))
 	require.EqualValues(t, 101, l.l.linkCredit, "credits are untouched when draining")
 
 	// when doing a non-drain flow we update the linkCredit to our new link credit total.
-	require.NoError(t, l.muxFlow(501, false))
+	require.NoError(t, l.muxFlow(501, false, nil))
 	require.EqualValues(t, 501, l.l.linkCredit, "credits are untouched when draining")
 }
 

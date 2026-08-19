@@ -3,6 +3,7 @@
 ## 1.8.0 (TBD)
 
 * Added support for setting `desired-capabilities` in the connection OPEN frames
+* Add Receiver.IssueCreditWithProperties. This allows setting properties on the FLOW frame
 
 ## 1.7.0 (2026-06-08)
 

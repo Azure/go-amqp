@@ -131,6 +131,8 @@ func ParseBody(r *buffer.Buffer) (FrameBody, error) {
 // Write encodes fr into buf.
 // split out from conn.WriteFrame for testing purposes.
 func Write(buf *buffer.Buffer, fr Frame) error {
+	startLen := buf.Len()
+
 	// write header
 	buf.Append([]byte{
 		0, 0, 0, 0, // size, overwrite later
@@ -145,15 +147,15 @@ func Write(buf *buffer.Buffer, fr Frame) error {
 		return err
 	}
 
+	frameSize := buf.Len() - startLen
+
 	// validate size
-	if uint(buf.Len()) > math.MaxUint32 {
+	if uint(frameSize) > math.MaxUint32 {
 		return errors.New("frame too large")
 	}
 
-	// retrieve raw bytes
+	// retrieve raw bytes and write correct size at the frame's start offset
 	bufBytes := buf.Bytes()
-
-	// write correct size
-	binary.BigEndian.PutUint32(bufBytes, uint32(len(bufBytes)))
+	binary.BigEndian.PutUint32(bufBytes[startLen:], uint32(frameSize))
 	return nil
 }

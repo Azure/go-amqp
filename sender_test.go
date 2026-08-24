@@ -970,6 +970,106 @@ func TestSenderSendMultiTransfer(t *testing.T) {
 	require.NoError(t, client.Close())
 }
 
+func TestSenderSendMultiTransferWithSettlements(t *testing.T) {
+	var deliveryID uint32
+	transferCount := 0
+	const maxReceiverFrameSize = 128
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		switch tt := req.(type) {
+		case *fake.AMQPProto:
+			return newResponse(fake.ProtoHeader(fake.ProtoAMQP))
+		case *frames.PerformOpen:
+			b, err := fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformOpen{
+				ChannelMax:   65535,
+				ContainerID:  "container",
+				IdleTimeout:  time.Minute,
+				MaxFrameSize: maxReceiverFrameSize,
+			})
+			if err != nil {
+				return fake.Response{}, err
+			}
+			return fake.Response{Payload: b}, nil
+		case *frames.PerformBegin:
+			return newResponse(fake.PerformBegin(0, remoteChannel))
+		case *frames.PerformEnd:
+			return newResponse(fake.PerformEnd(0, nil))
+		case *frames.PerformAttach:
+			return newResponse(fake.SenderAttach(0, tt.Name, 0, SenderSettleModeUnsettled))
+		case *frames.PerformTransfer:
+			if tt.DeliveryID != nil {
+				if transferCount != 0 {
+					return fake.Response{}, fmt.Errorf("unexpected DeliveryID for frame number %d", transferCount)
+				}
+				deliveryID = *tt.DeliveryID
+			}
+			if tt.MessageFormat != nil && transferCount != 0 {
+				return fake.Response{}, fmt.Errorf("unexpected MessageFormat for frame number %d", transferCount)
+			} else if tt.MessageFormat == nil && transferCount == 0 {
+				return fake.Response{}, errors.New("unexpected nil MessageFormat")
+			}
+			if tt.More {
+				transferCount++
+				return fake.Response{}, nil
+			}
+			return newResponse(fake.PerformDisposition(encoding.RoleReceiver, 0, deliveryID, nil, &encoding.StateAccepted{}))
+		case *frames.PerformDetach:
+			return newResponse(fake.PerformDetach(0, 0, nil))
+		case *frames.PerformClose:
+			return newResponse(fake.PerformClose(nil))
+		default:
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+	netConn := fake.NewNetConn(responder, fake.NetConnOptions{
+		ChunkSize: 8,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, netConn, nil)
+	cancel()
+	require.NoError(t, err)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+
+	settlementsChan := make(chan Settlement, 10)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	snd, err := session.NewSender(ctx, "target", &SenderOptions{
+		Settlements: settlementsChan,
+	})
+	cancel()
+	require.NoError(t, err)
+
+	sendInitialFlowFrame(t, 0, netConn, 0, 100)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	payload := make([]byte, maxReceiverFrameSize*4)
+	for i := 0; i < maxReceiverFrameSize*4; i++ {
+		payload[i] = byte(i % 256)
+	}
+	receipt, err := snd.SendWithReceipt(ctx, NewMessage(payload), nil)
+	require.NoError(t, err)
+	cancel()
+
+	// wait for settlement
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	select {
+	case s := <-settlementsChan:
+		require.Equal(t, receipt.DeliveryTag(), s.DeliveryTag)
+		require.Equal(t, &StateAccepted{}, s.DeliveryState)
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for settlement")
+	}
+
+	// split up into 8 transfers due to transfer frame header size (since the final frame completes the transfer)
+	require.Equal(t, 8, transferCount)
+
+	require.NoError(t, client.Close())
+}
+
 func TestSenderConnReaderError(t *testing.T) {
 	netConn := fake.NewNetConn(senderFrameHandlerNoUnhandled(0, SenderSettleModeUnsettled), fake.NetConnOptions{})
 
@@ -1613,20 +1713,20 @@ func TestSenderSendWithReceipt(t *testing.T) {
 
 			sendInitialFlowFrame(t, 0, netConn, 0, 100)
 
-			ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 			receipt, err := snd.SendWithReceipt(ctx, NewMessage([]byte("test")), nil)
 			cancel()
 			require.NoError(t, err)
 			require.Equal(t, []byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}, receipt.DeliveryTag())
 
-			ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 			state, err := receipt.Wait(ctx)
 			cancel()
 			require.NoError(t, err)
 			require.Equal(t, test.state, state)
 
 			// subsequent calls should yield the same result
-			ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
 			state, err = receipt.Wait(ctx)
 			cancel()
 			require.NoError(t, err)

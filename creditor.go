@@ -4,14 +4,17 @@ import (
 	"context"
 	"errors"
 	"sync"
+
+	"github.com/Azure/go-amqp/internal/encoding"
 )
 
 type creditor struct {
 	mu sync.Mutex
 
 	// future values for the next flow frame.
-	pendingDrain bool
-	creditsToAdd uint32
+	pendingDrain      bool
+	creditsToAdd      uint32
+	pendingProperties map[encoding.Symbol]any
 
 	// drained is set when a drain is active and we're waiting
 	// for the corresponding flow from the remote.
@@ -38,10 +41,14 @@ func (mc *creditor) EndDrain() {
 // and resets the internal state.
 // Returns:
 //
-//	(drain: true, credits: 0) if a flow is needed (drain)
-//	(drain: false, credits > 0) if a flow is needed (issue credit)
-//	(drain: false, credits == 0) if no flow needed.
-func (mc *creditor) FlowBits(currentCredits uint32) (bool, uint32) {
+//	(drain: true, credits: 0, properties) if a flow is needed (drain)
+//	(drain: false, credits > 0, properties) if a flow is needed (issue credit)
+//	(drain: false, credits == 0, properties) if a flow is needed only to carry properties
+//	(drain: false, credits == 0, nil) if no flow needed.
+//
+// properties, if non-nil, are link-state properties queued via
+// IssueCreditWithProperties that should be attached to the outgoing flow frame.
+func (mc *creditor) FlowBits(currentCredits uint32) (bool, uint32, map[encoding.Symbol]any) {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
 
@@ -64,7 +71,10 @@ func (mc *creditor) FlowBits(currentCredits uint32) (bool, uint32) {
 
 	mc.creditsToAdd = 0
 
-	return drain, credits
+	properties := mc.pendingProperties
+	mc.pendingProperties = nil
+
+	return drain, credits, properties
 }
 
 // Drain initiates a drain and blocks until EndDrain is called.
@@ -113,5 +123,30 @@ func (mc *creditor) IssueCredit(credits uint32) error {
 	}
 
 	mc.creditsToAdd += credits
+	return nil
+}
+
+// IssueCreditWithProperties queues up additional credits, together with
+// link-state properties, to be requested/attached at the next call of
+// FlowBits(). The properties are merged into any properties already pending.
+func (mc *creditor) IssueCreditWithProperties(credits uint32, properties map[encoding.Symbol]any) error {
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+
+	if mc.drained != nil {
+		return errLinkDraining
+	}
+
+	mc.creditsToAdd += credits
+
+	if len(properties) > 0 {
+		if mc.pendingProperties == nil {
+			mc.pendingProperties = make(map[encoding.Symbol]any, len(properties))
+		}
+		for k, v := range properties {
+			mc.pendingProperties[k] = v
+		}
+	}
+
 	return nil
 }

@@ -19,6 +19,7 @@ func TestLinkFlowThatNeedsToReplenishCredits(t *testing.T) {
 	for times := 0; times < 100; times++ {
 		l := newTestLink(t)
 		l.l.linkCredit = 2
+		l.initialCreditWindow = 2
 
 		waitForCredit := make(chan struct{})
 
@@ -34,7 +35,7 @@ func TestLinkFlowThatNeedsToReplenishCredits(t *testing.T) {
 		err = l.IssueCredit(1)
 		require.Error(t, err, "issueCredit can only be used with receiver links using manual credit management")
 
-		// we've consumed half of the maximum credit we're allowed to have - reflow!
+		// Credit has dropped to half of the window — trigger replenishment.
 		l.l.linkCredit = 1
 		close(waitForCredit)
 
@@ -43,15 +44,11 @@ func TestLinkFlowThatNeedsToReplenishCredits(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	Loop:
 		for {
-			// the first flow frame we receive isn't always the one with the updated credit.
-			// to avoid the race, we continue to receive frames until we get the flow frame
-			// with the correct value, a wrong frame, or the context expires.
 			select {
 			case txFrame := <-l.l.session.tx:
 				switch frame := txFrame.FrameBody.(type) {
 				case *frames.PerformFlow:
 					require.False(t, frame.Drain)
-					// replenished credits: l.receiver.maxCredit-uint32(l.countUnsettled())
 					if *frame.LinkCredit == 2 {
 						break Loop
 					}
@@ -122,6 +119,32 @@ func TestLinkFlowWithManualCreditor(t *testing.T) {
 	case *frames.PerformFlow:
 		require.False(t, frame.Drain)
 		require.EqualValues(t, 100+1, *frame.LinkCredit)
+	default:
+		require.Fail(t, fmt.Sprintf("Unexpected frame was transferred: %+v", txFrame))
+	}
+}
+
+func TestLinkFlowWithManualCreditorAndProperties(t *testing.T) {
+	l := newTestLink(t)
+	l.autoSendFlow = false
+	l.l.linkCredit = 1
+	go l.mux(receiverTestHooks{})
+	defer closeTestLink(&l.l)
+
+	require.NoError(t, l.IssueCreditWithProperties(2, map[string]any{
+		"rabbitmq:deferral-tokens": []string{"tok1", "tok2"},
+	}))
+
+	// flow happens immmediately in 'mux'
+	txFrame := <-l.l.session.tx
+
+	switch frame := txFrame.FrameBody.(type) {
+	case *frames.PerformFlow:
+		require.False(t, frame.Drain)
+		require.EqualValues(t, 2+1, *frame.LinkCredit)
+		require.Equal(t,
+			[]string{"tok1", "tok2"},
+			frame.Properties[encoding.Symbol("rabbitmq:deferral-tokens")])
 	default:
 		require.Fail(t, fmt.Sprintf("Unexpected frame was transferred: %+v", txFrame))
 	}
@@ -213,11 +236,11 @@ func TestMuxFlowHandlesDrainProperly(t *testing.T) {
 
 	// simulate what our 'drain' call to muxFlow would look like
 	// when draining
-	require.NoError(t, l.muxFlow(0, true))
+	require.NoError(t, l.muxFlow(0, true, nil))
 	require.EqualValues(t, 101, l.l.linkCredit, "credits are untouched when draining")
 
 	// when doing a non-drain flow we update the linkCredit to our new link credit total.
-	require.NoError(t, l.muxFlow(501, false))
+	require.NoError(t, l.muxFlow(501, false, nil))
 	require.EqualValues(t, 501, l.l.linkCredit, "credits are untouched when draining")
 }
 
@@ -234,9 +257,7 @@ func newTestLink(t *testing.T) *Receiver {
 	l := &Receiver{
 		l: link{
 			source: &frames.Source{},
-			// adding just enough so the debug() print will still work...
-			// debug(1, "FLOW Link Mux half: source: %s, inflight: %d, credit: %d, deliveryCount: %d, messages: %d, unsettled: %d, maxCredit : %d, settleMode: %s", l.source.Address, l.receiver.inFlight.len(), l.l.linkCredit, l.deliveryCount, len(l.messages), l.countUnsettled(), l.receiver.maxCredit, l.receiverSettleMode.String())
-			done: make(chan struct{}),
+			done:   make(chan struct{}),
 			session: &Session{
 				tx:            make(chan frameBodyEnvelope, 100),
 				done:          make(chan struct{}),
@@ -246,9 +267,10 @@ func newTestLink(t *testing.T) *Receiver {
 			rxQ:   queue.NewHolder(queue.New[frames.FrameBody](100)),
 			close: make(chan struct{}),
 		},
-		autoSendFlow:  true,
-		inFlight:      inFlight{},
-		receiverReady: make(chan struct{}, 1),
+		autoSendFlow:        true,
+		initialCreditWindow: defaultLinkCredit,
+		inFlight:            inFlight{},
+		receiverReady:       make(chan struct{}, 1),
 	}
 
 	l.messagesQ = queue.NewHolder(queue.New[Message](100))

@@ -3,7 +3,8 @@
 ## 1.8.0 (TBD)
 
 * Added support for setting `desired-capabilities` in the connection OPEN frames
-* Add Receiver.IssueCreditWithProperties. This allows setting properties on the FLOW frame
+* Added `Receiver.SendLinkStateProperties` to attach link-state properties to a FLOW frame without altering the link's credit window. Supported with both automatic and manual credit management.
+* Added `Receiver.IssueCreditWithProperties` to issue credit and attach link-state properties on the same FLOW frame. Like `Receiver.IssueCredit`, it requires manual credit management.
 
 ## 1.7.0 (2026-06-08)
 

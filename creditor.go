@@ -47,7 +47,8 @@ func (mc *creditor) EndDrain() {
 //	(drain: false, credits == 0, nil) if no flow needed.
 //
 // properties, if non-nil, are link-state properties queued via
-// IssueCreditWithProperties that should be attached to the outgoing flow frame.
+// IssueCreditWithProperties or SendLinkStateProperties that should be attached
+// to the outgoing flow frame.
 //
 // NOTE: in the properties-only case credits is 0 because no credit is being
 // added; the caller is responsible for re-advertising the link's current credit

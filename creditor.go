@@ -43,11 +43,15 @@ func (mc *creditor) EndDrain() {
 //
 //	(drain: true, credits: 0, properties) if a flow is needed (drain)
 //	(drain: false, credits > 0, properties) if a flow is needed (issue credit)
-//	(drain: false, credits == 0, properties) if a flow is needed only to carry properties
+//	(drain: false, credits == 0, properties != nil) if a flow is needed only to carry properties
 //	(drain: false, credits == 0, nil) if no flow needed.
 //
 // properties, if non-nil, are link-state properties queued via
 // IssueCreditWithProperties that should be attached to the outgoing flow frame.
+//
+// NOTE: in the properties-only case credits is 0 because no credit is being
+// added; the caller is responsible for re-advertising the link's current credit
+// so that the flow frame does not clobber the credit window.
 func (mc *creditor) FlowBits(currentCredits uint32) (bool, uint32, map[encoding.Symbol]any) {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
@@ -129,6 +133,7 @@ func (mc *creditor) IssueCredit(credits uint32) error {
 // IssueCreditWithProperties queues up additional credits, together with
 // link-state properties, to be requested/attached at the next call of
 // FlowBits(). The properties are merged into any properties already pending.
+// A credits value of 0 queues the properties without altering the credit window.
 func (mc *creditor) IssueCreditWithProperties(credits uint32, properties map[encoding.Symbol]any) error {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()

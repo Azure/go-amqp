@@ -153,6 +153,35 @@ func TestLinkFlowWithManualCreditorAndProperties(t *testing.T) {
 	}
 }
 
+// a properties-only flow (credit == 0) must re-advertise the current link credit;
+// advertising 0 would clobber the credit window and stall delivery.
+func TestLinkFlowWithManualCreditorAndPropertiesOnly(t *testing.T) {
+	l := newTestLink(t)
+	l.autoSendFlow = false
+	l.l.linkCredit = 10
+	go l.mux(receiverTestHooks{})
+	defer closeTestLink(&l.l)
+
+	require.NoError(t, l.IssueCreditWithProperties(0, map[string]any{
+		"foo:bar": []string{"tok1", "tok2"},
+	}))
+
+	txFrame := <-l.l.session.tx
+
+	switch frame := txFrame.FrameBody.(type) {
+	case *frames.PerformFlow:
+		require.False(t, frame.Drain)
+		require.EqualValues(t, 10, *frame.LinkCredit, "properties-only flow must not change the credit window")
+		require.Equal(t,
+			[]string{"tok1", "tok2"},
+			frame.Properties[encoding.Symbol("foo:bar")])
+	default:
+		require.Fail(t, fmt.Sprintf("Unexpected frame was transferred: %+v", txFrame))
+	}
+
+	require.EqualValues(t, 10, l.l.linkCredit, "the credit window is unchanged")
+}
+
 func TestLinkFlowWithDrain(t *testing.T) {
 	var drainedFlow *frames.PerformFlow
 	var issuedFlow *frames.PerformFlow

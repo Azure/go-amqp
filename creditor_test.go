@@ -56,6 +56,25 @@ func TestCreditorIssueCreditWithPropertiesMergesWithPlainCredit(t *testing.T) {
 	require.Equal(t, props, gotProps)
 }
 
+// a properties-only queueing leaves the credit window alone: FlowBits reports 0
+// added credits, and the caller re-advertises the current credit.
+func TestCreditorIssueCreditWithPropertiesOnly(t *testing.T) {
+	r := newTestLink(t)
+	props := map[encoding.Symbol]any{"foo:bar": []string{"tok1"}}
+	require.NoError(t, r.creditor.IssueCreditWithProperties(0, props))
+
+	drain, credits, gotProps := r.creditor.FlowBits(10)
+	require.False(t, drain)
+	require.EqualValues(t, 0, credits, "no credits are added for a properties-only flow")
+	require.Equal(t, props, gotProps)
+
+	// nothing remains pending, so no further flow is needed.
+	drain, credits, gotProps = r.creditor.FlowBits(10)
+	require.False(t, drain)
+	require.EqualValues(t, 0, credits)
+	require.Nil(t, gotProps)
+}
+
 func TestCreditorIssueCreditWithPropertiesWhileDrainingFails(t *testing.T) {
 	r := newTestLink(t)
 	r.creditor.drained = make(chan struct{})

@@ -668,6 +668,12 @@ func (r *Receiver) mux(hooks receiverTestHooks) {
 
 		drain, credits, properties := r.creditor.FlowBits(r.l.linkCredit)
 		if drain || credits > 0 || len(properties) > 0 {
+			if !drain && credits == 0 {
+				// this flow exists solely to carry link-state properties, so
+				// re-advertise the current credit window rather than zeroing it.
+				credits = r.l.linkCredit
+			}
+
 			debug.Log(1, "RX (Receiver %p) (flow): source: %q, inflight: %d, curLinkCredit: %d, newLinkCredit: %d, drain: %v, deliveryCount: %d, messages: %d, unsettled: %d, settlementCount: %d, settleMode: %s, properties: %+v",
 				r, r.l.source.Address, r.inFlight.len(), r.l.linkCredit, credits, drain, r.l.deliveryCount, msgLen, r.countUnsettled(), previousSettlementCount, r.l.receiverSettleMode.String(), properties)
 

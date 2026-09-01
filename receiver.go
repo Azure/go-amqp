@@ -81,7 +81,7 @@ func (r *Receiver) IssueCredit(credit uint32) error {
 // SendLinkStateProperties.
 func (r *Receiver) IssueCreditWithProperties(credit uint32, properties map[string]any) error {
 	if r.autoSendFlow {
-		return errors.New("issueCreditWithProperties can only be used with receiver links using manual credit management; use SendLinkStateProperties to attach properties without changing credit")
+		return errors.New("IssueCreditWithProperties can only be used with receiver links using manual credit management; use SendLinkStateProperties to attach properties without changing credit")
 	}
 
 	props, err := encodeLinkStateProperties(properties)

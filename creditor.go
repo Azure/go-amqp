@@ -120,15 +120,7 @@ func (mc *creditor) Drain(ctx context.Context, r *Receiver) error {
 // IssueCredit queues up additional credits to be requested at the next
 // call of FlowBits()
 func (mc *creditor) IssueCredit(credits uint32) error {
-	mc.mu.Lock()
-	defer mc.mu.Unlock()
-
-	if mc.drained != nil {
-		return errLinkDraining
-	}
-
-	mc.creditsToAdd += credits
-	return nil
+	return mc.IssueCreditWithProperties(credits, nil)
 }
 
 // IssueCreditWithProperties queues up additional credits, together with

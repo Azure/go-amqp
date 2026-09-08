@@ -66,13 +66,84 @@ func (r *Receiver) IssueCredit(credit uint32) error {
 		return err
 	}
 
-	// cause mux() to check our flow conditions.
+	r.nudgeMux()
+	return nil
+}
+
+// IssueCreditWithProperties adds credit to be requested in the next flow frame,
+// together with link-state properties (AMQP 1.0 sec 2.7.4) to attach to that
+// same frame. Property keys are encoded as AMQP symbols.
+//
+// Like IssueCredit, this may only be used with receiver links using manual
+// credit management, as the requested credit is added to the link's credit
+// window. To attach link-state properties without altering the credit window,
+// which is supported for both automatic and manual credit management, use
+// SendLinkStateProperties.
+func (r *Receiver) IssueCreditWithProperties(credit uint32, properties map[string]any) error {
+	if r.autoSendFlow {
+		return errors.New("IssueCreditWithProperties can only be used with receiver links using manual credit management; use SendLinkStateProperties to attach properties without changing credit")
+	}
+
+	props, err := encodeLinkStateProperties(properties)
+	if err != nil {
+		return err
+	}
+
+	if err := r.creditor.IssueCreditWithProperties(credit, props); err != nil {
+		return err
+	}
+
+	r.nudgeMux()
+	return nil
+}
+
+// SendLinkStateProperties queues link-state properties (AMQP 1.0 sec 2.7.4) to be
+// attached to the next outbound flow frame. Property keys are encoded as AMQP
+// symbols. The peer surfaces them via ReceiverOptions.OnLinkStateProperties.
+//
+// The link's credit window is left untouched, so this may be used with receiver
+// links using either automatic or manual credit management. If no flow frame is
+// otherwise pending, one is sent solely to carry the properties, advertising the
+// receiver's current link credit unchanged.
+//
+// Properties are merged into any properties already queued but not yet sent.
+func (r *Receiver) SendLinkStateProperties(properties map[string]any) error {
+	if len(properties) == 0 {
+		return errors.New("at least one property is required")
+	}
+
+	props, err := encodeLinkStateProperties(properties)
+	if err != nil {
+		return err
+	}
+
+	if err := r.creditor.IssueCreditWithProperties(0, props); err != nil {
+		return err
+	}
+
+	r.nudgeMux()
+	return nil
+}
+
+// encodeLinkStateProperties converts caller-supplied link-state properties into
+// their AMQP symbol-keyed representation.
+func encodeLinkStateProperties(properties map[string]any) (map[encoding.Symbol]any, error) {
+	props := make(map[encoding.Symbol]any, len(properties))
+	for k, v := range properties {
+		if k == "" {
+			return nil, errors.New("flow property key must not be empty")
+		}
+		props[encoding.Symbol(k)] = v
+	}
+	return props, nil
+}
+
+// nudgeMux causes mux() to re-evaluate the link's flow conditions.
+func (r *Receiver) nudgeMux() {
 	select {
 	case r.receiverReady <- struct{}{}:
 	default:
 	}
-
-	return nil
 }
 
 // DrainCreditOptions contains any optional values for the Receiver.DrainCredit method.
@@ -604,7 +675,7 @@ func (r *Receiver) mux(hooks receiverTestHooks) {
 	hooks.MuxStart()
 
 	if r.autoSendFlow {
-		r.l.doneErr = r.muxFlow(r.l.linkCredit, false)
+		r.l.doneErr = r.muxFlow(r.l.linkCredit, false, nil)
 	}
 
 	for {
@@ -638,13 +709,19 @@ func (r *Receiver) mux(hooks receiverTestHooks) {
 			return
 		}
 
-		drain, credits := r.creditor.FlowBits(r.l.linkCredit)
-		if drain || credits > 0 {
-			debug.Log(1, "RX (Receiver %p) (flow): source: %q, inflight: %d, curLinkCredit: %d, newLinkCredit: %d, drain: %v, deliveryCount: %d, messages: %d, unsettled: %d, settlementCount: %d, settleMode: %s",
-				r, r.l.source.Address, r.inFlight.len(), r.l.linkCredit, credits, drain, r.l.deliveryCount, msgLen, r.countUnsettled(), previousSettlementCount, r.l.receiverSettleMode.String())
+		drain, credits, properties := r.creditor.FlowBits(r.l.linkCredit)
+		if drain || credits > 0 || len(properties) > 0 {
+			if !drain && credits == 0 {
+				// this flow exists solely to carry link-state properties, so
+				// re-advertise the current credit window rather than zeroing it.
+				credits = r.l.linkCredit
+			}
+
+			debug.Log(1, "RX (Receiver %p) (flow): source: %q, inflight: %d, curLinkCredit: %d, newLinkCredit: %d, drain: %v, deliveryCount: %d, messages: %d, unsettled: %d, settlementCount: %d, settleMode: %s, properties: %+v",
+				r, r.l.source.Address, r.inFlight.len(), r.l.linkCredit, credits, drain, r.l.deliveryCount, msgLen, r.countUnsettled(), previousSettlementCount, r.l.receiverSettleMode.String(), properties)
 
 			// send a flow frame.
-			r.l.doneErr = r.muxFlow(credits, drain)
+			r.l.doneErr = r.muxFlow(credits, drain, properties)
 		}
 
 		if r.l.doneErr != nil {
@@ -708,7 +785,8 @@ func (r *Receiver) mux(hooks receiverTestHooks) {
 
 // muxFlow sends tr to the session mux.
 // l.linkCredit will also be updated to `linkCredit`
-func (r *Receiver) muxFlow(linkCredit uint32, drain bool) error {
+// properties, if non-nil, are attached as link-state properties on the outgoing flow frame.
+func (r *Receiver) muxFlow(linkCredit uint32, drain bool, properties map[encoding.Symbol]any) error {
 	var (
 		deliveryCount = r.l.deliveryCount
 	)
@@ -718,6 +796,7 @@ func (r *Receiver) muxFlow(linkCredit uint32, drain bool) error {
 		DeliveryCount: &deliveryCount,
 		LinkCredit:    &linkCredit, // max number of messages,
 		Drain:         drain,
+		Properties:    properties,
 	}
 
 	// Update credit. This must happen before entering loop below

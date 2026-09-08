@@ -15,14 +15,73 @@ func TestCreditorIssueCredits(t *testing.T) {
 	r := newTestLink(t)
 	require.NoError(t, r.creditor.IssueCredit(3))
 
-	drain, credits := r.creditor.FlowBits(1)
+	drain, credits, properties := r.creditor.FlowBits(1)
 	require.False(t, drain)
 	require.EqualValues(t, 3+1, credits, "flow frame includes the pending credits and our current credits")
+	require.Nil(t, properties, "no properties were queued")
 
 	// flow clears the previous data once it's been called.
-	drain, credits = r.creditor.FlowBits(4)
+	drain, credits, properties = r.creditor.FlowBits(4)
 	require.False(t, drain)
 	require.EqualValues(t, 0, credits, "drain flow frame always sets link-credit to 0")
+	require.Nil(t, properties)
+}
+
+func TestCreditorIssueCreditWithProperties(t *testing.T) {
+	r := newTestLink(t)
+	props := map[encoding.Symbol]any{"foo:bar": []string{"tok1", "tok2"}}
+	require.NoError(t, r.creditor.IssueCreditWithProperties(2, props))
+
+	drain, credits, gotProps := r.creditor.FlowBits(0)
+	require.False(t, drain)
+	require.EqualValues(t, 2, credits)
+	require.Equal(t, props, gotProps)
+
+	// properties (and credits) are cleared once read.
+	drain, credits, gotProps = r.creditor.FlowBits(0)
+	require.False(t, drain)
+	require.EqualValues(t, 0, credits)
+	require.Nil(t, gotProps)
+}
+
+func TestCreditorIssueCreditWithPropertiesMergesWithPlainCredit(t *testing.T) {
+	r := newTestLink(t)
+	require.NoError(t, r.creditor.IssueCredit(3))
+	props := map[encoding.Symbol]any{"foo:bar": []string{"tok1"}}
+	require.NoError(t, r.creditor.IssueCreditWithProperties(2, props))
+
+	drain, credits, gotProps := r.creditor.FlowBits(1)
+	require.False(t, drain)
+	require.EqualValues(t, 3+2+1, credits, "credit from IssueCredit and IssueCreditWithProperties accumulate together")
+	require.Equal(t, props, gotProps)
+}
+
+// a properties-only queueing leaves the credit window alone: FlowBits reports 0
+// added credits, and the caller re-advertises the current credit.
+func TestCreditorIssueCreditWithPropertiesOnly(t *testing.T) {
+	r := newTestLink(t)
+	props := map[encoding.Symbol]any{"foo:bar": []string{"tok1"}}
+	require.NoError(t, r.creditor.IssueCreditWithProperties(0, props))
+
+	drain, credits, gotProps := r.creditor.FlowBits(10)
+	require.False(t, drain)
+	require.EqualValues(t, 0, credits, "no credits are added for a properties-only flow")
+	require.Equal(t, props, gotProps)
+
+	// nothing remains pending, so no further flow is needed.
+	drain, credits, gotProps = r.creditor.FlowBits(10)
+	require.False(t, drain)
+	require.EqualValues(t, 0, credits)
+	require.Nil(t, gotProps)
+}
+
+func TestCreditorIssueCreditWithPropertiesWhileDrainingFails(t *testing.T) {
+	r := newTestLink(t)
+	r.creditor.drained = make(chan struct{})
+	defer close(r.creditor.drained)
+
+	err := r.creditor.IssueCreditWithProperties(1, map[encoding.Symbol]any{"x": "y"})
+	require.ErrorIs(t, err, errLinkDraining)
 }
 
 func TestCreditorDrain(t *testing.T) {
@@ -52,7 +111,7 @@ func TestCreditorDrain(t *testing.T) {
 	time.Sleep(time.Second * 2)
 
 	// the next time someone requests a flow frame it'll drain (this doesn't affect the blocked Drain() calls)
-	drain, credits := r.creditor.FlowBits(101)
+	drain, credits, _ := r.creditor.FlowBits(101)
 	require.True(t, drain)
 	require.EqualValues(t, 0, credits, "Drain always drains with 0 credit")
 

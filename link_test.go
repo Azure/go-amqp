@@ -127,6 +127,144 @@ func TestLinkFlowWithManualCreditor(t *testing.T) {
 	}
 }
 
+func TestLinkFlowWithManualCreditorAndProperties(t *testing.T) {
+	l := newTestLink(t)
+	l.autoSendFlow = false
+	l.l.linkCredit = 1
+	go l.mux(receiverTestHooks{})
+	defer closeTestLink(&l.l)
+
+	require.NoError(t, l.IssueCreditWithProperties(2, map[string]any{
+		"foo:bar": []string{"tok1", "tok2"},
+	}))
+
+	// flow happens immmediately in 'mux'
+	txFrame := <-l.l.session.tx
+
+	switch frame := txFrame.FrameBody.(type) {
+	case *frames.PerformFlow:
+		require.False(t, frame.Drain)
+		require.EqualValues(t, 2+1, *frame.LinkCredit)
+		require.Equal(t,
+			[]string{"tok1", "tok2"},
+			frame.Properties[encoding.Symbol("foo:bar")])
+	default:
+		require.Fail(t, fmt.Sprintf("Unexpected frame was transferred: %+v", txFrame))
+	}
+}
+
+// a properties-only flow (credit == 0) must re-advertise the current link credit;
+// advertising 0 would clobber the credit window and stall delivery.
+func TestLinkFlowWithManualCreditorAndPropertiesOnly(t *testing.T) {
+	l := newTestLink(t)
+	l.autoSendFlow = false
+	l.l.linkCredit = 10
+	go l.mux(receiverTestHooks{})
+	defer closeTestLink(&l.l)
+
+	require.NoError(t, l.IssueCreditWithProperties(0, map[string]any{
+		"foo:bar": []string{"tok1", "tok2"},
+	}))
+
+	txFrame := <-l.l.session.tx
+
+	switch frame := txFrame.FrameBody.(type) {
+	case *frames.PerformFlow:
+		require.False(t, frame.Drain)
+		require.EqualValues(t, 10, *frame.LinkCredit, "properties-only flow must not change the credit window")
+		require.Equal(t,
+			[]string{"tok1", "tok2"},
+			frame.Properties[encoding.Symbol("foo:bar")])
+	default:
+		require.Fail(t, fmt.Sprintf("Unexpected frame was transferred: %+v", txFrame))
+	}
+
+	require.EqualValues(t, 10, l.l.linkCredit, "the credit window is unchanged")
+}
+
+// IssueCreditWithProperties alters the credit window, so like IssueCredit it is
+// only available with manual credit management. Otherwise the requested credit
+// would be added on top of the auto-flow steady-state window, permanently
+// inflating it beyond ReceiverOptions.Credit.
+func TestLinkIssueCreditWithPropertiesRequiresManualCreditor(t *testing.T) {
+	l := newTestLink(t)
+	require.True(t, l.autoSendFlow)
+	l.l.linkCredit = 10
+	go l.mux(receiverTestHooks{})
+	defer closeTestLink(&l.l)
+
+	// consume the initial auto flow so we can assert no further frames are sent
+	initial := <-l.l.session.tx
+	require.EqualValues(t, 10, *initial.FrameBody.(*frames.PerformFlow).LinkCredit)
+
+	err := l.IssueCreditWithProperties(5, map[string]any{"foo:bar": "baz"})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "manual credit management")
+
+	require.EqualValues(t, 10, l.l.linkCredit, "the credit window is untouched")
+	select {
+	case txFrame := <-l.l.session.tx:
+		require.Fail(t, fmt.Sprintf("Unexpected frame was transferred: %+v", txFrame))
+	case <-time.After(100 * time.Millisecond):
+		// no flow frame was sent
+	}
+}
+
+func TestLinkSendLinkStatePropertiesPreservesCreditAuto(t *testing.T) {
+	l := newTestLink(t)
+	require.True(t, l.autoSendFlow)
+	l.l.linkCredit = 2
+	go l.mux(receiverTestHooks{})
+	defer closeTestLink(&l.l)
+
+	// consume the initial auto flow
+	initial := <-l.l.session.tx
+	require.EqualValues(t, 2, *initial.FrameBody.(*frames.PerformFlow).LinkCredit)
+
+	require.NoError(t, l.SendLinkStateProperties(map[string]any{"foo:bar": "baz"}))
+
+	txFrame := <-l.l.session.tx
+
+	switch frame := txFrame.FrameBody.(type) {
+	case *frames.PerformFlow:
+		require.False(t, frame.Drain)
+		require.EqualValues(t, 2, *frame.LinkCredit, "properties-only flow must not change the credit window")
+		require.Equal(t, "baz", frame.Properties[encoding.Symbol("foo:bar")])
+	default:
+		require.Fail(t, fmt.Sprintf("Unexpected frame was transferred: %+v", txFrame))
+	}
+
+	require.EqualValues(t, 2, l.l.linkCredit)
+
+	// auto-replenishment must still work: consuming and settling both credits
+	// reclaims them. if the properties-only flow had zeroed linkCredit, the
+	// mux would never reach the replenish branch and the link would stall.
+	l.l.linkCredit = 0
+	l.onSettlement(2)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	select {
+	case txFrame := <-l.l.session.tx:
+		frame, ok := txFrame.FrameBody.(*frames.PerformFlow)
+		require.True(t, ok, "Unexpected frame was transferred: %+v", txFrame)
+		require.EqualValues(t, 2, *frame.LinkCredit, "credit is replenished back to the steady-state window")
+		require.Nil(t, frame.Properties, "properties are not resent")
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+}
+
+func TestLinkSendLinkStatePropertiesValidation(t *testing.T) {
+	l := newTestLink(t)
+	defer closeTestLink(&l.l)
+
+	require.Error(t, l.SendLinkStateProperties(nil))
+	require.Error(t, l.SendLinkStateProperties(map[string]any{}))
+	require.Error(t, l.SendLinkStateProperties(map[string]any{"": "baz"}))
+	require.Error(t, l.IssueCreditWithProperties(1, map[string]any{"": "baz"}))
+}
+
 func TestLinkFlowWithDrain(t *testing.T) {
 	var drainedFlow *frames.PerformFlow
 	var issuedFlow *frames.PerformFlow
@@ -213,11 +351,11 @@ func TestMuxFlowHandlesDrainProperly(t *testing.T) {
 
 	// simulate what our 'drain' call to muxFlow would look like
 	// when draining
-	require.NoError(t, l.muxFlow(0, true))
+	require.NoError(t, l.muxFlow(0, true, nil))
 	require.EqualValues(t, 101, l.l.linkCredit, "credits are untouched when draining")
 
 	// when doing a non-drain flow we update the linkCredit to our new link credit total.
-	require.NoError(t, l.muxFlow(501, false))
+	require.NoError(t, l.muxFlow(501, false, nil))
 	require.EqualValues(t, 501, l.l.linkCredit, "credits are untouched when draining")
 }
 

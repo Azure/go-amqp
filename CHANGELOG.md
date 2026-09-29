@@ -2,9 +2,16 @@
 
 ## 1.8.0 (TBD)
 
+### Features Added
+
 * Added support for setting `desired-capabilities` in the connection OPEN frames
 * Added `Receiver.SendLinkStateProperties` to attach link-state properties to a FLOW frame without altering the link's credit window. Supported with both automatic and manual credit management.
 * Added `Receiver.IssueCreditWithProperties` to issue credit and attach link-state properties on the same FLOW frame. Like `Receiver.IssueCredit`, it requires manual credit management.
+
+### Bugs Fixed
+
+* Enforce a maximum nesting depth when decoding AMQP types.
+* Reject received frames that exceed the negotiated maximum frame size.
 
 ## 1.7.0 (2026-06-08)
 

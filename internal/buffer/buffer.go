@@ -10,6 +10,21 @@ import (
 type Buffer struct {
 	b []byte
 	i int
+	// depth bounds type-decoder recursion; see ReadAny.
+	depth int
+}
+
+// IncDepth increments and returns the current recursion depth.
+func (b *Buffer) IncDepth() int {
+	b.depth++
+	return b.depth
+}
+
+// DecDepth decrements the current recursion depth.
+func (b *Buffer) DecDepth() {
+	if b.depth > 0 {
+		b.depth--
+	}
 }
 
 // New creates a new Buffer with b as its initial contents.
@@ -43,6 +58,7 @@ func (b *Buffer) Skip(n int) {
 func (b *Buffer) Reset() {
 	b.b = b.b[:0]
 	b.i = 0
+	b.depth = 0
 }
 
 // Reclaim moves the unread portion of the buffer to the

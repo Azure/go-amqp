@@ -342,6 +342,11 @@ func readCompositeHeader(r *buffer.Buffer) (_ AMQPType, fields int64, _ error) {
 // legitimate compound observed on real brokers.
 const maxCompoundCount = 65536
 
+// maxNestingDepth bounds how deeply compound AMQP values (described types,
+// lists, maps, arrays) may nest during decode. Matches the .NET decoder's
+// limit of 64.
+const maxNestingDepth = 64
+
 func readListHeader(r *buffer.Buffer) (length int64, _ error) {
 	type_, err := readType(r)
 	if err != nil {
@@ -518,6 +523,14 @@ func readBinary(r *buffer.Buffer) ([]byte, error) {
 }
 
 func ReadAny(r *buffer.Buffer) (any, error) {
+	// bound decode nesting depth. ReadAny is the single point every nested
+	// value passes through.
+	if r.IncDepth() > maxNestingDepth {
+		r.DecDepth()
+		return nil, fmt.Errorf("amqp: value nesting exceeds maximum depth of %d", maxNestingDepth)
+	}
+	defer r.DecDepth()
+
 	if tryReadNull(r) {
 		return nil, nil
 	}

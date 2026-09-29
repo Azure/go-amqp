@@ -745,6 +745,11 @@ func (c *Conn) readFrame() (frames.Frame, error) {
 			frameInProgress = true
 		}
 
+		// reject frames larger than the negotiated max frame size.
+		if currentHeader.Size > c.maxFrameSize {
+			return frames.Frame{}, fmt.Errorf("frame size %d exceeds maximum frame size %d", currentHeader.Size, c.maxFrameSize)
+		}
+
 		// check size is reasonable
 		if currentHeader.Size > math.MaxInt32 { // make max size configurable
 			return frames.Frame{}, errors.New("payload too large")

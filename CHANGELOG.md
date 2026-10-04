@@ -12,6 +12,7 @@
 
 * Enforce a maximum nesting depth when decoding AMQP types.
 * Reject received frames that exceed the negotiated maximum frame size.
+* Keep `ReceiverOptions.MaxMessageSize` when the peer's ATTACH frame omits `max-message-size`. Previously the limit was replaced with zero (no limit).
 
 ## 1.7.0 (2026-06-08)
 

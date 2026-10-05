@@ -1228,6 +1228,117 @@ func TestReceiveMessageTooBig(t *testing.T) {
 	require.NoError(t, client.Close())
 }
 
+// receiverAttachWithMaxMessageSize is like fake.ReceiverAttach but advertises the
+// provided max-message-size. A value of zero omits the field from the frame.
+func receiverAttachWithMaxMessageSize(linkName string, linkHandle uint32, maxMessageSize uint64) ([]byte, error) {
+	return fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformAttach{
+		Name:   linkName,
+		Handle: linkHandle,
+		Role:   encoding.RoleSender,
+		Source: &frames.Source{
+			Address:      "test",
+			Durable:      encoding.DurabilityNone,
+			ExpiryPolicy: encoding.ExpirySessionEnd,
+		},
+		ReceiverSettleMode: ReceiverSettleModeSecond.Ptr(),
+		MaxMessageSize:     maxMessageSize,
+	})
+}
+
+func TestReceiveMessageTooBigPeerOmitsMaxMessageSize(t *testing.T) {
+	const linkHandle = 0
+	deliveryID := uint32(1)
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		if attach, ok := req.(*frames.PerformAttach); ok {
+			return newResponse(receiverAttachWithMaxMessageSize(attach.Name, linkHandle, 0))
+		}
+		resp, err := receiverFrameHandler(0, ReceiverSettleModeSecond)(remoteChannel, req)
+		if resp.Payload != nil || err != nil {
+			return resp, err
+		}
+		switch ff := req.(type) {
+		case *frames.PerformFlow:
+			if *ff.NextIncomingID == deliveryID {
+				// this is the first flow frame, send our payload
+				bigPayload := make([]byte, 256)
+				return newResponse(fake.PerformTransfer(0, linkHandle, deliveryID, bigPayload))
+			}
+			// ignore future flow frames as we have no response
+			return fake.Response{}, nil
+		default:
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+	conn := fake.NewNetConn(responder, fake.NetConnOptions{})
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, conn, nil)
+	cancel()
+	require.NoError(t, err)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
+		SettlementMode: ReceiverSettleModeSecond.Ptr(),
+		MaxMessageSize: 128,
+	})
+	cancel()
+	require.NoError(t, err)
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+	msg, err := r.Receive(ctx, nil)
+	cancel()
+	require.Nil(t, msg)
+	var linkErr *LinkError
+	require.ErrorAs(t, err, &linkErr)
+	require.Contains(t, linkErr.Error(), ErrCondMessageSizeExceeded)
+	require.NoError(t, client.Close())
+}
+
+func TestReceiverMaxMessageSizeNegotiation(t *testing.T) {
+	tests := []struct {
+		label  string
+		client uint64
+		peer   uint64
+		want   uint64
+	}{
+		{label: "neither sets a limit", client: 0, peer: 0, want: 0},
+		{label: "only the peer sets a limit", client: 0, peer: 1024, want: 1024},
+		{label: "only the client sets a limit", client: 1024, peer: 0, want: 1024},
+		{label: "peer limit is smaller", client: 1024, peer: 512, want: 512},
+		{label: "peer limit is larger", client: 1024, peer: 2048, want: 1024},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+				if attach, ok := req.(*frames.PerformAttach); ok {
+					return newResponse(receiverAttachWithMaxMessageSize(attach.Name, 0, tt.peer))
+				}
+				return receiverFrameHandlerNoUnhandled(0, ReceiverSettleModeSecond)(remoteChannel, req)
+			}
+			conn := fake.NewNetConn(responder, fake.NetConnOptions{})
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			client, err := NewConn(ctx, conn, nil)
+			cancel()
+			require.NoError(t, err)
+			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+			session, err := client.NewSession(ctx, nil)
+			cancel()
+			require.NoError(t, err)
+			ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+			r, err := session.NewReceiver(ctx, "source", &ReceiverOptions{
+				SettlementMode: ReceiverSettleModeSecond.Ptr(),
+				MaxMessageSize: tt.client,
+			})
+			cancel()
+			require.NoError(t, err)
+			require.Equal(t, tt.want, r.l.maxMessageSize)
+			require.NoError(t, client.Close())
+		})
+	}
+}
+
 func TestReceiveSuccessAcceptFails(t *testing.T) {
 	muxSem := test.NewMuxSemaphore(2)
 

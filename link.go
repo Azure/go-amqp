@@ -218,7 +218,9 @@ func (l *link) attach(ctx context.Context, beforeAttach func(*frames.PerformAtta
 		return detach.Error
 	}
 
-	if l.maxMessageSize == 0 || resp.MaxMessageSize < l.maxMessageSize {
+	// a zero or absent max-message-size from the peer means it imposes no limit,
+	// so it must not replace a limit set locally.
+	if resp.MaxMessageSize != 0 && (l.maxMessageSize == 0 || resp.MaxMessageSize < l.maxMessageSize) {
 		l.maxMessageSize = resp.MaxMessageSize
 	}
 

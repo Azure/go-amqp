@@ -13,7 +13,7 @@ The [amqp][godoc_amqp] module is an AMQP 1.0 client implementation for Go.
 
 ### Prerequisites
 
-- Go 1.18 or later
+- Go 1.25 or later
 - An AMQP 1.0 compliant [broker][broker_listing]
 
 ### Install the module

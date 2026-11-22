@@ -13,6 +13,7 @@
 * Enforce a maximum nesting depth when decoding AMQP types.
 * Reject received frames that exceed the negotiated maximum frame size.
 * Keep `ReceiverOptions.MaxMessageSize` when the peer's ATTACH frame omits `max-message-size`. Previously the limit was replaced with zero (no limit).
+* Handle delivery IDs that wrap from 4294967295 to 0 in DISPOSITION frames. Previously a DISPOSITION for delivery ID 4294967295 made the session loop forever, and a range that crossed the wrap settled nothing.
 
 ## 1.7.0 (2026-06-08)
 

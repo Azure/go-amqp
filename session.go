@@ -426,12 +426,8 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 			// Disposition frames can reference transfers from more than one
 			// link. Send this frame to all of them.
 			case *frames.PerformDisposition:
-				start := body.First
-				end := start
-				if body.Last != nil {
-					end = *body.Last
-				}
-				for deliveryID := start; deliveryID <= end; deliveryID++ {
+				for i, n := uint32(0), deliveryIDCount(body.First, body.Last); i < n; i++ {
+					deliveryID := body.First + i
 					// find the input (remote) handle for this delivery ID.
 					// default to the map for local delivery IDs.
 					handles := inputHandleFromDeliveryID
@@ -720,12 +716,8 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 					// sender with a peer that's in mode second; sending confirmation of disposition.
 					// disposition frames can reference a range of delivery IDs, although it's highly
 					// likely in this case there will only be one.
-					start := fr.First
-					end := start
-					if fr.Last != nil {
-						end = *fr.Last
-					}
-					for deliveryID := start; deliveryID <= end; deliveryID++ {
+					for i, n := uint32(0), deliveryIDCount(fr.First, fr.Last); i < n; i++ {
+						deliveryID := fr.First + i
 						// send delivery state to the channel and close it to signal
 						// that the delivery has completed (RSM == ModeSecond)
 						if done, ok := settlementFromDeliveryID[deliveryID]; ok {
@@ -741,12 +733,8 @@ func (s *Session) mux(remoteBegin *frames.PerformBegin) {
 					// The receiver is settling with RSM == first (immediate settlement).
 					// Remove the delivery IDs from the remote-delivery tracking map so that
 					// memory is reclaimed even if the peer never sends a confirming disposition.
-					start := fr.First
-					end := start
-					if fr.Last != nil {
-						end = *fr.Last
-					}
-					for deliveryID := start; deliveryID <= end; deliveryID++ {
+					for i, n := uint32(0), deliveryIDCount(fr.First, fr.Last); i < n; i++ {
+						deliveryID := fr.First + i
 						delete(inputHandleFromRemoteDeliveryID, deliveryID)
 					}
 				}
@@ -852,3 +840,18 @@ type frameBodyEnvelope struct {
 // the address of this var is a sentinel value indicating
 // that a transfer frame is in need of a delivery ID
 var needsDeliveryID uint32
+
+// deliveryIDCount returns the number of delivery IDs in the inclusive range
+// [first, last] of a disposition frame. Delivery IDs are RFC 1982 serial
+// numbers, so the range can wrap from math.MaxUint32 to 0 once a session has
+// carried 2^32 transfers. A last that precedes first is an empty range.
+func deliveryIDCount(first uint32, last *uint32) uint32 {
+	if last == nil {
+		return 1
+	}
+	d := *last - first
+	if d >= 1<<31 {
+		return 0
+	}
+	return d + 1
+}

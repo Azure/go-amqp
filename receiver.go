@@ -892,11 +892,8 @@ func (r *Receiver) muxHandleFrame(fr frames.FrameBody) error {
 		// fire the peer-initiated delivery state change callback for any tracked deliveries
 		// that were not already handled by the in-flight RSM==second path.
 		if r.onDeliveryStateChanged != nil {
-			end := fr.First
-			if fr.Last != nil {
-				end = *fr.Last
-			}
-			for deliveryID := fr.First; deliveryID <= end; deliveryID++ {
+			for i, n := uint32(0), deliveryIDCount(fr.First, fr.Last); i < n; i++ {
+				deliveryID := fr.First + i
 				r.incomingDeliveriesMu.Lock()
 				msg, ok := r.incomingDeliveries[deliveryID]
 				if ok {
@@ -1074,18 +1071,14 @@ func (f *inFlight) remove(first uint32, last *uint32, err error, handler func(*M
 		return 0
 	}
 
-	ll := first
-	if last != nil {
-		ll = *last
-	}
-
 	count := uint32(0)
-	for i := first; i <= ll; i++ {
-		info, ok := f.m[i]
+	for i, n := uint32(0), deliveryIDCount(first, last); i < n; i++ {
+		deliveryID := first + i
+		info, ok := f.m[deliveryID]
 		if ok {
 			handler(info.msg)
 			info.wait <- err
-			delete(f.m, i)
+			delete(f.m, deliveryID)
 			count++
 		}
 	}

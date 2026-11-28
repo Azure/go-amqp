@@ -192,3 +192,56 @@ func TestMap32CountBoundsChecked(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "exceeds maximum")
 }
+
+// map8 encodes a map8 holding one entry, key and value already encoded.
+func map8(key, value []byte) []byte {
+	body := append(append([]byte{2}, key...), value...)
+	return append([]byte{byte(TypeCodeMap8), byte(len(body))}, body...)
+}
+
+// unhashableKeys are encoded AMQP values that decode to a Go value which
+// cannot be a Go map key.
+var unhashableKeys = map[string][]byte{
+	"list0":  {byte(TypeCodeList0)},
+	"list8":  {byte(TypeCodeList8), 0x02, 0x01, byte(TypeCodeBoolTrue)},
+	"map8":   {byte(TypeCodeMap8), 0x01, 0x00},
+	"binary": {byte(TypeCodeVbin8), 0x01, 0xff},
+	"array8": {byte(TypeCodeArray8), 0x03, 0x01, byte(TypeCodeUbyte), 0x07},
+	// a described type with a ulong descriptor above 255 and a list value
+	"described list": {0x00, byte(TypeCodeUlong), 0, 0, 0, 1, 0, 0, 0, 0, byte(TypeCodeList0)},
+	// a described type whose descriptor is a binary
+	"described binary descriptor": {0x00, byte(TypeCodeVbin8), 0x01, 0xff, byte(TypeCodeBoolTrue)},
+}
+
+func TestUnhashableMapKeysAreRefused(t *testing.T) {
+	for name, key := range unhashableKeys {
+		t.Run(name, func(t *testing.T) {
+			encoded := map8(key, []byte{byte(TypeCodeBoolTrue)})
+
+			var a Annotations
+			require.ErrorIs(t, Unmarshal(buffer.New(encoded), &a), errInvalidMapKey)
+
+			_, err := ReadAny(buffer.New(encoded))
+			require.ErrorIs(t, err, errInvalidMapKey)
+
+			var m map[any]any
+			require.ErrorIs(t, Unmarshal(buffer.New(encoded), &m), errInvalidMapKey)
+		})
+	}
+}
+
+func TestHashableCompositeMapKeyIsDecoded(t *testing.T) {
+	// a described type whose descriptor and value are both hashable is a
+	// valid key
+	key := []byte{0x00, byte(TypeCodeUlong), 0, 0, 0, 1, 0, 0, 0, 0, byte(TypeCodeStr8), 0x01, 'k'}
+	encoded := map8(key, []byte{byte(TypeCodeBoolTrue)})
+	want := DescribedType{Descriptor: uint64(1 << 32), Value: "k"}
+
+	var a Annotations
+	require.NoError(t, Unmarshal(buffer.New(encoded), &a))
+	require.Equal(t, Annotations{want: true}, a)
+
+	v, err := ReadAny(buffer.New(encoded))
+	require.NoError(t, err)
+	require.Equal(t, map[any]any{want: true}, v)
+}

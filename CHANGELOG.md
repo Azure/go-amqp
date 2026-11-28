@@ -14,6 +14,7 @@
 * Reject received frames that exceed the negotiated maximum frame size.
 * Keep `ReceiverOptions.MaxMessageSize` when the peer's ATTACH frame omits `max-message-size`. Previously the limit was replaced with zero (no limit).
 * Handle delivery IDs that wrap from 4294967295 to 0 in DISPOSITION frames. Previously a DISPOSITION for delivery ID 4294967295 made the session loop forever, and a range that crossed the wrap settled nothing.
+* Return a decoding error for a map key that cannot be a Go map key (a list, map, array or binary, or a described type holding one) in message annotations, delivery annotations, footers and any other AMQP map. Previously such a key panicked in the receiver's goroutine and crashed the process. Fixes #369.
 
 ## 1.7.0 (2026-06-08)
 

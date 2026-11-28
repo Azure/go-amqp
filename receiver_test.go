@@ -323,6 +323,71 @@ func TestReceiverCloseTimeout(t *testing.T) {
 	require.NoError(t, client.Close())
 }
 
+func TestReceiveMessageWithUnhashableAnnotationKey(t *testing.T) {
+	const linkHandle = 0
+	deliveryID := uint32(1)
+	responder := func(remoteChannel uint16, req frames.FrameBody) (fake.Response, error) {
+		switch tt := req.(type) {
+		case *fake.AMQPProto:
+			return newResponse(fake.ProtoHeader(fake.ProtoAMQP))
+		case *frames.PerformOpen:
+			return newResponse(fake.PerformOpen("container"))
+		case *frames.PerformClose:
+			return newResponse(fake.PerformClose(nil))
+		case *frames.PerformBegin:
+			return newResponse(fake.PerformBegin(0, remoteChannel))
+		case *frames.PerformEnd:
+			return newResponse(fake.PerformEnd(0, nil))
+		case *frames.PerformAttach:
+			return newResponse(fake.ReceiverAttach(0, tt.Name, 0, ReceiverSettleModeFirst, tt.Source.Filter))
+		case *frames.PerformDetach:
+			require.NotNil(t, tt.Error)
+			require.EqualValues(t, ErrCondInternalError, tt.Error.Condition)
+			return newResponse(fake.PerformDetach(0, 0, nil))
+		case *frames.PerformFlow, *fake.KeepAlive:
+			return fake.Response{}, nil
+		default:
+			return fake.Response{}, fmt.Errorf("unhandled frame %T", req)
+		}
+	}
+	conn := fake.NewNetConn(responder, fake.NetConnOptions{})
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	client, err := NewConn(ctx, conn, nil)
+	cancel()
+	require.NoError(t, err)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	session, err := client.NewSession(ctx, nil)
+	cancel()
+	require.NoError(t, err)
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	r, err := session.NewReceiver(ctx, "source", nil)
+	cancel()
+	require.NoError(t, err)
+
+	// message annotations whose only key is an empty list, then a data section;
+	// decoding the key used to panic in the receiver's goroutine
+	format := uint32(0)
+	fr, err := fake.EncodeFrame(frames.TypeAMQP, 0, &frames.PerformTransfer{
+		Handle:        linkHandle,
+		DeliveryID:    &deliveryID,
+		DeliveryTag:   []byte("tag"),
+		MessageFormat: &format,
+		Payload:       []byte("\x00Sr\xc1\x03\x02\x45\x41\x00Su\xa0\x01x"),
+	})
+	require.NoError(t, err)
+	conn.SendFrame(fr)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	msg, err := r.Receive(ctx, nil)
+	cancel()
+	require.Nil(t, msg)
+	var linkErr *LinkError
+	require.ErrorAs(t, err, &linkErr)
+	require.Contains(t, linkErr.Error(), "invalid map key")
+
+	require.NoError(t, client.Close())
+}
+
 func TestReceiveInvalidMessage(t *testing.T) {
 	const linkHandle = 0
 	deliveryID := uint32(1)

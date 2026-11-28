@@ -103,3 +103,25 @@ func TestMessageHeaderMarshal(t *testing.T) {
 	// 0x42 is false for the Durable field
 	require.Equal(t, []byte{0x0, 0x53, 0x70, 0xd0, 0x0, 0x0, 0x0, 0x7, 0x0, 0x0, 0x0, 0x2, 0x42, 0x50, 0x0}, b)
 }
+
+// A peer controls every map in a message, and AMQP allows any type as a map
+// key. A key that is not a valid Go map key (a list, a binary, a described
+// type holding one) used to panic in the receiver's goroutine, which no
+// caller can recover; it must be a decoding error.
+func TestMessageUnmarshalUnhashableMapKey(t *testing.T) {
+	const data = "\x00Su\xa0\x01x" // a data section holding "x"
+	for label, encoded := range map[string]string{
+		"message annotations, list key":   "\x00Sr\xc1\x03\x02\x45\x41" + data,
+		"message annotations, binary key": "\x00Sr\xc1\x05\x02\xa0\x01\xff\x41" + data,
+		"delivery annotations, list key":  "\x00Sq\xc1\x03\x02\x45\x41" + data,
+		"footer, list key":                data + "\x00Sx\xc1\x03\x02\x45\x41",
+		"amqp-value map, described key":   "\x00Sw\xc1\x0d\x02\x00\x80\x00\x00\x00\x01\x00\x00\x00\x00\x45\x41",
+	} {
+		t.Run(label, func(t *testing.T) {
+			var m Message
+			require.NotPanics(t, func() {
+				require.Error(t, m.UnmarshalBinary([]byte(encoded)))
+			})
+		})
+	}
+}

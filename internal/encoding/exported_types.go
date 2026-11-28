@@ -269,6 +269,9 @@ func (a *Annotations) Unmarshal(r *buffer.Buffer) error {
 		if err != nil {
 			return err
 		}
+		if !isHashable(key) {
+			return errInvalidMapKey
+		}
 		m[key] = value
 	}
 	*a = m

@@ -298,19 +298,63 @@ func (m *mapAnyAny) unmarshalMapItems(r *buffer.Buffer, count uint32) error {
 			return err
 		}
 
-		// https://golang.org/ref/spec#Map_types:
-		// The comparison operators == and != must be fully defined
-		// for operands of the key type; thus the key type must not
-		// be a function, map, or slice.
-		switch reflect.ValueOf(key).Kind() {
-		case reflect.Slice, reflect.Func, reflect.Map:
-			return errors.New("invalid map key")
+		if !isHashable(key) {
+			return errInvalidMapKey
 		}
 
 		mm[key] = value
 	}
 	*m = mm
 	return nil
+}
+
+// errInvalidMapKey is returned when a decoded map key cannot be used as a Go
+// map key.
+var errInvalidMapKey = errors.New("invalid map key")
+
+// isHashable reports whether key can be stored in a Go map without a runtime
+// panic.
+//
+// AMQP allows any type as a map key, but a Go map key must be comparable
+// (https://golang.org/ref/spec#Map_types). A decoded list, map, array or
+// binary is a slice or a map, and a described type whose descriptor or value
+// is one of those is a struct holding it, and storing either as a key panics
+// with "hash of unhashable type". The check is on the dynamic value, since
+// DescribedType's fields are interfaces.
+func isHashable(key any) bool {
+	switch key.(type) {
+	case nil, bool, uint8, uint16, uint32, uint64, int8, int16, int32, int64,
+		float32, float64, string, Symbol, time.Time, UUID:
+		return true
+	}
+	return isHashableValue(reflect.ValueOf(key))
+}
+
+func isHashableValue(v reflect.Value) bool {
+	switch v.Kind() {
+	case reflect.Invalid:
+		return true
+	case reflect.Slice, reflect.Map, reflect.Func:
+		return false
+	case reflect.Interface:
+		return v.IsNil() || isHashableValue(v.Elem())
+	case reflect.Array:
+		for i := 0; i < v.Len(); i++ {
+			if !isHashableValue(v.Index(i)) {
+				return false
+			}
+		}
+		return true
+	case reflect.Struct:
+		for i := 0; i < v.NumField(); i++ {
+			if !isHashableValue(v.Field(i)) {
+				return false
+			}
+		}
+		return true
+	default:
+		return true
+	}
 }
 
 // mapStringAny is used to decode AMQP maps that have string keys
